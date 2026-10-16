@@ -126,6 +126,59 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
+def frontendDirectory = layout.projectDirectory.dir('frontend')
+def frontendDistribution = frontendDirectory.dir('dist')
+def frontendNpmCache = layout.projectDirectory.dir('.npm-cache')
+def npmExecutable = OperatingSystem.current().isWindows() ? 'npm.cmd' : 'npm'
+def skipFrontendBuild = providers.gradleProperty('frontendSkipBuild')
+    .map { it.toBoolean() }
+    .orElse(false)
+
+def frontendInstall = tasks.register('frontendInstall', Exec) {
+    group = 'build'
+    description = 'Installs the locked React frontend dependencies.'
+    workingDir frontendDirectory
+    commandLine npmExecutable, 'ci', '--cache', frontendNpmCache.asFile.absolutePath
+    inputs.files(frontendDirectory.file('package.json'), frontendDirectory.file('package-lock.json'))
+    outputs.dir(frontendDirectory.dir('node_modules'))
+    onlyIf { !skipFrontendBuild.get() }
+}
+
+def frontendBuild = tasks.register('frontendBuild', Exec) {
+    group = 'build'
+    description = 'Builds the production React assets served by Spring Boot.'
+    dependsOn frontendInstall
+    workingDir frontendDirectory
+    commandLine npmExecutable, 'run', 'build'
+    inputs.files(frontendDirectory.file('package.json'), frontendDirectory.file('package-lock.json'))
+    inputs.dir(frontendDirectory.dir('src'))
+    inputs.file(frontendDirectory.file('index.html'))
+    inputs.file(frontendDirectory.file('tsconfig.json'))
+    inputs.file(frontendDirectory.file('vite.config.ts'))
+    outputs.dir(frontendDistribution)
+    onlyIf { !skipFrontendBuild.get() }
+}
+
+def frontendCheck = tasks.register('frontendCheck', Exec) {
+    group = 'verification'
+    description = 'Runs frontend type, lint, and component checks.'
+    dependsOn frontendInstall
+    workingDir frontendDirectory
+    commandLine npmExecutable, 'run', 'check'
+    onlyIf { !skipFrontendBuild.get() }
+}
+
+tasks.named('processResources') {
+    dependsOn frontendBuild
+    from(frontendDistribution) {
+        into 'static'
+    }
+}
+
+tasks.named('check') {
+    dependsOn frontendCheck
+}
+
 jar {
     // Only dependency-inclusive Shadow JARs are distributed.
     enabled = false

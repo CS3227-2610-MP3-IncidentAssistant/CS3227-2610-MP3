@@ -1,0 +1,87 @@
+name: Deploy web application
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify production artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Make Gradle Wrapper executable
+        run: chmod +x gradlew
+      - name: Verify frontend
+        working-directory: frontend
+        run: npm ci && npm run check && npm run build
+      - name: Verify backend and assembled web artifact
+        run: xvfb-run --auto-servernum ./gradlew build -PfrontendSkipBuild=true
+      - name: Verify container can be built
+        run: docker build --tag incident-desk:${{ github.sha }} .
+
+  deploy:
+    name: Deploy to Cloud Run
+    needs: verify
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - name: Build and publish container
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+        run: docker build --tag "$IMAGE" . && docker push "$IMAGE"
+      - name: Deploy immutable revision
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+        run: >-
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}"
+          --image "$IMAGE"
+          --region "${{ vars.GCP_REGION }}"
+          --platform managed
+          --allow-unauthenticated
+          --quiet
+      - name: Verify deployed health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          service_url="$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" --region "${{ vars.GCP_REGION }}" --format='value(status.url)')"
+          response="$(curl --fail --silent --show-error --retry 5 --retry-delay 5 "$service_url/health")"
+          test "$response" = '{"status":"UP"}'
+          echo "Verified health for commit ${{ github.sha }}"
