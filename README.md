@@ -8,6 +8,19 @@ reporting. It targets Java 25 and is built with the checked-in Gradle Wrapper.
 See [the developer guide](docs/DeveloperGuide.md) for setup, build, test, and
 architecture details.
 
+## Spring Boot migration preview
+
+The incremental MP3 migration now includes a Spring Boot web process with a
+minimal health endpoint. Start it with:
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+Then request `http://localhost:8080/health`. The endpoint returns only the
+aggregate application status. The existing JavaFX launcher remains available
+while the web migration is in progress.
+
 ## Agent usage guide
 
 This repository provides three project-specific agent skills:

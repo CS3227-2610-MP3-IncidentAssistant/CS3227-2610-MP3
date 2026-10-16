@@ -5,6 +5,7 @@ plugins {
     id 'application'
     id 'java'
     id 'com.gradleup.shadow' version '9.5.1'
+    id 'org.springframework.boot' version '4.1.1'
 }
 
 group = 'com.cs3227'
@@ -66,6 +67,10 @@ run {
 }
 
 dependencies {
+    implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.1')
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
     String javaFxVersion = '25.0.2'
     List<String> javaFxModules = ['javafx-base', 'javafx-controls', 'javafx-fxml', 'javafx-graphics']
 
@@ -96,6 +101,7 @@ dependencies {
 
     testImplementation platform('org.junit:junit-bom:5.11.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -137,6 +143,15 @@ shadowJar {
             'Enable-Native-Access': 'ALL-UNNAMED'
         )
     }
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'incident-desk-web.jar'
+    mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
+}
+
+tasks.named('bootRun') {
+    mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
 }
 
 def shadowJarMacArm64 = tasks.register('shadowJarMacArm64', ShadowJar) {
