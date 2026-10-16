@@ -5,7 +5,9 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 
 | Action | Reporter | Responder | Admin |
 | --- | --- | --- | --- |
-| Register account | Allowed | Not applicable; responder is promoted | Admin account bootstrap is implementation-specific |
+| Register through public portal | Creates Reporter only | No public registration; responder is promoted | No public registration; controlled bootstrap or authorized provisioning only |
+| Sign in through role portal | Reporter account through Reporter portal | Responder account through Responder portal | Administrator account through Administrator portal |
+| Provision Administrator | No | No | Allowed after controlled first-Administrator bootstrap |
 | Change own password | Allowed after current-password verification | Allowed after current-password verification | Allowed after current-password verification |
 | View incident list | Own incidents only | Incidents assigned to them (regardless of current category access), and unassigned incidents in permitted categories | All incidents |
 | View incident details | Own incidents only | Incident is assigned to them (regardless of current category access), or is unassigned in a permitted category | All incidents |
@@ -27,11 +29,14 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 | View own performance | No | Own statistics | All responder/statistical views |
 | View audit log | No | No | Allowed |
 | Delete/reset account | No | No | Allowed, subject to retention/security rules |
+| AI improve draft | Own current draft text only | No | No |
+| AI incident summary / suggested steps | No | An incident currently viewable under the detail rule | No |
+| AI operational trend summary | No | No | Privacy-safe aggregate statistics only |
 
 ## Enforcement rules
 
-- Obtain the actor from the active authenticated session, not a method argument
-  originating from the UI.
+- Obtain the actor from the current request's trusted authenticated security
+  context, not a method argument originating from the browser.
 - Re-evaluate authorization when an operation executes; do not rely on a list
   view checked earlier.
 - A responder losing category access immediately loses access to unassigned
@@ -45,3 +50,13 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 - Statistics and exports must apply the same anonymity rules as detail views.
 - When permission is denied, avoid revealing whether an inaccessible incident
   exists or who reported it.
+- Authorize each AI request immediately before selecting provider data. Never
+  rely on a previously authorized page, cached browser data, or an incident
+  identifier supplied by the user.
+- AI output grants no authority and cannot bypass the ordinary authorization,
+  validation, lifecycle, audit, or transaction path.
+- A login portal, URL, hidden field, or submitted role value never grants a
+  role. The authenticated account's current persisted role determines access.
+- Promotion approval updates the existing account rather than creating a second
+  username or credential record. Rejection leaves role and category access
+  unchanged.

@@ -2,20 +2,30 @@
 
 ## Product goal
 
-Provide a local company incident-reporting application in which reporters can
-raise and track issues, authorized responders can handle them, and
-administrators can govern access and review operational performance.
+Provide a production-style web application in which reporters can raise and
+track incidents, authorized responders can handle them, and administrators can
+govern access and review operational performance. Each retained role has one
+narrow, advisory SoC LLM feature with explicit human review.
 
-The application is a Java desktop application distributed as a single Shadow
-JAR. It stores application data and attachments in local files. Multiple
-accounts may exist, but only one user can operate the application at a time.
+The application is a concurrent Java web application deployed on an
+independently managed public host. It uses server-side authentication and
+authorization, shared persistent storage, environment-based secrets, and
+separate development and production configuration. JavaFX and local files are
+MP2 implementation details, not MP3 production architecture.
 
 ## Shared capabilities
 
-- Login, logout, and a single active application session.
+- A public role-entry page with separate Reporter, Responder, and Administrator
+  login portals. The portals use one backend identity store and authentication
+  service; they are not separate account databases or authorization boundaries.
+- Login, logout, and multiple isolated concurrent web sessions. Each portal
+  accepts only an account currently authorized for that role and returns a
+  generic failure for invalid credentials or a role mismatch.
 - Login names are case-sensitive. Names that differ only by letter case identify
   distinct accounts.
-- User registration.
+- Public registration is available only from the Reporter portal and always
+  creates a Reporter. The Responder and Administrator portals provide no public
+  registration or client-controlled role selection.
 - Authenticated users can replace their own password after confirming their current password.
 - Role- and category-based access control.
 - Reusable table/list views with searching, filtering, and sorting where
@@ -36,20 +46,33 @@ accounts may exist, but only one user can operate the application at a time.
   limited to 40 million pixels. Unsupported media fails safely in the viewer.
 - Only the owning reporter can add attachments to a persisted `DRAFT` or
   unassigned `SUBMITTED` incident. Viewing follows incident-detail permissions.
-- In-process notifications/events; notifications do not need to survive an
-  application restart unless a later requirement says otherwise.
+- A React browser interface that works on current desktop and mobile-width
+  browsers without relying on JavaFX. The Java backend remains the authority
+  for validation, authorization, persistence, audit, and AI data selection.
+- All state-changing HTTP requests use CSRF protection and server-side
+  authorization. Sessions use secure production cookie settings.
+- Application events must not expose one user's protected data to another
+  session. Persistent notification history remains optional unless scheduled.
 - SLO countdown or status badges.
+- A shared AI gateway providing provider configuration, authorization-aware
+  prompt construction, rate limiting, timeouts, bounded retries, input/output
+  limits, safe errors, redacted operational logging, and a test double.
 
 ## Reporter requirements
 
 A reporter can:
 
-- Submit an incident report, optionally marked anonymous.
+- Submit an incident report with a clearly labelled anonymous-report checkbox
+  or switch. The control defaults to the approved product value, explains the
+  application's anonymity boundary, and sends its value through the normal
+  validated submission operation.
 - Submitted incident reports require a non-blank title, description, and
   category; incomplete drafts may omit title or description. Titles are
   stripped of leading and trailing whitespace before storage. Descriptions and
-  resolution remarks retain entered whitespace after non-blank validation. No
-  arbitrary text-length limits are imposed.
+  resolution remarks retain entered whitespace after non-blank validation.
+  Centrally configured server-side length limits must be documented in
+  `workflow/product-requirements.md` and applied consistently in browser,
+  application, database, and AI-selection boundaries.
 - Save an incomplete report as a draft and submit it later.
 - Upload supported images and view them in the application.
 - View, search, and filter their own incidents and their statuses.
@@ -60,6 +83,15 @@ A reporter can:
   insufficient.
 - Request promotion to responder by selecting requested incident categories and
   providing optional additional comments.
+- Track the current promotion-request status. Approval changes the existing
+  account to Responder, grants only the approved categories, preserves the
+  account identifier and historical references, records an audit event, and
+  requires reauthentication before Responder access. Rejection leaves the role
+  and category access unchanged and records the decision.
+- Request an AI-assisted rewrite or structure of the reporter's current draft
+  description. Generated text remains an untrusted suggestion until the
+  reporter explicitly applies or copies it, and incident submission remains a
+  separate normal application action.
 
 ## Responder requirements
 
@@ -73,6 +105,9 @@ A responder can:
   position.
 - View weekly resolved-case counts and the responder SLO measures defined in
   `.agents/slo.md`.
+- Request an AI summary and suggested investigation steps for an incident the
+  responder is currently authorized to view. The feature cannot claim, assign,
+  comment on, hand off, or resolve an incident.
 
 ## Administrator requirements
 
@@ -91,9 +126,35 @@ An administrator can:
 - View incident and application audit records.
 - View operational statistics filtered by responder, reporter, category, and
   time period, subject to anonymous-report privacy rules.
+- Provision the first Administrator through the one-time controlled bootstrap
+  specified in `.agents/mp2-grade-improvements.md`. Later Administrators can be
+  created only through an authenticated, authorized Administrator operation;
+  no public form or request parameter may select the Administrator role.
 
 Statistics include incidents resolved, resolution duration, reopened-incident
 counts/rates, and configured SLO performance.
+
+An administrator can also request an AI operational-trend summary built from
+privacy-safe aggregate statistics. The feature must not send raw incident text,
+comments, credentials, or reporter identities to the provider and cannot
+change accounts, access, incidents, SLOs, or audit records.
+
+## AI-wide requirements
+
+- Authorization is checked immediately before selecting any data for an AI
+  request; a prior page view is not sufficient.
+- Only feature-specific allowlisted data may be sent to the SoC LLM.
+- Passwords, password hashes, reset credentials, session identifiers,
+  anonymous-reporter identities, unrelated incidents, audit secrets, and
+  attachment bytes are never sent.
+- Incident text, comments, attachment names, provider responses, and all other
+  external text are untrusted data, never instructions to the application.
+- AI output is advisory plain text, escaped for browser display, and cannot
+  invoke application operations.
+- Every AI result has a visible human review point. Failure, timeout, malformed
+  output, or rate limiting leaves the non-AI workflow available.
+- Provider prompts and responses are not written to application logs. Store
+  only safe metadata required for diagnostics and evidence.
 
 ## Data-retention expectations
 
@@ -116,3 +177,6 @@ The following are deliberately not invented by this document:
   separate exceptional process.
 - Notification presentation and retention.
 - Password policy and the exact delivery mechanism for reset credentials.
+- Exact SoC LLM endpoint, model, credentials, rate limits, and provider data
+  retention policy; confirm these from the current course guide before coding.
+- Production host and managed PostgreSQL provider.

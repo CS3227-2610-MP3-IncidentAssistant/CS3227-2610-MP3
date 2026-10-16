@@ -30,7 +30,7 @@
 
 - Every successful transition produces one incident audit event.
 - Invalid transitions fail without partially changing the incident, audit log,
-  attachments, or persisted files.
+  attachments, or canonical database state.
 - The current assignee must be absent in `DRAFT`, `SUBMITTED`, `RESOLVED`, and
   `WITHDRAWN`.
 - Resolution remarks are retained when an incident is reopened. A later
@@ -45,3 +45,9 @@
 - Admin resolution of a `SUBMITTED` incident is not currently allowed because
   the listed transitions require `ASSIGNED`. Change this rule explicitly if
   direct admin resolution is desired.
+- Concurrent transitions use the current persisted version. Exactly one of two
+  competing claims may succeed; stale transitions fail without overwriting the
+  winning state or creating a success audit.
+- AI suggestions never perform or imply a lifecycle transition. Every
+  transition still enters through the normal authenticated, authorized,
+  validated, audited transaction path.

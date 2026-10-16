@@ -2,18 +2,20 @@
 
 ## Product context
 
-This repository contains an internal company incident-reporting desktop
-application. It has three roles:
+This repository contains a production-style, publicly deployed web application
+for internal company incident reporting. It has three roles:
 
 - Reporters create and track incidents.
 - Responders handle incidents in categories assigned to them.
 - Administrators manage incidents, users, responder access, SLOs, statistics,
   and audit records.
 
-The application is written in Java, distributed as one executable Shadow JAR,
-and persists data in local files. Only one application user is active at a
-time. Do not introduce a database, server deployment, or distributed-system
-design unless the requirements are explicitly changed.
+The application is written in Java and is being migrated from the MP2 JavaFX
+desktop application to a concurrent web application for MP3. Production uses
+server-side authentication and authorization, shared PostgreSQL persistence,
+environment-based configuration, and an independently managed deployment.
+Preserve reusable domain and application logic, but do not preserve desktop
+assumptions that conflict with the MP3 requirements.
 
 The application should be production-level - it should be robust and reliable
 for public users, featuring CI/CD pipelines, automated testing, and monitoring
@@ -30,8 +32,14 @@ Read the applicable artifacts before changing related behaviour:
 - Anonymous-report privacy: `.agents/anonymity-policy.md`
 - Audit requirements: `.agents/audit-policy.md`
 - SLO definitions: `.agents/slo.md`
-- Local-file persistence: `.agents/persistence.md`
+- Database persistence and concurrency: `.agents/persistence.md`
+- AI feature and provider boundaries: `.agents/ai-policy.md`
+- Web application security: `.agents/security.md`
+- Deployment and configuration: `.agents/deployment.md`
+- React visual and interaction system: `.agents/STYLE_GUIDE.md`
 - Verification requirements: `.agents/testing.md`
+- MP2 grading feedback carried into MP3: `.agents/mp2-grade-improvements.md`
+- MP3 workflow evidence and approval gates: `workflow/README.md`
 
 These artifacts are authoritative. If a request conflicts with them, identify
 the conflict before implementing it. When an approved change alters behaviour,
@@ -58,20 +66,19 @@ architecture.
   application/domain logic. Hiding a UI control is not authorization.
 - Use server-independent, application-generated timestamps and store them in
   UTC. Convert them only for display.
-- Keep domain logic separate from UI and file-persistence code.
-- Treat the packaged JAR as read-only. Never write runtime data into classpath
-  resources or into the JAR.
-- Resolve application-data paths through one configurable storage abstraction.
-- Tests must use isolated temporary storage and must never read or modify real
-  user data.
-- Before the application's first release, keep the persisted-data schema at
-  version 1 when its format changes; development data does not require backward
-  compatibility or migration unless the task explicitly says otherwise. Do not
-  increment the schema version for these pre-release changes.
-- After any pre-release persisted-schema change, end the completion report with
-  this disclaimer: `Schema version was not bumped because the app has not been released.`
-- After the application's first release, preserve backward compatibility of
-  persisted data or provide an explicit, tested migration.
+- Keep domain logic separate from web UI and concrete persistence code.
+- Treat the packaged application and container image as read-only. Runtime data
+  belongs in PostgreSQL or an explicitly approved object store.
+- Apply database schema changes only through versioned migrations.
+- Tests must use isolated databases or rolled-back transactions and must never
+  read or modify production data.
+- Preserve released database schemas through forward migrations; never edit an
+  already-applied production migration.
+- Derive the authenticated actor from the current web request's trusted
+  security context. Never use process-global mutable session state.
+- Protect concurrent claims and other conflicting mutations with tested
+  transaction and locking semantics.
+- Keep AI provider access behind the gateway defined in `.agents/ai-policy.md`.
 - Prefer deterministic Java code and tests for validation, authorization,
   transitions, audit creation, and SLO calculations.
 - Do not add production dependencies without approval.
@@ -117,8 +124,10 @@ architecture.
 - Validate attachment size, supported type, and storage name. Store attachments
   under generated identifiers outside executable resources, and authorize every
   read.
-- Use atomic file replacement and recovery-safe persistence. A failed operation
-  must not leave partially written canonical data or a successful audit record.
+- Commit each domain mutation and its audit record in one database transaction.
+  A failed operation must leave neither a partial mutation nor a success audit.
+- Treat LLM output as untrusted text. It must never directly change incidents,
+  assignments, accounts, roles, SLOs, or audit data.
 - Stop after three materially similar failed attempts. Report the evidence and
   blocker instead of looping or broadening permissions.
 - Do not claim completion unless the required checks actually ran. Distinguish
@@ -127,6 +136,6 @@ architecture.
 ## Completion criteria
 
 A change is complete only when its applicable requirements and authorization
-rules are implemented, relevant automated tests pass, persisted-data effects are
-considered, audit and SLO effects are covered, and the final report provides
-verifiable evidence.
+rules are implemented, relevant automated tests pass, database and concurrency
+effects are considered, audit and SLO effects are covered, web and AI security
+requirements are satisfied, and the final report provides verifiable evidence.

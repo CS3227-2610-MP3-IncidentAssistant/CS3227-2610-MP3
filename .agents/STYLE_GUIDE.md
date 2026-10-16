@@ -1,18 +1,26 @@
-# Incident Desk visual guide
+# Incident Desk React Style Guide
 
-This is the JavaFX design-system handoff for Incident Desk. Keep one Calm Blue Operations system across Administrator, Reporter, and Responder; role identity comes from navigation and content, not a separate palette. The shared JavaFX stylesheet at `src/main/resources/com/company/incidentdesk/ui/shared/theme/application.css` is the implementation source of truth.
+This guide preserves the Calm Blue Operations visual language from MP2 while
+defining its MP3 implementation for a responsive React web application. Role
+identity comes from navigation labels, permissions, and content—not separate
+color palettes. Visual consistency must not weaken authorization, privacy,
+semantic HTML, keyboard access, or safe rendering.
 
 ## Design tokens
 
-| Token | Hex | Use |
+Define these values once as CSS custom properties or equivalent theme tokens.
+Components consume tokens rather than repeating literal colors.
+
+| Token | Value | Use |
 | --- | --- | --- |
-| Navy | `#17233F` | Sidebar, login art, avatar text |
-| Action blue | `#4169D8` | Primary actions, active navigation, charts, timeline markers |
-| Canvas | `#F5F7FB` | Application content background |
-| Surface | `#FFFFFF` | Cards, panels, forms, title bar, dialogs |
-| Primary text | `#18243A` | Headings, body text, controls |
-| Muted text | `#6E788A` | Supporting text, labels, table headers |
-| Border | `#DCE2EC` | Cards, panels, separators |
+| `--color-navy` | `#17233F` | Navigation, login art, strong contrast areas |
+| `--color-action` | `#4169D8` | Primary actions, active navigation, charts |
+| `--color-canvas` | `#F5F7FB` | Application background |
+| `--color-surface` | `#FFFFFF` | Cards, forms, panels, dialogs |
+| `--color-text` | `#18243A` | Headings and body text |
+| `--color-text-muted` | `#6E788A` | Supporting text and table headers |
+| `--color-border` | `#DCE2EC` | Cards, controls, and separators |
+| `--color-focus` | `#8EAAFF` | Visible keyboard focus |
 
 | Semantic tone | Foreground | Soft background | Use |
 | --- | --- | --- | --- |
@@ -22,94 +30,182 @@ This is the JavaFX design-system handoff for Incident Desk. Keep one Calm Blue O
 | Danger | `#B33A3A` | `#FCE4E4` | Error, destructive action, high priority |
 | Neutral | `#596579` | `#E9EDF3` | Inactive or unavailable state |
 
-Supporting values: focus outline `#8EAAFF`, hover surface `#F9FAFC`, input border `#C9D1DD`, danger border `#E5B1B1`, sidebar text `#D8E1F6`, progress track `#E8ECF3`, and dialog scrim `rgba(16, 24, 39, .56)`.
+Supporting tokens should cover an 8px spacing scale, 8–12px radii, restrained
+shadows, control heights, content widths, typography, and breakpoints. Add new
+tokens deliberately; do not introduce one-off variants for individual pages.
 
 ## Typography
 
-Use Segoe UI on Windows and select a system fallback in Java when unavailable. Page titles use 25–34px bold text; dialog titles 19px bold; panel headings 17px bold; metric values 29px bold; body and controls 14–16px; labels and table headers 12–13px semibold. Keep headings left aligned. Never rely on color alone.
+- Prefer the system UI font stack; do not require a remote font for core use.
+- Page titles use approximately 28–34px bold text, panel headings 17–20px,
+  body and controls 14–16px, and labels/table headers 12–14px semibold.
+- Use semantic heading order. Do not select heading elements only for size.
+- Keep primary reading text left aligned and allow user zoom to 200% without
+  clipped content or hidden actions.
 
-## Layout and spacing
+## Responsive layout
 
-- Use an 8px rhythm where practical, with modest 8–12px control radii and 12px panel radii.
-- Use a 232px full sidebar, collapsing to 78px below 900px and 64px below 600px.
-- Content padding is 34px horizontally on wide screens, 24px at medium widths, and 14px on narrow screens.
-- Metrics use four, two, then one column as width decreases.
-- Forms and details use two columns on wide screens and one column below 600px.
-- Prefer `ScrollPane`, `HBox`, `VBox`, `GridPane`, and `Priority.ALWAYS` sizing to horizontal overflow.
-- Long text wraps. Controls and actions wrap rather than clip.
+- Use an 8px spacing rhythm where practical.
+- Use a full sidebar near 232px on wide screens. At narrower widths, collapse
+  it to an accessible menu rather than an icon-only navigation with no labels.
+- Use approximately 32px horizontal content padding on wide screens, 24px at
+  medium widths, and 16px on narrow screens.
+- Metrics move from four columns to two and then one. Forms and detail layouts
+  move from two columns to one before horizontal overflow occurs.
+- Tables with essential row relationships may scroll within a labelled region;
+  simpler data should become stacked cards at narrow widths.
+- Long titles, descriptions, comments, filenames, and AI output wrap without
+  breaking the page.
 
-## Component rules
+## Shared React components
 
-### Buttons and navigation
+Before creating a component, search the existing shared component directory and
+reuse or extend a suitable primitive. Shared components own presentation and
+accessibility behavior only. They do not perform authorization, load protected
+records directly, or infer identity from hidden data.
 
-Buttons are at least 40px high with a 9px radius and semibold text. Primary actions use action blue and white text; destructive actions use danger text and a soft danger background; ghost actions are reserved for low emphasis. Every interactive control must have visible hover, focused, pressed, and disabled states. Active navigation uses both position/text and color.
+The shared system should provide or compose:
 
-### Fields and validation
+- application shell, responsive navigation, page header, and breadcrumb;
+- primary, secondary, destructive, ghost, small, loading, and disabled buttons;
+- labelled inputs, text areas, selects, checkboxes, field errors, and form
+  summaries;
+- semantic badges for incident status, category, SLO, priority, and role;
+- cards, metric cards, tables or lists, filters, pagination, and empty states;
+- incident detail sections, comment thread, attachment tile, lifecycle timeline,
+  resolution history, and SLO progress;
+- confirmation dialog, toast or status message, loading state, and page error;
+- AI suggestion panel with unambiguous generated-content labeling, review,
+  apply/copy, retry, rate-limit, and unavailable states.
 
-Fields use explicit semibold labels, a white surface, 40px minimum height, 8px radius, and input border. Invalid fields use a danger border plus adjacent textual help. Preserve the label and message in the accessibility tree. Text areas start around 108px high and wrap content.
+### Role entry and authentication
 
-### Cards, tables, and lists
+- Provide a public role-entry screen with clearly labelled Reporter, Responder,
+  and Administrator choices leading to separate login routes or portal views.
+- Keep the brand, form structure, validation, recovery behavior, and
+  accessibility consistent across portals while making the selected role and
+  destination unmistakable.
+- Show registration only in the Reporter portal. Never show a public role
+  selector inside registration, and never offer Administrator or Responder
+  signup.
+- Do not reveal whether a login failed because the account exists under another
+  role. Use the generic authentication message defined by the security policy.
+- Portal separation is navigation and expectation-setting only. Do not encode
+  authorization solely in React routes or portal-specific components.
 
-Cards and panels use a white surface, 1px border, and 12px radius. Table headers use muted 12px semibold text on `#F8FAFD`; cells use clear padding and row separators. Interactive rows show a hover surface. Empty states provide a clear next step.
+### Anonymous submission control
 
-### Badges and progress
+- Use an explicitly labelled checkbox or switch such as "Submit anonymously",
+  with short supporting text explaining who will not see the reporter identity
+  and the documented limits of anonymity.
+- The selected state must be visible before submission, keyboard operable, and
+  included in the form's accessible name/description relationships.
+- Do not infer anonymity from missing identity fields. Submit an explicit
+  boolean to the backend and render the persisted result after success.
 
-Badges use text plus a semantic foreground/background pair, 4px by 9px padding, pill radius, and 12px bold text. Priority includes its written level; a dot may supplement but never replace it. Progress bars use an 8px blue fill on a neutral track and expose a textual/accessible value.
+Do not create parallel role-specific versions when composition and authorized
+data can support one shared component.
 
-### Attachments, comments, and timeline
+## Interaction states
 
-Comment author roles describe the role at posting time, captured from the
-authenticated account. Later role changes do not relabel past comments.
-Anonymous comment avatars derive only from the redacted author label.
+- Every interactive element has visible hover, focus-visible, active, loading,
+  disabled, success, and error behavior where applicable.
+- Buttons are at least 40px high with clear text. Destructive actions use a
+  confirmation step that states the consequence.
+- Disabled controls must not be the only explanation; provide adjacent text
+  when the user needs to know why an action is unavailable.
+- Do not use color alone for state. Combine color with text and, when helpful,
+  an icon.
+- Loading indicators retain layout where possible. Empty and error states give
+  a clear next action.
+- Prevent accidental duplicate form submissions, but rely on backend
+  idempotency and concurrency controls for correctness.
 
-Attachment tiles are at least 92px high with a dashed border and visible file type. Comments use a 34px avatar and a neutral message bubble. Timeline markers use blue dots and textual event descriptions with locally formatted time.
+## Forms and validation
 
-### Dialogs and notifications
+- Every control has a persistent programmatic label and useful autocomplete
+  metadata where appropriate.
+- Show field errors next to the field and provide an accessible error summary
+  for a rejected submission.
+- Browser validation may improve feedback but never replaces backend
+  validation.
+- Preserve deliberate incident-description and resolution whitespace while
+  still enforcing the centrally configured length limits.
+- Never accept actor, role, ownership, assignee, audit identity, or trusted
+  timestamps from React state as authoritative.
 
-Confirmation dialogs state the consequence, have explicit cancel/confirm actions, support Escape, receive focus, and return focus to the trigger. Success notifications use text and an accessible role, not color alone. Page-level errors include a concise explanation and recovery action.
+## Tables, timelines, and metrics
 
-## Accessibility
+- Table headers use proper `<th>` scope and controls have accessible names.
+- Interactive rows must also expose a real link or button; clicking a styled
+  container alone is insufficient.
+- Use stable text labels for status and SLO state. Charts require a textual
+  value or table alternative.
+- Display dates in the user's chosen/local zone while preserving UTC values and
+  unambiguous server semantics.
+- Skeletons or placeholders must not expose data from a previous authenticated
+  user or incident while new content loads.
 
-- Use semantic JavaFX controls, explicit labels, meaningful action names, and table headers.
-- Set accessible text when the visual label does not fully describe a control.
-- Preserve logical keyboard order and visible focus.
-- Communicate status with text or icons as well as color.
-- Keep text/background pairs readable and support wrapped content at narrow widths.
-- Skip optional animation when reduced motion is requested.
+## Dialogs and notifications
 
-## JavaFX mapping
+- Use the native `<dialog>` element or an accessible, tested dialog primitive.
+- Dialogs receive focus, trap it while open, close with Escape when safe, and
+  return focus to the trigger.
+- Notifications use an appropriate live region without repeatedly announcing
+  routine updates.
+- Page-level errors provide a concise explanation and recovery action without
+  exposing stack traces, SQL, provider payloads, or protected resource details.
 
-| Product pattern | JavaFX control/layout |
-| --- | --- |
-| Sidebar/navigation | `VBox`, `Button`, `ScrollPane`, pseudo-classes |
-| Panels and metrics | `VBox`, `HBox`, `GridPane`, `BorderPane`, `Region` |
-| Tables and lists | `TableView`, `ListView` |
-| Forms | `Label`, `TextField`, `ComboBox`, `DatePicker`, `TextArea`, `CheckBox` |
-| Attachments | `FileChooser`, `ImageView`, `MediaView`, `TilePane`/`FlowPane` |
-| Comments and timeline | `VBox`, `HBox`, `ScrollPane`, `Separator` |
-| Confirmation | `Dialog` or `DialogPane` |
-| Notification overlay | `StackPane` with an `HBox`/`Label` |
-| Charts and progress | `BarChart`, `LineChart`, `ProgressBar` |
+## AI presentation
 
-## JavaFX CSS boundaries
+- Label output as an AI-generated suggestion and show that it may be incorrect.
+- Render output as text, never with `dangerouslySetInnerHTML`. Do not turn model
+  text into links, commands, or React components.
+- Keep the suggestion visually separate from saved incident content.
+- Reporter output may be copied or explicitly applied to the editable form, but
+  applying it must not submit the incident.
+- Responder and Administrator output remains advisory and has no mutation
+  control disguised as an AI action.
+- Provider timeout, malformed output, or rate limiting uses a recoverable error
+  state and leaves the normal role workflow usable.
 
-JavaFX CSS does not support browser custom properties, Grid/Flexbox, media queries, fixed positioning, `z-index`, browser overflow, transitions, or arbitrary font weights. Keep responsive behavior and layout in Java; use looked-up colors or the small repeated token set in CSS. Use `-fx-background-radius`, `-fx-border-radius`, `-fx-border-color`, and `-fx-effect`. Custom window behavior belongs in Java, and rounded backgrounds may require explicit child radii or clipping.
+## Accessibility baseline
 
-## Shared component API
+- Target WCAG 2.2 AA for contrast, keyboard operation, focus visibility,
+  labels, error identification, reflow, and target size.
+- Prefer semantic HTML before ARIA. Use ARIA only to complete semantics that
+  native elements cannot express.
+- Preserve logical DOM and tab order. Never use positive `tabIndex` to repair a
+  visual ordering problem.
+- Support keyboard-only use, screen-reader names, 200% zoom, narrow reflow,
+  reduced motion, and sufficient non-color cues.
+- Decorative icons are hidden from assistive technology; meaningful icons have
+  an accessible text equivalent.
 
-Role pages should use `UiComponents` rather than repeating style-class strings or rebuilding common component structure. Use `ActionStyle`, `SemanticTone`, and `FeedbackType` to select closed visual variants. Standard JavaFX controls remain available for ordinary layout and data binding.
+## Security and privacy boundaries
 
-| Need | Shared API |
-| --- | --- |
-| Action button | `UiComponents.action(text, ActionStyle.PRIMARY)` |
-| Semantic badge | `UiComponents.badge(text, SemanticTone.SUCCESS)` |
-| Titled surface | `UiComponents.panel(title, content...)` |
-| Metric | `UiComponents.metricCard(label, value, detail)` |
-| Labelled/validated control | `UiComponents.field(label, control)` and `ValidatedField.showError(...)` |
-| Loading/empty/error/success | `UiComponents.feedback(title, detail, FeedbackType.ERROR)` |
-| Attachment summary | `UiComponents.attachmentTile(title, detail)` |
-| Timestamped comment | `UiComponents.comment(..., sentAt, clock, message)` |
-| Lifecycle event | `UiComponents.timelineEvent(description)` |
-| SLO progress | `UiComponents.sloProgress(progress, accessibleDescription)` |
+- React route guards and hidden controls are presentation conveniences, not
+  authorization. The Java backend enforces every resource access and mutation.
+- Escape untrusted content by default. Avoid `dangerouslySetInnerHTML`; any
+  future rich-text feature requires a restrictive sanitizer and security tests.
+- Do not persist credentials, session identifiers, anonymous identity, raw AI
+  prompts/responses, or protected incident data in `localStorage`.
+- Clear role-specific cached state on logout and authentication changes.
+- Do not include sensitive incident content or identity in URLs, analytics,
+  browser logs, error-reporting breadcrumbs, or client-visible configuration.
 
-Keep business authorization, lifecycle decisions, validation rules, and data access outside these components. Supply already-authorized display data and application validation results to the UI layer.
+## Verification checklist
+
+For each new or materially changed shared component, verify:
+
+- reuse was considered before adding another primitive;
+- responsive behavior at wide, medium, and narrow widths;
+- keyboard, focus, semantic HTML, labels, errors, and screen-reader status;
+- loading, empty, denied, success, failure, and stale-data states;
+- safe rendering of long text, malicious HTML, and AI output;
+- absence of protected data from URLs, browser storage, and client logs; and
+- backend authorization remains the source of truth.
+
+Record implementation-specific completion evidence under
+`workflow/test-evidence/`; do not mark visual components complete in this guide
+before the React implementation exists.

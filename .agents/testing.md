@@ -2,100 +2,125 @@
 
 ## General approach
 
-- Keep domain and authorization logic testable without launching the UI.
-- Return stable application error codes and field validation results so UI code
+- Keep domain and authorization logic testable without a browser or provider.
+- Return stable application error codes and field validation results so the UI
   never parses exception messages.
-- Use deterministic clocks and identifier generators in tests.
-- Use a fresh temporary application-data directory for every persistence test.
-- Never access a developer's or user's real application-data directory.
-- Test both successful and denied paths.
-- Verify persisted state and audit evidence rather than trusting status text.
+- Use deterministic clocks and identifier generators.
+- Use isolated databases, fake AI providers, and fake external services.
+- Test successful, denied, stale, concurrent, malformed, and unavailable paths.
+- Verify persisted state and audit evidence rather than trusting HTTP status or
+  visible text alone.
 
 ## Required suites
 
-### Authentication and accounts
+### Authentication and web security
 
-- Registration validation and duplicate identities.
-- Case-sensitive login lookup, including distinct accounts whose names differ
-  only by letter case.
-- Login success/failure, logout, and session replacement.
-- Password hashes are salted and plaintext is absent from stored files/logs.
-- Self-service password replacement requires the current password, atomically stores a new salted hash with its
-  audit event, rejects mismatched confirmation, and leaves the previous credential usable after persistence failure.
-- Promotion approval/rejection and category-access changes.
-- Password reset credentials expire after 24 hours, are superseded by later resets, and are invalidated
-  after the mandatory password replacement succeeds.
-- Account deletion disables login while preserving tombstoned history.
+- Registration validation, duplicate identities, login success/failure,
+  logout, session fixation protection, and session invalidation.
+- Successful Reporter, Responder, and Administrator portal login; generic
+  rejection for wrong-portal role, invalid credentials, disabled account, and
+  direct protected-route access without role enumeration.
+- Reporter-only public registration and tampered requests attempting to create
+  Responder or Administrator accounts.
+- Concurrent users retain distinct identities, roles, data, and CSRF tokens.
+- State-changing requests reject missing or invalid CSRF tokens.
+- Production cookies are Secure, HttpOnly, and use an explicit SameSite policy.
+- Protected routes require authentication and enforce role authorization in
+  backend logic.
+- Security headers, safe error pages, request-size limits, and open-redirect
+  prevention are verified.
+- Password hashes are salted and plaintext is absent from the database, logs,
+  HTTP responses, and test evidence.
+- Promotion, category-access, password-change/reset, and account-disable paths
+  include allowed and denied tests.
+- Promotion tests cover request status, approval, rejection, duplicate or stale
+  decisions, preserved account identity/history, approved category assignment,
+  rollback, audit effects, session invalidation, and subsequent Responder portal
+  and queue access.
+- Administrator provisioning tests cover one-time bootstrap, reuse rejection,
+  authorized later provisioning, public endpoint denial, unchanged account
+  state on failure, and absence of credentials from logs and audits.
 
 ### Authorization
 
-- Map access denial and missing resources to identical presentation-safe
-  resource-unavailable errors.
 - Each row of `.agents/authorization-matrix.md` has allowed and denied tests.
-- Reporters cannot enumerate or access another reporter's incidents.
-- Responders cannot access categories not assigned to them.
-- Responders cannot modify incidents assigned to someone else.
-- Authorization is rechecked after role/category changes.
-- UI-hidden actions also fail when invoked directly at the domain boundary.
+- Denied and missing resources use the same presentation-safe response where
+  distinguishing them would leak information.
+- Reporters cannot enumerate another reporter's incidents.
+- Responders cannot access unauthorized categories or another responder's
+  assigned incident.
+- Authorization is rechecked after role, ownership, assignment, and category
+  changes and immediately before every AI request.
+- UI-hidden actions fail when invoked directly over HTTP or at the application
+  boundary.
 
-### Incident lifecycle
+### Incident lifecycle and concurrency
 
-- Required submitted-incident title, description, and category validation,
-  including incomplete draft text, title stripping, and preservation of
-  description and resolution whitespace.
-- Every transition and invalid transition in
+- Cover every transition and invalid transition in
   `.agents/incident-lifecycle.md`.
-- Editing/withdrawal before and after assignment.
-- Resolution requires remarks.
-- Reopening succeeds only for the owning reporter and only with a non-blank
-  explanatory follow-up comment.
-- Reopening appends the comment, preserves prior resolution history, and commits
-  the comment, state transition, and audit event as one logical operation.
-- Empty or whitespace-only comments and follow-ups on non-resolved incidents do
-  not reopen an incident.
-- Handoff preserves the original queue position.
-- Admin reassignment rejects ineligible responders.
+- Validate required fields, edit/withdraw timing, resolution remarks, handoff
+  queue order, reassignment eligibility, reopening explanation, and preservation
+  of resolution history.
+- Reopening commits comment, state transition, and audit together.
+- Two simultaneous claims have exactly one success.
+- Stale updates do not overwrite a newer assignment or lifecycle state.
 
 ### Privacy and attachments
 
-- Anonymous identity is absent from every display/export model and log.
+- Anonymous identity is absent from responder and normal administrator views,
+  filters, statistics, exports, audit presentation, notifications, AI payloads,
+  provider errors, and logs.
 - The owning reporter can still access an anonymous incident.
-- Attachment size/type/path validation and traversal attempts.
-- Attachment reads require current incident authorization.
-- Stored filenames do not disclose usernames or original paths.
-- Verify spoofed extensions, image pixel bounds, per-file/count/aggregate
-  limits, symlink rejection, failed-upload rollback, and pending-upload
-  recovery without deleting unrelated files.
-- Test version-1 attachment migration with a pre-upgrade backup and migration
-  audit. Verify image rendering and logout invalidation on each target OS.
-- Reject video uploads, including video renamed as PNG/JPEG, without writing
-  blobs, metadata or success audits. Preserve any legacy video metadata/files
-  on restart but deny their opening; video playback is not a supported feature.
+- The anonymous checkbox/switch value reaches persisted state; unchecked and
+  checked submissions produce the expected privacy-safe representations.
+- Attachment tests cover authorization, detected type, spoofed extensions,
+  image dimensions, byte/count/aggregate limits, safe headers, unsafe names,
+  failed-write cleanup, and unsupported video/audio.
 
-### Persistence and recovery
+### Persistence and audit
 
-- Round-trip all entity and lifecycle variants through storage.
-- Restart recovery preserves data and relationships.
-- Failed validation leaves canonical data unchanged.
-- Simulated interrupted writes and corrupt temporary/canonical files.
-- Unknown schema version and tested migrations from supported old versions.
-- A second application writer is refused.
-- Audit event and domain mutation commit or fail together.
+- Apply all migrations to an empty PostgreSQL database.
+- Round-trip all retained entity and lifecycle variants.
+- Restart/redeploy persistence preserves data and relationships.
+- Database constraints reject invalid references and duplicate unique values.
+- Failed validation, authorization, persistence, or audit insertion rolls back
+  the entire logical operation.
+- Every required operation produces the correct redacted append-only audit
+  event, including deterministic ordering and tombstoned actors.
+- Cover every SLO formula and edge case in `.agents/slo.md`.
 
-### Audit and SLO
+### AI security and resilience
 
-- Every required operation produces the correct redacted audit event.
-- Audit ordering and tombstoned actors.
-- All formulas and edge cases in `.agents/slo.md`.
-- Filters do not leak anonymous identity.
+- Use a fake provider for deterministic automated tests; CI must not require a
+  real SoC LLM key.
+- Cover direct prompt injection and indirect injection in incident text,
+  comments, attachment names, and previous AI output.
+- Cover cross-role and cross-incident leakage, anonymous identity requests,
+  excessive data selection, and unrelated-incident identifiers.
+- Cover malicious HTML/Markdown/script output and attempts to make AI perform
+  unauthorized application actions.
+- Cover per-user rate-limit exhaustion, oversized input/output, timeout,
+  malformed response, unavailable provider, bounded retry, and cancellation.
+- Prove prompts and responses do not appear in application or CI logs.
+- Prove AI output is not persisted as a domain change without a separate,
+  authorized human action through the normal workflow.
+
+### Deployment and acceptance
+
+- CI runs build, unit tests, database integration tests, formatting/style
+  checks, security-related tests, and production artifact creation.
+- The container starts from a clean environment and exposes a working health
+  endpoint.
+- A deployed smoke test covers login and one end-to-end path for each role.
+- Production and development use separate configuration and credentials.
 
 ## Completion evidence
 
-Before declaring a change complete, report:
+Before declaring a change complete, record:
 
-- Test/build commands run.
-- Passed and failed results.
-- Checks not run and why.
-- Relevant manual verification, if any.
-- Persisted-format or migration impact.
-- Remaining assumptions or risks.
+- Test/build commands run and the exact commit tested.
+- Passed, failed, skipped, and unavailable checks.
+- Relevant manual and deployed verification.
+- Migration, concurrency, audit, privacy, and AI-data effects.
+- Sanitized evidence location under `workflow/test-evidence/`.
+- Remaining assumptions and risks.

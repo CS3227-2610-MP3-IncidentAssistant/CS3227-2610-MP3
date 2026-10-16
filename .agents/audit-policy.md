@@ -43,7 +43,8 @@ unnecessary incident content, or an anonymous reporter's display identity.
 - Account disabling/deletion and password-reset initiation/completion. Reset audit records contain no
   plaintext password, password hash, or reset credential.
 - SLO configuration changes.
-- Data migration, backup restoration, and detected storage corruption.
+- Database migration and approved backup restoration.
+- AI request acceptance and outcome category, without prompt or response text.
 
 ## Integrity rules
 
@@ -58,5 +59,6 @@ unnecessary incident content, or an anonymous reporter's display identity.
 - An incident audit view shows only events for that incident.
 - Anonymous incident audit presentation must follow `.agents/anonymity-policy.md`.
 
-File permissions and checksums can detect some accidental damage but cannot make
-local files tamper-proof against a machine owner. Do not claim otherwise.
+Database permissions and append-only application APIs reduce ordinary
+modification risk but do not make records tamper-proof against a database or
+hosting administrator. Do not claim otherwise.

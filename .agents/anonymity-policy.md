@@ -7,9 +7,10 @@ normal administrator incident, statistics, export, and audit views. The
 application retains an internal reporter link so the reporter can view the
 incident, receive its status, and post a follow-up.
 
-This is confidentiality within the application, not cryptographic anonymity:
-the local data owner may be capable of inspecting storage files. User-facing
-copy must not promise stronger anonymity than the implementation provides.
+This is confidentiality within the application, not cryptographic anonymity.
+Authorized database or hosting operators may be capable of inspecting the
+protected canonical record. User-facing copy must not promise stronger
+anonymity than the implementation provides.
 
 ## Required protections
 
@@ -17,11 +18,12 @@ copy must not promise stronger anonymity than the implementation provides.
   view and transfer object.
 - Do not reveal identity through comments, audit actor labels, filters,
   statistics, notifications, attachment paths/names, exports, error messages,
-  or logs.
+  logs, metrics, AI prompts, AI responses, provider errors, or workflow
+  evidence.
 - Store the internal reporter reference only in the protected canonical data,
   not duplicated across derived indexes or display models without need.
-- Generate stored attachment names; never embed usernames or original local
-  paths.
+- Generate stored attachment identifiers; never embed usernames, client paths,
+  or identity-bearing values in storage keys or download URLs.
 - For anonymous incidents, use generic image display names for every role
   (and generic video names for any retained, unsupported legacy metadata).
   Sanitized original names remain protected storage metadata only.
@@ -45,6 +47,7 @@ confirmation, audit, and display rules before implementation.
 
 ## Testing expectations
 
-Test every representation of an anonymous incident, including detail/list
-views, audit displays, statistics, filters, exports, comments, attachments,
-notifications, serialized display models, and failure messages.
+Test every representation of an anonymous incident, including HTTP responses,
+detail/list views, audit displays, statistics, filters, exports, comments,
+attachments, notifications, serialized models, AI provider payloads,
+application/CI logs, metrics, and failure messages.
