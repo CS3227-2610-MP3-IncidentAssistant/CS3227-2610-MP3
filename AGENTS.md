@@ -60,6 +60,23 @@ Make reasonable, low-risk assumptions. Ask before making a decision that would
 materially change product behaviour, security, privacy, stored-data format, or
 architecture.
 
+## Repository and submission branches
+
+- `main` is the canonical day-to-day development branch. Feature branches and
+  pull requests target `main`.
+- `master` is reserved as the assignment submission branch because the graders
+  will pull that branch. Do not use it for ordinary development.
+- At submission time, after the exact `main` commit has passed the required
+  checks and received human release approval, replace `master` so that it
+  points to exactly that verified `main` commit. Do not preserve divergent
+  `master`-only content.
+- Replacing the published `master` branch is a destructive release operation.
+  Perform it only on an explicit human submission instruction, record the
+  submitted commit SHA and verification evidence, and confirm the remote
+  `master` and `main` refs match afterward.
+- Do not make repository changes after the submission branch has been
+  finalized unless the course staff explicitly permits them.
+
 ## Engineering rules
 
 - Enforce role-, ownership-, assignment-, and category-based authorization in
