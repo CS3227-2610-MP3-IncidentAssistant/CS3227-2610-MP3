@@ -1,5 +1,9 @@
 # Deployment and Configuration
 
+The selected provider topology, development proxy, storage direction, and cost
+controls are documented in `.agents/deployment_strategy.md`. This file remains
+the authoritative environment, release, and operational contract.
+
 ## Environments
 
 - Maintain separate development and production configuration.
