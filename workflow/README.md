@@ -12,6 +12,8 @@ evidence.
 ## Files
 
 - `product-requirements.md`: MP3 goals, roles, feature inventory, and scope.
+- `administrator-vertical-slice.md`: draft React + Spring Boot administrator
+  feature-parity specification and acceptance boundaries.
 - `ai-features.md`: feature-specific provider data and human-review contracts.
 - `threat-model.md`: assets, trust boundaries, threats, and mitigations.
 - `acceptance-criteria.md`: release-level and feature-level acceptance tests.

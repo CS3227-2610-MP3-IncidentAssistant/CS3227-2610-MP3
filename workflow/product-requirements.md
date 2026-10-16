@@ -22,8 +22,26 @@ AI feature.
 
 ### Administrator
 
-TODO: List retained web workflows and the privacy-safe operational-trend AI
-feature.
+The draft administrator vertical slice preserves the complete current desktop
+administrator surface and adds the MP3 controls required by the canonical
+contracts. An authenticated Administrator can:
+
+- monitor, search, filter, sort, and inspect incidents across the company;
+- comment on incidents; view privacy-safe comments and image attachments; and
+  assign, reassign, unassign, or resolve incidents within lifecycle rules;
+- review promotion requests, update Responder category access, reset or
+  tombstone eligible accounts, and use controlled Administrator provisioning;
+- configure prospective, versioned SLO targets by category;
+- view privacy-safe operational statistics and filterable append-only audit
+  history; and
+- request an advisory AI summary built only from privacy-safe aggregate
+  statistics, with no mutation authority.
+
+Detailed behavior, denied/stale/failure paths, data boundaries, and required
+evidence are specified in `administrator-vertical-slice.md`. Its expanded
+feature-parity scope requires product-owner approval because some retained
+desktop capabilities are currently classified as post-MVP in
+`.agents/mvp-scope.md`.
 
 ## Shared non-functional requirements
 

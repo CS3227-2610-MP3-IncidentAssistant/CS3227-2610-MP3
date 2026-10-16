@@ -1,0 +1,566 @@
+# Administrator React + Spring Boot Vertical Slice
+
+Status: **Draft — awaiting product-owner and security/architecture approval.**
+
+This document specifies the administrator experience to be migrated from the
+JavaFX application to a React browser interface backed by Spring Boot and
+PostgreSQL. It inventories every capability exposed by the current desktop
+administrator view, reconciles that behavior with the canonical MP3 contracts,
+and defines observable acceptance criteria before implementation begins.
+
+The canonical policies under `.agents/` remain authoritative. If this draft and
+a canonical policy disagree, the canonical policy wins until a human approves
+and records a coordinated policy change.
+
+## 1. Scope decision
+
+The requested slice targets **administrator feature parity**, not only the
+minimum administrator MVP. It therefore includes current desktop features that
+`.agents/mvp-scope.md` presently labels post-MVP:
+
+- administrator assignment, reassignment, unassignment, and resolution;
+- account deletion and temporary-password reset;
+- detailed operational statistics; and
+- the full application audit-log interface.
+
+Approving this specification schedules those features earlier; it does not
+weaken any lifecycle, privacy, authorization, audit, or transaction rule. The
+team must record product-owner approval before implementation starts.
+
+### Current desktop inventory and disposition
+
+| Current JavaFX surface | Behavior found | Web disposition |
+| --- | --- | --- |
+| Authenticated shell | Dashboard, Accounts, SLO configuration, Audit log, Statistics, notification tray, own-password change, logout | Preserve as a responsive authenticated shell; notifications remain a decision |
+| Administrator dashboard | Per-category SLO target overview; company incident table; search, filters, sort, refresh, open detail | Preserve and make queries paged/server-side |
+| Incident detail | Lifecycle facts, resolution history, SLO, comments, image attachments, assign/reassign, unassign, resolve | Preserve with transaction-safe HTTP mutations; omit the non-functional audit placeholder |
+| Accounts | Directory, pending-only toggle, promotion request detail and decision, Responder category configuration, password reset, deletion | Preserve; add MP3-required controlled Administrator provisioning |
+| SLO configuration | Per-category current target, create new version, read-only history | Preserve with PostgreSQL version history and atomic audit |
+| Statistics | Category/date filters, company metrics, Responder breakdown | Preserve and add the required Responder/Reporter filters and AI trend summary |
+| Audit log | Newest-first activity table and event-detail dialog | Preserve and add policy-required time/actor/action/target filters |
+
+JavaFX controls, virtual-thread UI tasks, double-click-only shortcuts,
+process-global sessions, local aggregate files, and in-process event refreshes
+are implementation details to replace, not behaviors to preserve. Web controls
+must always expose a keyboard-operable named link or button even when pointer
+shortcuts are also offered.
+
+## 2. Goals and outcomes
+
+The slice is complete when an authenticated Administrator can use a responsive
+React application to monitor all company incidents, perform authorized incident
+and account operations, govern responder access and SLO targets, inspect
+privacy-safe statistics and audit evidence, and request an advisory operational
+trend summary. Spring Boot is authoritative for identity, authorization,
+validation, transactions, timestamps, privacy-safe data selection, and audit
+creation. PostgreSQL is the shared source of truth.
+
+The migration must preserve reusable domain and application rules while
+replacing JavaFX views, process-global session assumptions, local-file
+persistence, and in-process UI refresh mechanics.
+
+## 3. Actors and global preconditions
+
+- The actor is an enabled account whose persisted role is `ADMINISTRATOR`.
+- The actor authenticated through the Administrator portal. Portal selection
+  is an expected-role check, not authority by itself.
+- Every protected HTTP request derives the actor from Spring Security's trusted
+  request context. Browser-supplied actor, role, timestamp, ownership, or audit
+  values are ignored.
+- Every state-changing request passes CSRF validation and repeats authorization
+  at execution time.
+- Missing and forbidden protected resources use the same presentation-safe
+  response wherever distinguishing them could leak information.
+- A changed, disabled, or signed-out session clears administrator data from the
+  React query/cache state and redirects to the appropriate authentication flow.
+
+## 4. Information architecture
+
+The authenticated administrator shell provides these destinations:
+
+| Route | Purpose |
+| --- | --- |
+| Dashboard | SLO overview and company-wide incident list |
+| Accounts | Accounts, promotion decisions, category access, reset, deletion, and administrator provisioning |
+| SLO configuration | Current per-category targets and version history |
+| Audit log | Filterable application audit history and event details |
+| Statistics | Company and responder operational measures plus advisory AI trend summary |
+
+The shell also exposes the current login name and role, password change,
+notifications if retained for the release, and logout. On narrow screens the
+labelled sidebar becomes an accessible menu; it must not collapse into
+unlabelled icons.
+
+Browser history and deep links must work for list and detail routes. Protected
+incident content, reporter identity, reset credentials, and session identifiers
+must not appear in URLs.
+
+## 5. Functional requirements
+
+### ADM-AUTH-01 — Administrator portal authentication
+
+The public role-entry page links to a clearly labelled Administrator login
+portal backed by the same identity store and authentication service as the
+other roles. The portal accepts only an enabled account whose persisted role is
+`ADMINISTRATOR`. Invalid credentials, unknown or disabled accounts, and a
+valid account presented to the wrong role portal receive the same generic
+failure without username or role enumeration.
+
+Successful authentication rotates the session identifier and establishes a
+server-side session with production cookie controls. The Administrator portal
+offers no public registration, role selector, or self-service privileged
+account creation. Direct navigation to an administrator route while signed out
+or under another role exposes no protected page data.
+
+### ADM-INC-01 — Company incident dashboard
+
+The Dashboard shows one current SLO summary for every incident category and a
+company-wide incident list. Each row shows:
+
+- incident identifier and title;
+- category and lifecycle status;
+- creation/submission time;
+- privacy-safe reporter label;
+- current assignee or `Unassigned`; and
+- evaluated SLO label/progress state.
+
+The list supports:
+
+- trimmed, case-insensitive search across title, description, and incident ID;
+- multi-select category, status, and evaluated-SLO filters;
+- assignment state;
+- non-anonymous reporter and eligible responder identity filters;
+- inclusive creation-date bounds interpreted in the user's display timezone;
+- sorting by creation time, submission time, queue-entry time, title, status,
+  or category in ascending or descending order; and
+- reset to newest creation time first, with incident ID ascending as the stable
+  tie-breaker for every ordering.
+
+Selections within category, status, or SLO groups use OR. Different filter
+groups use AND. Empty selections mean all. Anonymous incidents remain in
+results when otherwise matched, but their internal reporter identity is absent
+from row data and reporter-filter options. Search/filter/sort executes on the
+server with bounded page size and pagination; React must not load the entire
+company dataset to filter locally.
+
+Loading, empty, denied/session-expired, invalid-filter, server-failure, and
+retry states are explicit. A late response from an earlier query must not
+replace a newer result or restore data after logout.
+
+### ADM-INC-02 — Incident detail and collaboration
+
+An Administrator can open any incident and view the latest authorized,
+privacy-safe representation:
+
+- identifier, title, description, category, status, reporter and assignee;
+- created, submitted, withdrawn, queue-entry, first-assigned, and latest-
+  assignment timestamps when applicable;
+- complete resolution history;
+- SLO state and progress;
+- comment thread and comment composer; and
+- authorized PNG/JPEG attachment metadata and images.
+
+Anonymous reporters and their comments use `Anonymous reporter`. The normal
+administrator interface offers no deanonymization path. Attachments use generic
+display names for anonymous reports and are read through an authorization-
+checked endpoint with safe content headers. Administrators may view but not add
+attachments.
+
+The current JavaFX `Audit timeline not available yet` placeholder is not a
+feature to reproduce. The React page either omits the section or, if incident-
+scoped audit is implemented in this slice, loads only privacy-safe events for
+that incident under ADM-AUD-01 rules.
+
+An Administrator may add a non-blank comment. Server-configured text limits
+apply consistently in React, Spring validation, and the database. The UI keeps
+unsent text after a recoverable failure and prevents duplicate submissions.
+
+### ADM-INC-03 — Assign or reassign
+
+For an unassigned `SUBMITTED` incident the action is labelled `Assign`; for an
+`ASSIGNED` incident it is labelled `Reassign`. The selection contains only
+enabled Responders whose current category access includes the incident's
+category.
+
+On confirmation the server rechecks the incident version/state, administrator
+role, target account status/role, and category eligibility in the mutation
+transaction. It sets or replaces the single assignee and required assignment
+timestamps, then commits the incident change and one audit event atomically.
+Concurrent or stale requests cannot overwrite a newer lifecycle or access
+change. An ineligible or stale target returns a stable conflict/unavailable
+result and leaves state and audit unchanged.
+
+If no eligible Responders exist, the page explains that category access must be
+configured first and offers a safe route to Accounts without changing the
+incident.
+
+### ADM-INC-04 — Unassign
+
+An Administrator may unassign only an `ASSIGNED` incident. A confirmation names
+the consequence before submission. Success clears the assignee, transitions
+the incident to `SUBMITTED`, preserves its original queue position for the
+current queue cycle, and commits one audit event in the same transaction.
+
+Cancel changes nothing. Duplicate clicks produce at most one mutation. A stale
+state returns a safe conflict result and refreshes the detail.
+
+### ADM-INC-05 — Resolve
+
+An Administrator may resolve only an `ASSIGNED` incident. Resolution remarks
+must be non-blank and within the configured text limit; entered whitespace is
+retained after non-blank validation. Success transitions the incident to
+`RESOLVED`, appends rather than replaces resolution history, records the
+application-generated UTC timestamp, and commits one resolution audit event in
+the same transaction.
+
+Invalid, stale, denied, or persistence-failed requests leave the incident and
+audit unchanged. Recoverable failures preserve entered remarks. This slice does
+not permit direct resolution of an unassigned `SUBMITTED` incident.
+
+### ADM-ACC-01 — Account directory
+
+Accounts are listed in deterministic login-name order with login name, current
+role, status where relevant, responder categories, pending-promotion indicator,
+and available actions. The directory supports a `pending promotion requests
+only` filter. Deleted/tombstoned accounts are not actionable directory rows,
+but their stable identifiers remain in historical incident and audit records.
+
+Account data is server-paginated for web scale. Empty, loading, denied,
+session-expired, and failure states reveal no privileged data.
+
+### ADM-ACC-02 — Promotion review
+
+For each pending Reporter-to-Responder request, an Administrator can review the
+requester, requested categories, request time, and optional comments, then
+approve, reject, or cancel.
+
+Approval changes the existing account to `RESPONDER`, grants exactly the
+approved/requested category set defined by the request, preserves the account
+identifier and historical references, records the decision and access change
+atomically, and invalidates existing sessions so the user must reauthenticate
+through the Responder portal. Rejection changes neither role nor category
+access. Both decisions retain request history and create the required audit
+event. Cancel changes nothing.
+
+Only a still-pending request for an enabled Reporter can be decided. Duplicate
+or stale decisions fail without a second mutation or success audit.
+
+### ADM-ACC-03 — Responder category access
+
+An Administrator can replace an enabled Responder's permitted category set,
+including clearing it to an empty set. The server ignores any browser-supplied
+role and rechecks that the target is still an enabled Responder.
+
+Success persists the new set and its audit event atomically and invalidates or
+refreshes affected sessions as required by `.agents/security.md`. Revocation
+immediately removes access to unassigned incidents and future claims in that
+category. Incidents already assigned to the Responder remain viewable and
+actionable until resolution, handoff, or reassignment. Submitting an unchanged
+set is idempotent and must not create misleading change evidence.
+
+### ADM-ACC-04 — Temporary-password reset
+
+After explicit confirmation, an Administrator can initiate a reset for an
+enabled account other than their own currently authenticated account. The server
+generates a high-entropy one-time temporary password, stores only its salted
+hash, invalidates/supersedes the old credential and active sessions, and sets a
+24-hour expiry. The credential change and secret-free audit event commit
+atomically.
+
+The plaintext temporary password is returned only after durable commit, shown
+once in a non-cacheable response/dialog, never logged or stored in browser
+persistence, and cleared from client state when the dialog closes or the page
+unmounts. The user must replace it before accessing any role workflow. A failed
+reset never displays a secret.
+
+The delivery mechanism outside the application remains a product decision; UI
+copy instructs the Administrator to use an approved secure channel.
+
+### ADM-ACC-05 — Account deletion
+
+After a destructive confirmation, an Administrator may disable/tombstone an
+eligible account. The operation does not physically delete incidents, comments,
+resolutions, promotion history, or audit evidence. Historical references use a
+neutral deleted-account label. The target cannot authenticate, and existing
+sessions are invalidated or rejected on their next use.
+
+An Administrator cannot delete their own currently authenticated account. The
+server rechecks eligibility and commits the tombstone and audit event in one
+transaction. This operation is irreversible in this slice.
+
+### ADM-ACC-06 — Administrator provisioning
+
+Although the desktop Accounts page does not provide it, MP3 requires controlled
+administrator provisioning. The first Administrator is created only through
+the one-time environment/CLI/bootstrap mechanism approved under
+`.agents/mp2-grade-improvements.md`. Reuse is rejected and audited without
+exposing credentials.
+
+After bootstrap, only an authenticated Administrator may create another
+Administrator through a dedicated operation. No public form, login portal,
+query parameter, or client-supplied role selector can create a privileged
+account. Exact credential delivery and whether this control shares the Accounts
+page require an approved security ADR before implementation.
+
+### ADM-SLO-01 — Versioned category targets
+
+For every incident category, an Administrator can view the current effective
+target and read-only version history, then create a new version containing:
+
+- average time-to-claim target in non-negative whole minutes;
+- average time-in-progress target in non-negative whole minutes; and
+- average reopen-rate target from 0 through 100 percent.
+
+The browser shows field-level and summary errors, but the server remains
+authoritative. Saving unchanged values is disabled/no-op and does not create a
+version. A valid change receives a server-generated ID and UTC effective time,
+commits with an audit event, applies prospectively, and never rewrites historic
+cycle evaluation. Persistence failure leaves the prior target effective.
+
+### ADM-STAT-01 — Operational statistics
+
+An Administrator can filter statistics by responder, non-anonymous reporter,
+category, inclusive time period, and any other approved incident scope shared
+with the service. Anonymous incidents contribute to aggregate measures but
+never expose or become selectable by reporter identity.
+
+The company summary displays:
+
+- incidents resolved;
+- average time to claim;
+- average time in progress;
+- reopened-incident count and reopen rate; and
+- Administrator-resolved count.
+
+The responder breakdown displays responder-attributable resolution count,
+average time in progress, reopen count/rate, and Administrator-resolved count
+where meaningful. Queue-level time to claim is not falsely attributed to a
+Responder. Empty populations show `No data`; zero-denominator calculations do
+not invent a percentage. Charts, if used, have a textual/table equivalent.
+
+An inverted period is rejected without querying protected statistics. All
+calculations use persisted UTC lifecycle timestamps and the definitions in
+`.agents/slo.md`.
+
+### ADM-AI-01 — Advisory operational-trend summary
+
+From the currently selected statistics scope, an Administrator may request an
+AI-generated operational-trend summary. Immediately before data selection the
+server reauthorizes the actor and rebuilds the aggregates; it does not trust
+statistics posted back by React.
+
+The provider payload may contain only aggregate counts, durations, rates,
+category names, and time bounds. It contains no raw incident text, comments,
+attachment data or names, credentials, session data, audit records, reporter
+identity, or anonymous internal identity. Output is escaped plain text labelled
+`AI-generated suggestion` and remains separate from saved data. There is no
+apply or mutation action.
+
+The shared AI gateway enforces configured input/output limits, per-account and
+per-feature rate limits, timeouts, cancellation, at most one bounded retry for
+an idempotent transient failure, safe error categories, and secret/content-
+free logs. Accepted requests and outcome categories are audited without prompt
+or response text. Failure leaves normal statistics usable.
+
+Exact provider, model, and numeric limits remain blocked on the current course
+guide and `workflow/ai-features.md` approval.
+
+### ADM-AUD-01 — Audit history
+
+The Audit log is append-only and Administrator-only. It lists newest events
+first with deterministic tie-breaking and supports server-side filters for
+inclusive time bounds, actor, action, target type, and target identifier.
+Opening an event shows:
+
+- event identifier and application-generated UTC occurrence time;
+- privacy-safe actor label and role snapshot;
+- action, target type/identifier, and outcome; and
+- structured, redacted before/after changes or concise details.
+
+It never exposes passwords, hashes, temporary/reset credentials, sessions,
+unnecessary incident content, raw AI prompts/responses, or anonymous reporter
+identity. Deleted actors render with a tombstoned label while retaining their
+stable identifier. No browser or application operation can edit or delete an
+audit event.
+
+### ADM-SELF-01 — Own password, notifications, and logout
+
+The Administrator can replace their own password only after current-password
+verification and matching valid new-password confirmation. The change and
+secret-free audit event are atomic; plaintext and hashes never enter logs or
+client persistence.
+
+Logout invalidates the server session, clears privileged React state, and
+returns to public role entry. If transient notifications are retained, they
+must be scoped to the authenticated account/session and never leak anonymous
+identity or protected records across sessions. Persistent notification history
+is not required by this slice.
+
+## 6. HTTP and application contract
+
+Exact URI names may follow the approved web ADR, but the implementation must
+expose typed operations with these semantics:
+
+| Operation family | Read/mutation behavior |
+| --- | --- |
+| Administrator session | current actor, password change, logout |
+| Incidents | paged query, detail, comment, attachment read, assign/reassign, unassign, resolve |
+| Accounts | paged directory, pending requests, promotion decision, category replacement, reset, tombstone, privileged provisioning |
+| SLO | current targets, category history, create target version |
+| Statistics/AI | aggregate query, responder breakdown, trend-summary request |
+| Audit | paged filtered query and event detail |
+
+Responses use explicit DTOs rather than serialized domain entities. DTOs
+contain only fields authorized for this actor and representation. Mutation
+requests contain business inputs and an opaque concurrency/version token where
+needed, never actor or audit identity. Stable machine-readable error codes
+cover validation, unauthenticated, unavailable/denied, conflict/stale,
+rate-limited, and internal/persistence failure. React does not parse exception
+messages.
+
+List endpoints use bounded pagination and allowlisted sort fields. Identifiers
+are validated before repository access. State-changing endpoints reject missing
+or invalid CSRF tokens and unsupported content types.
+
+## 7. Transaction, persistence, and concurrency rules
+
+- PostgreSQL schema changes use forward-only versioned migrations.
+- Each mutation and its required audit event commit in one database
+  transaction; neither is visible on rollback.
+- Conflicting lifecycle and account mutations use optimistic version checks or
+  equivalent row locking proven by integration tests.
+- Application-generated timestamps are UTC and database/server-clock defaults
+  are not the source of business time.
+- An incident has at most one assignee, enforced in application logic and
+  database constraints where appropriate.
+- SLO version history and audit history are append-only through ordinary
+  application APIs.
+- Tests use isolated PostgreSQL databases/schemas and never production data.
+
+## 8. React interaction and accessibility contract
+
+- Follow `.agents/STYLE_GUIDE.md` and target WCAG 2.2 AA.
+- Use semantic headings, labelled controls, real buttons/links, table headers,
+  keyboard-operable menus, visible focus, non-color state cues, and live
+  regions appropriate to the urgency of feedback.
+- Dialogs trap focus, close with Escape when safe, and return focus to their
+  trigger. Destructive and credential-reset dialogs state consequences.
+- Prevent duplicate UI submissions without relying on that prevention for
+  correctness.
+- Preserve layout at 200% zoom and reflow from desktop to mobile width. Dense
+  tables may scroll in a labelled region or become accessible cards.
+- Long titles, descriptions, comments, identifiers, and AI output wrap safely.
+- Render all untrusted content as text; do not use `dangerouslySetInnerHTML`.
+- Do not store credentials, reset secrets, anonymous identity, raw AI content,
+  or protected incident data in `localStorage` or analytics.
+- Every page defines loading, empty, success, field-error, denied/session-
+  expired, stale/conflict, server-failure, and retry behavior as applicable.
+
+## 9. Acceptance criteria and evidence
+
+The administrator slice is acceptable when:
+
+- [ ] Only an enabled authenticated Administrator can load an administrator
+  route or API representation; denied and missing resources do not leak data.
+- [ ] The Administrator portal shares the backend identity store, accepts only
+  the persisted Administrator role, uses generic failures, rotates the session
+  on success, and exposes no public registration or role-selection path.
+- [ ] The dashboard provides server-paginated company incidents with the
+  specified search, filters, sorting, stable tie-breaker, privacy-safe identity
+  options, SLO overview, and stale-response protection.
+- [ ] Incident detail renders privacy-safe lifecycle, resolution, SLO, comment,
+  and image-attachment data without exposing an anonymous identity.
+- [ ] Assign/reassign, unassign, resolve, and comment operations reauthorize at
+  execution, reject stale or invalid state, prevent duplicate mutation, and
+  commit required audit evidence atomically.
+- [ ] The account directory supports pending-promotion review, approval and
+  rejection, Responder category replacement, one-time temporary-password
+  reset, eligible account tombstoning, and controlled Administrator
+  provisioning with the specified session effects.
+- [ ] SLO target changes validate all fields, create prospective append-only
+  versions, preserve history, and commit audit evidence atomically.
+- [ ] Statistics use persisted lifecycle timestamps, apply the specified
+  filters and formulas, handle empty populations, and include anonymous
+  incidents only in non-identifying aggregates.
+- [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
+  sends only allowlisted aggregate data, renders escaped advisory text, has no
+  mutation path, and fails without blocking statistics.
+- [ ] The audit UI provides paged deterministic history and time, actor, action,
+  and target filters without secrets, unnecessary content, or anonymous
+  identity.
+- [ ] Password change and logout use server-side sessions, CSRF protection,
+  secret-free logging and auditing, session invalidation, and client cache
+  clearing.
+- [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
+  reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
+- [ ] The required automated, accessibility, and deployed checks below are
+  recorded against the exact release commit under `workflow/test-evidence/`.
+
+### Required verification
+
+The following suites are required before the slice can be called complete:
+
+1. Domain/application tests for every allowed and denied administrator action,
+   lifecycle rule, validation limit, privacy transformation, SLO formula, and
+   audit change.
+2. Spring MVC/security tests for authentication, expected-role portal checks,
+   CSRF, resource authorization, generic missing/denied responses, content
+   types, request limits, session invalidation, and safe error DTOs.
+3. PostgreSQL integration tests for empty-database migrations, round trips,
+   transaction rollback, audit atomicity, version conflicts, and concurrent
+   assignment/reassignment/deletion/access changes.
+4. React component tests for semantic structure, keyboard/focus behavior,
+   validation, confirmation, loading/empty/error states, stale responses, and
+   malicious/long text rendering.
+5. Browser end-to-end tests covering each navigation destination and one
+   successful plus denied/stale path for each mutation family.
+6. AI gateway tests for aggregate-only payloads, prompt injection, anonymous
+   identity exclusion, malicious output, rate limit, timeout, retry, malformed
+   response, unavailable provider, cancellation, and absence of content in
+   logs/audits.
+7. Responsive and accessibility verification at wide, medium, and narrow
+   widths, keyboard-only operation, 200% zoom, and automated accessibility
+   scanning.
+8. Deployment smoke test over HTTPS using the exact release commit and an
+   isolated non-production dataset.
+
+Evidence must record exact commands, commit SHA, environment, passed/failed/
+skipped checks, sanitized outputs, and remaining risks under
+`workflow/test-evidence/`. Agent output alone does not satisfy an approval gate.
+
+## 10. Traceability matrix
+
+| Requirement | Canonical source | Primary evidence |
+| --- | --- | --- |
+| ADM-AUTH-01 | requirements, security, authorization matrix | authentication/session/portal security tests |
+| ADM-INC-01/02 | requirements, authorization matrix, anonymity, SLO | MVC + React + E2E list/detail tests |
+| ADM-INC-03/04/05 | incident lifecycle, authorization matrix, audit | service + PostgreSQL conflict/atomicity + E2E tests |
+| ADM-ACC-01/02/03 | requirements, authorization matrix, security | service + MVC + session invalidation + E2E tests |
+| ADM-ACC-04/05/06 | requirements, security, audit, MP2 improvements | credential/tombstone/bootstrap security tests |
+| ADM-SLO-01 | SLO, audit | calculation + versioning + PostgreSQL tests |
+| ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
+| ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
+| ADM-AUD-01 | audit policy, anonymity | append-only/privacy/filter tests |
+| ADM-SELF-01 | requirements, security, audit | password/session/CSRF tests |
+
+## 11. Decisions required before implementation
+
+1. Approve pulling the current desktop parity features listed in section 1
+   into this vertical slice despite their current post-MVP label.
+2. Approve the Administrator provisioning workflow and credential-delivery
+   mechanism in a security ADR.
+3. Confirm centrally enforced text, page-size, password, and request limits.
+4. Confirm whether notifications remain in the first web slice.
+5. Decide whether incident-scoped audit history is implemented now or the
+   JavaFX placeholder is simply omitted.
+6. Confirm the SoC LLM provider/model, limits, and data-retention terms before
+   ADM-AI-01 implementation.
+7. Approve the React asset deployment topology, API URI conventions, session
+   cookie policy, and attachment storage in the architecture records.
+
+## 12. Approval
+
+- Product owner: TODO
+- Security/architecture reviewer: TODO
+- Approved scope/date: TODO
+- Review evidence: TODO
