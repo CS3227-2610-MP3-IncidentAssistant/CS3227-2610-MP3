@@ -19,7 +19,9 @@ a separate static frontend.
 - Application authorization boundary: TODO
 - PostgreSQL schema, migrations, and transaction boundary: TODO
 - Concurrent incident-claim strategy: TODO
-- Attachment storage choice and consistency: TODO
+- Attachment storage choice: Neon Object Storage private branch-scoped bucket;
+  metadata remains in PostgreSQL. Write compensation and full attachment-flow
+  consistency remain TODO. See `neon-services.md`.
 - Application event replacement for JavaFX-thread events: TODO
 - AI gateway and provider trust boundary: TODO
 - Development/test/production configuration: TODO
@@ -43,3 +45,6 @@ Create one record in `decisions/` for each material choice. At minimum cover:
 - Architect/reviewer: TODO
 - Security reviewer: TODO
 - Date: TODO
+
+The repository user approved the Neon Object Storage provider amendment on
+2026-10-17. Independent architecture and security review remain TODO.

@@ -36,6 +36,25 @@ npm run dev
 
 The frontend can then be accessed at <http://localhost:5173/>.
 
+## Neon services
+
+The production service policy is declared in `neon.ts`: application traffic
+uses the pooled Neon PostgreSQL URL and attachment bytes use the private
+`incident-attachments` Object Storage bucket. After authenticating the Neon CLI,
+provision the linked `production` branch:
+
+```powershell
+neon deploy
+```
+
+Neon pulls the branch variables into the git-ignored `.env.local` (or `.env`
+when that file already exists). The Spring backend reads `DATABASE_URL` and the
+standard `AWS_*` variables from its process environment. Production must also
+set `INCIDENT_DESK_NEON_REQUIRED=true` so missing configuration fails startup;
+local development remains available without provider credentials. See
+`.env.example` for variable names and safe defaults. Keep
+`DATABASE_URL_UNPOOLED` reserved for future versioned migrations.
+
 Vite proxies `/health` and future `/api` requests to Spring Boot. A normal
 Gradle build compiles the React production assets into the Spring Boot web JAR.
 Production deployment builds one container and deploys it to Cloud Run through

@@ -8,6 +8,7 @@ is the central index: it links to those criteria but does not duplicate them.
 - [MVP exit criteria](../.agents/mvp-scope.md#mvp-exit-criteria)
 - [Spring Boot health-endpoint acceptance criteria](../.agents/springboot_migration/health-endpoint.md#acceptance-criteria)
 - [Administrator vertical-slice acceptance criteria and evidence](administrator-vertical-slice.md#9-acceptance-criteria-and-evidence)
+- [Neon PostgreSQL and Object Storage acceptance criteria](neon-services.md#acceptance-criteria)
 
 ## Index and completion rules
 

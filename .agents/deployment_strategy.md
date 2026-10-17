@@ -2,7 +2,8 @@
 
 Status: **Approved direction; implementation and release evidence pending**
 
-Approved by: repository user on 2026-10-16
+Approved by: repository user on 2026-10-16; Neon Object Storage amendment
+requested by the repository user on 2026-10-17
 
 ## Decision
 
@@ -10,7 +11,9 @@ Deploy Incident Desk as one containerized web application on Google Cloud Run
 in Singapore. The container will run Spring Boot, expose the Java API and
 health endpoint, and serve the production build of the Vite/React/TypeScript
 frontend. Use Neon PostgreSQL in Singapore for shared relational persistence
-and Google Cloud Storage for attachment bytes.
+and Neon Object Storage for attachment bytes. This amendment keeps attachment
+metadata in PostgreSQL while allowing the rows and private objects to branch
+together.
 
 Vercel is not part of the initial production topology. It may be reconsidered
 if frontend preview deployments provide enough value to justify a second
@@ -29,7 +32,7 @@ Google Cloud Run, Singapore
   `- Spring Boot /health
        |
        |- Neon PostgreSQL, Singapore
-       `- Google Cloud Storage, Singapore
+       `- Neon Object Storage, private branch-scoped bucket
 ```
 
 The browser must use relative URLs such as `/api/incidents`. React and the API
@@ -116,11 +119,13 @@ CSRF protection and server-side authorization remain mandatory.
 ## Attachment storage
 
 - Store attachment metadata and authorization relationships in PostgreSQL.
-- Store attachment bytes in a private Google Cloud Storage bucket under
-  generated identifiers, never original filenames or executable application
-  paths.
-- Keep the bucket in or near the Singapore deployment region and block public
-  object access.
+- Store attachment bytes in the private Neon Object Storage bucket declared by
+  `neon.ts`, under generated identifiers rather than original filenames or
+  executable application paths.
+- Keep the Neon project in the supported Singapore region
+  (`aws-ap-southeast-1`) and keep anonymous/public object access disabled.
+- Access storage from the Spring backend with an S3-compatible client using
+  Neon's branch-scoped `AWS_*` variables, SigV4, and path-style addressing.
 - Validate every upload according to `.agents/requirements.md` and authorize
   every read. The choice between authorized backend streaming and narrowly
   scoped short-lived signed URLs must be specified and threat-modelled before
@@ -128,6 +133,9 @@ CSRF protection and server-side authorization remain mandatory.
 - Define cleanup and transaction-compensation behavior before permitting
   uploads so failed database or object-store operations do not leave unsafe or
   misleading state.
+
+Detailed integration criteria and evidence are owned by
+`workflow/neon-services.md`.
 
 ## Cost and scaling controls
 

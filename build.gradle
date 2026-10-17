@@ -68,8 +68,13 @@ run {
 
 dependencies {
     implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.1')
+    implementation platform('software.amazon.awssdk:bom:2.56.0')
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.postgresql:postgresql'
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:url-connection-client'
 
     String javaFxVersion = '25.0.2'
     List<String> javaFxModules = ['javafx-base', 'javafx-controls', 'javafx-fxml', 'javafx-graphics']
@@ -205,6 +210,15 @@ tasks.named('bootJar') {
 
 tasks.named('bootRun') {
     mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
+}
+
+tasks.register('neonServiceSmoke', JavaExec) {
+    group = 'verification'
+    description = 'Runs non-destructive connectivity checks against configured Neon PostgreSQL and Object Storage.'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.company.incidentdesk.infrastructure.neon.NeonServiceSmoke'
+    environment 'INCIDENT_DESK_NEON_REQUIRED', 'true'
 }
 
 def shadowJarMacArm64 = tasks.register('shadowJarMacArm64', ShadowJar) {

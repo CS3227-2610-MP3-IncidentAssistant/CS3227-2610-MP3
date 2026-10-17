@@ -13,3 +13,8 @@ out/
 # Incident Desk runtime data must remain outside the source tree.
 .incident-desk-data/
 data/
+.neon
+node_modules/
+.env
+.env.*
+!.env.example
