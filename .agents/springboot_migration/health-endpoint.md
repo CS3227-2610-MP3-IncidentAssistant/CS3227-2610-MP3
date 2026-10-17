@@ -92,15 +92,15 @@ Boot. Consumers must depend on the JSON `status` field rather than an exact
 
 ## Acceptance criteria
 
-1. The Spring Boot application context starts with the Java 25 toolchain.
-2. `GET /health` returns HTTP 200 and JSON containing exactly
+- [x] The Spring Boot application context starts with the Java 25 toolchain.
+- [x] `GET /health` returns HTTP 200 and JSON containing exactly
    `{"status":"UP"}` while the current application has no failing health
    contributor.
-3. The response does not include `components` or `details`.
-4. A representative non-health Actuator route, `/env`, is not exposed.
-5. The existing JavaFX source and packaging remain available during this
+- [x] The response does not include `components` or `details`.
+- [x] A representative non-health Actuator route, `/env`, is not exposed.
+- [x] The existing JavaFX source and packaging remain available during this
    migration slice.
-6. The Gradle test suite and Spring Boot executable archive build pass.
+- [x] The Gradle test suite and Spring Boot executable archive build pass.
 
 ## Verification mapping
 

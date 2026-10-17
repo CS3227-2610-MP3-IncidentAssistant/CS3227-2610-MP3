@@ -1,47 +1,49 @@
-# Acceptance Criteria
+# Acceptance Criteria Index
 
-Status: **TODO — convert each approved requirement into observable, testable
-criteria and link evidence.**
+Acceptance criteria are owned by the individual specification files. This file
+is the central index: it links to those criteria but does not duplicate them.
 
-## Release-level criteria
+## Registered specifications
 
-- [ ] Public deployment is reachable over HTTPS and identifies the release.
-- [ ] `master`, the release tag, GitHub Pages, and the deployed artifact refer
-  to the same assessed commit.
-- [ ] Development and production use separate credentials and configuration.
-- [ ] CI builds, tests, checks, packages, deploys, and smoke-tests the release.
-- [ ] PostgreSQL data survives application restart/redeploy.
-- [ ] Concurrent sessions are isolated and a competing claim has one winner.
-- [ ] Reporter, Responder, and Administrator end-to-end workflows pass.
-- [ ] Separate role login portals use one backend identity store, accept only
-  the matching persisted role, and do not reveal usernames or roles on failure.
-- [ ] Public registration can create only a Reporter; first and subsequent
-  Administrator provisioning follow the approved controlled workflows.
-- [ ] Anonymous submission is selected through an accessible control, persists
-  the chosen value, and exposes only the neutral label to unauthorized roles.
-- [ ] Reporter-to-Responder promotion works end to end through request, status,
-  Administrator decision, audit, reauthentication, and Responder portal access.
-- [ ] One advisory AI feature per role passes normal, denied, adversarial, and
-  provider-failure tests.
-- [ ] Anonymous identity is absent from unauthorized views, AI requests, logs,
-  and evidence.
-- [ ] Required documentation, workflow records, and reflections match the
-  deployed release.
+- [MVP exit criteria](../.agents/mvp-scope.md#mvp-exit-criteria)
+- [Spring Boot health-endpoint acceptance criteria](../.agents/springboot_migration/health-endpoint.md#acceptance-criteria)
+- [Administrator vertical-slice acceptance criteria and evidence](administrator-vertical-slice.md#9-acceptance-criteria-and-evidence)
 
-## Feature criteria template
+## Index and completion rules
 
-Copy this section for every retained or new feature.
+- Every retained or new feature specification must contain its own observable,
+  checkable acceptance criteria and be linked from this index.
+- Each criterion should cover one outcome so it can be verified and ticked
+  independently. Include normal, denied, validation, failure, stale, and
+  concurrent outcomes when applicable.
+- Tick `[x]` in the individual specification only when the exact criterion is
+  fully satisfied and its reproducible automated or manual evidence is linked
+  or recorded there.
+- Leave `[ ]` for partial, failed, skipped, unavailable, manual-only, or
+  approval-gated results, and record what evidence remains outstanding.
+- Do not tick a broader release or slice criterion based only on a component
+  test. Never infer or record human approval from agent work.
+- Store substantial command output and release evidence under
+  `workflow/test-evidence/`, then link it from the owning specification.
 
-- Feature/requirement ID: TODO
-- Authorized actor: TODO
-- Preconditions: TODO
-- Given/when/then normal path: TODO
-- Denied path without information leakage: TODO
-- Validation and limits: TODO
-- Concurrent/stale path: TODO or not applicable with reason
-- Persistence and audit result: TODO
-- AI data and approval behavior: TODO or not applicable
-- Failure/recovery behavior: TODO
-- Automated evidence: TODO
-- Manual/deployed evidence: TODO
-- Human approver/date: TODO
+## New specification template
+
+Use this structure in the individual specification, then add its link above:
+
+```markdown
+## Acceptance criteria
+
+- [ ] Given/when/then normal outcome.
+- [ ] Denied outcome without information leakage.
+- [ ] Validation and limits.
+- [ ] Concurrent or stale outcome, or an explicit not-applicable rationale.
+- [ ] Persistence and audit outcome.
+- [ ] AI data and approval behavior, or an explicit not-applicable rationale.
+- [ ] Failure and recovery outcome.
+
+## Verification evidence
+
+- Automated: pending
+- Manual/deployed: pending
+- Human approver/date: pending
+```

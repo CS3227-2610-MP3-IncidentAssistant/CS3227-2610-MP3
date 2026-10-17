@@ -72,18 +72,18 @@ controls, automated verification, and reproducible CI/CD.
 
 ## MVP exit criteria
 
-- A registered reporter can submit and later view an incident.
-- An authorized responder can see, claim, and resolve it.
-- An unauthorized responder cannot see or modify incidents outside assigned
+- [ ] A registered reporter can submit and later view an incident.
+- [ ] An authorized responder can see, claim, and resolve it.
+- [ ] An unauthorized responder cannot see or modify incidents outside assigned
   categories.
-- An admin can grant responder status/category access and monitor incidents.
-- Concurrent sessions remain isolated and competing claims cannot both win.
-- State survives a normal application restart and redeploy.
-- Every AI feature enforces authorization and data minimization before the
+- [ ] An admin can grant responder status/category access and monitor incidents.
+- [ ] Concurrent sessions remain isolated and competing claims cannot both win.
+- [ ] State survives a normal application restart and redeploy.
+- [ ] Every AI feature enforces authorization and data minimization before the
   provider call, requires human review, and fails safely.
-- Required authorization, lifecycle, persistence, web-security, AI-security,
+- [ ] Required authorization, lifecycle, persistence, web-security, AI-security,
   and deployment smoke tests pass.
-- The public deployment and GitHub Pages product site identify the assessed
+- [ ] The public deployment and GitHub Pages product site identify the assessed
   release commit.
 
 This file sets delivery priority, not permission to violate future-facing domain

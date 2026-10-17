@@ -45,6 +45,26 @@ These artifacts are authoritative. If a request conflicts with them, identify
 the conflict before implementing it. When an approved change alters behaviour,
 update the relevant artifact, implementation, and tests together.
 
+## Specification-driven development
+
+All development in this repository must follow specification-driven
+development (SDD). Before changing implementation code, identify the governing
+canonical specifications and use `workflow/acceptance-criteria.md` to locate
+the explicit, observable acceptance criteria in the applicable individual
+specification. If the requested behaviour is missing, ambiguous, or conflicts
+with an authoritative artifact, update or clarify the specification and obtain
+any approval required by `workflow/README.md` before implementing it.
+
+Implementation, tests, and documentation must remain traceable to the approved
+criteria. After verification, tick criteria in their individual specification,
+not in the central index, and only when proved by recorded evidence. Leave
+unmet, untested, manual-only, or approval-gated criteria unticked. An agent must
+never claim or record human approval on a person's behalf.
+
+Use the repository's `specification-driven-development` skill for every task
+that creates or changes application behaviour, architecture, persistence,
+security, deployment, or production configuration.
+
 ## Working method
 
 1. Inspect relevant code and canonical artifacts before editing.

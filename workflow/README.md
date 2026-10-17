@@ -16,7 +16,8 @@ evidence.
   feature-parity specification and acceptance boundaries.
 - `ai-features.md`: feature-specific provider data and human-review contracts.
 - `threat-model.md`: assets, trust boundaries, threats, and mitigations.
-- `acceptance-criteria.md`: release-level and feature-level acceptance tests.
+- `acceptance-criteria.md`: index linking to acceptance criteria stored in each
+  individual specification.
 - `architecture.md`: selected web, persistence, AI, and deployment design.
 - `agent-workflow.md`: agent responsibilities, handoffs, isolation, and gates.
 - `decisions/`: approved architecture decision records.
