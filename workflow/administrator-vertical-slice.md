@@ -556,10 +556,12 @@ skipped checks, sanitized outputs, and remaining risks under
    permitted only where they meet ADM-SELF-01.
 5. Incident-scoped audit history is omitted from the incident page; the global
    privacy-safe audit interface remains in scope.
-6. The SoC LLM provider/model, limits, and data-retention terms remain open.
-   ADM-AI-01 may be built and tested against the deterministic fake provider,
-   but its production integration and acceptance criterion remain unticked
-   until those values receive human approval.
+6. The SoCLaaS provider contract and published quota defaults are recorded in
+   `workflow/ai-features.md`. ADM-AI-01 may be built and tested against the
+   deterministic fake provider, but production model selection, the actual key
+   budget, application limits, and the undocumented provider-retention risk
+   require human security/architecture approval before production integration;
+   its acceptance criterion remains unticked until verified.
 7. The single-origin React/Spring Boot topology and Neon storage direction are
    approved in `.agents/deployment_strategy.md`; remaining implementation
    choices are recorded in the architecture ADRs.

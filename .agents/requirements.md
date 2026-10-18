@@ -177,6 +177,8 @@ The following are deliberately not invented by this document:
   separate exceptional process.
 - Notification presentation and retention.
 - Password policy and the exact delivery mechanism for reset credentials.
-- Exact SoC LLM endpoint, model, credentials, rate limits, and provider data
-  retention policy; confirm these from the current course guide before coding.
+- The SoCLaaS endpoint and published quota defaults are recorded in
+  `workflow/ai-features.md`. Before coding, approve its application limits,
+  select a model visible to the production key, verify the actual key budget,
+  and explicitly accept or resolve the undocumented provider-retention terms.
 - Production host and managed PostgreSQL provider.

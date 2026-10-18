@@ -61,8 +61,10 @@ The shared gateway owns:
 - A deterministic fake provider for tests.
 - Safe operational metrics and logs that exclude prompts and responses.
 
-Exact numeric limits belong in `workflow/ai-features.md` after the current SoC
-LLM guide and rate limits are confirmed.
+The confirmed provider contract, application-side numeric limits, shared-key
+budget reserve, circuit behavior, and feature-specific acceptance criteria are
+owned by `workflow/ai-features.md`. Provider quotas are mutable ceilings, not
+application entitlements; production must re-verify them before enablement.
 
 ## Prompt and output handling
 

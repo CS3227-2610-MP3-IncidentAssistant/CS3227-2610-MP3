@@ -23,7 +23,15 @@ a separate static frontend.
   metadata remains in PostgreSQL. Write compensation and full attachment-flow
   consistency remain TODO. See `neon-services.md`.
 - Application event replacement for JavaFX-thread events: TODO
-- AI gateway and provider trust boundary: TODO
+- AI gateway and provider trust boundary: the Spring backend is the only
+  SoCLaaS client. It reauthorizes the actor, constructs a feature-specific
+  allowlisted record, acquires atomic shared rate/budget capacity, and calls the
+  fixed HTTPS SoCLaaS origin through a narrow non-streaming chat-completions
+  adapter. React receives only a validated plain-text suggestion or stable safe
+  error. The provider has no application credentials, database access, domain
+  tools, callback, or mutation path. Exact limits, key handling, circuit
+  behavior, and acceptance criteria are specified in `ai-features.md`; the
+  design remains draft until the required human security/architecture approval.
 - Development/test/production configuration: TODO
 - Health checks, logging, monitoring, backup, and restore: TODO
 - Deployment topology and rollback/forward-fix strategy: TODO
