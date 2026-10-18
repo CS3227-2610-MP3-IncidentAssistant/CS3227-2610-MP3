@@ -71,7 +71,11 @@ export async function roleLogin(
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   })
-  if (!response.ok) throw new ApiError(response.status, 'Sign-in failed')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { code?: unknown } | null
+    const code = typeof body?.code === 'string' ? body.code : undefined
+    throw new ApiError(response.status, 'Sign-in failed', undefined, code)
+  }
 }
 
 export async function registerAccount(

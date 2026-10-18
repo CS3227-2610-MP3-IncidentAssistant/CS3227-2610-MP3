@@ -138,10 +138,11 @@ route while signed out or under another role exposes no protected data.
 
 A missing or invalid CSRF token returns a stable, non-sensitive
 `SECURITY_SESSION_EXPIRED` response rather than the protected-resource
-unavailable response. During Reporter registration, React refreshes the
-anonymous security session and retries that pre-handler rejection at most once
-with the new token. The form retains all entered values if refresh or retry
-fails, so recovery never depends on re-entering credentials.
+unavailable response. During Reporter registration or login, React refreshes
+the anonymous security session and retries that pre-handler rejection at most
+once with the new token. Registration retains all entered values if refresh or
+retry fails. Login retains the login name but clears the password after a failed
+attempt, while the automatic retry reuses the credentials only in memory.
 
 ### REP-INC-01 — My incidents
 
@@ -397,7 +398,9 @@ deployed evidence is recorded.
   preserves the form if recovery fails.
 - [ ] `REP-AC-02` — Reporter login rotates the session, rejects wrong-role,
   unknown, disabled, and invalid-credential attempts without enumeration, and
-  protected routes expose no data to signed-out or non-Reporter sessions.
+  protected routes expose no data to signed-out or non-Reporter sessions. A
+  missing or stale CSRF token returns `SECURITY_SESSION_EXPIRED`; the browser
+  refreshes its anonymous security session and retries login at most once.
 - [ ] `REP-AC-03` — My incidents returns only the current Reporter's owned
   incidents, including their anonymous incidents and drafts, with bounded
   deterministic paging and the specified search/filter/sort semantics.
@@ -452,8 +455,9 @@ Current criterion status:
   automated coverage; complete tampered-request and exact-commit evidence
   remain required.
 - `REP-AC-02` is partial: role-gated login and Reporter route protection are
-  covered, and a disabled Reporter's list request now uses the safe denied
-  response; complete session-rotation/invalidation evidence remains required.
+  covered, stale login CSRF refresh-and-single-retry behavior has React coverage,
+  and a disabled Reporter's list request uses the safe denied response; complete
+  session-rotation/invalidation and deployed evidence remain required.
 - `REP-AC-03` is partial: ownership-scoped basic search and bounded paging are
   implemented; the approved filters, sort fields, SLO state, drafts, and
   isolated PostgreSQL query evidence remain required.
@@ -496,6 +500,14 @@ Automated evidence must include:
 
 Verification evidence:
 
+- Automated (partial stale-login recovery evidence): on 2026-10-18, working
+  tree based on `541825c`, `npm.cmd test -- --run src/App.test.tsx` passed all
+  12 focused tests, `npm.cmd run check` passed typecheck, lint, and all 15 React
+  tests, `npm.cmd run build` produced the production frontend, and
+  `gradlew.bat --no-daemon check` completed successfully. The parameterized
+  React tests cover Reporter and Administrator login, successful fresh-token
+  recovery, generic retry failure, bounded retry count, retained login name,
+  and cleared password.
 - Automated (partial walking-slice evidence): `gradlew.bat --no-daemon check
   bootJar` passed on 2026-10-18,
   including Java tests, frontend typecheck/lint and 12 component tests,

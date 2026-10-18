@@ -158,13 +158,18 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
     setSubmitting(true)
     setError('')
     try {
-      await roleLogin(loginName, password, portal, session.csrfToken)
-      setPassword('')
+      try {
+        await roleLogin(loginName, password, portal, session.csrfToken)
+      } catch (error) {
+        if (!isSecuritySessionExpired(error)) throw error
+        const refreshedSession = await onRefreshSession()
+        await roleLogin(loginName, password, portal, refreshedSession.csrfToken)
+      }
       await onRefreshSession()
     } catch {
-      setPassword('')
       setError('Sign-in failed. Check your credentials and portal, then try again.')
     } finally {
+      setPassword('')
       setSubmitting(false)
     }
   }

@@ -113,6 +113,12 @@ offers no public registration, role selector, or self-service privileged
 account creation. Direct navigation to an administrator route while signed out
 or under another role exposes no protected page data.
 
+A missing or stale login CSRF token returns the stable, non-sensitive
+`SECURITY_SESSION_EXPIRED` response. React refreshes the anonymous security
+session and retries login at most once with the new token. The automatic retry
+reuses credentials only in memory; a failed attempt retains the login name and
+clears the password.
+
 ### ADM-INC-01 — Company incident dashboard
 
 The Dashboard shows one current SLO summary for every incident category and a
@@ -465,7 +471,9 @@ The administrator slice is acceptable when:
   route or API representation; denied and missing resources do not leak data.
 - [ ] The Administrator portal shares the backend identity store, accepts only
   the persisted Administrator role, uses generic failures, rotates the session
-  on success, and exposes no public registration or role-selection path.
+  on success, and exposes no public registration or role-selection path. A
+  missing or stale CSRF token refreshes the anonymous security session and
+  retries login at most once without weakening CSRF protection.
 - [ ] The dashboard provides server-paginated company incidents with the
   specified search, filters, sorting, stable tie-breaker, privacy-safe identity
   options, SLO overview, and stale-response protection.
@@ -524,6 +532,16 @@ The following suites are required before the slice can be called complete:
    scanning.
 8. Deployment smoke test over HTTPS using the exact release commit and an
    isolated non-production dataset.
+
+Partial automated evidence: on 2026-10-18, working tree based on `541825c`,
+`npm.cmd test -- --run src/App.test.tsx` passed all 12 focused tests,
+`npm.cmd run check` passed typecheck, lint, and all 15 React tests,
+`npm.cmd run build` produced the production frontend, and
+`gradlew.bat --no-daemon check` completed successfully. The parameterized React
+tests cover Administrator and Reporter login, successful fresh-token recovery,
+generic retry failure, bounded retry count, retained login name, and cleared
+password. The criterion remains open pending its other required and deployed
+evidence.
 
 Evidence must record exact commands, commit SHA, environment, passed/failed/
 skipped checks, sanitized outputs, and remaining risks under

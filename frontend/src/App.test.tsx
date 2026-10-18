@@ -84,6 +84,97 @@ describe('web authentication and administrator slice', () => {
     await waitFor(() => expect(screen.getByLabelText('Password')).toHaveValue(''))
   })
 
+  it.each([
+    ['Reporter', '/api/v1/auth/reporter/login'],
+    ['Administrator', '/api/v1/auth/administrator/login'],
+  ])('refreshes an expired security session and retries %s sign-in once', async (portal, loginUrl) => {
+    let sessionRequests = 0
+    const loginTokens: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response({
+          ...anonymousSession,
+          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
+        })
+      }
+      if (url === loginUrl && init?.method === 'POST') {
+        const body = init.body as URLSearchParams
+        loginTokens.push(body.get('_csrf') ?? '')
+        return loginTokens.length === 1
+          ? response({
+              code: 'SECURITY_SESSION_EXPIRED',
+              message: 'Your security session expired. Try again.',
+            }, 403)
+          : response({ code: 'AUTHENTICATION_FAILED', message: 'Sign-in failed' }, 401)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: portal }))
+    fireEvent.change(await screen.findByLabelText('Login name'), { target: { value: 'retry-user' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'retry-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in failed')
+    expect(loginTokens).toEqual(['stale-csrf', 'fresh-csrf'])
+    expect(sessionRequests).toBe(2)
+    expect(screen.getByLabelText('Login name')).toHaveValue('retry-user')
+    expect(screen.getByLabelText('Password')).toHaveValue('')
+  })
+
+  it('completes Reporter sign-in after refreshing an expired security session', async () => {
+    let sessionRequests = 0
+    const loginTokens: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        if (sessionRequests === 3) {
+          return response({
+            authenticated: true,
+            loginName: 'retry-reporter',
+            role: 'REPORTER',
+            csrfHeader: 'X-CSRF-TOKEN',
+            csrfToken: 'authenticated-csrf',
+          })
+        }
+        return response({
+          ...anonymousSession,
+          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
+        })
+      }
+      if (url === '/api/v1/auth/reporter/login' && init?.method === 'POST') {
+        const body = init.body as URLSearchParams
+        loginTokens.push(body.get('_csrf') ?? '')
+        return loginTokens.length === 1
+          ? response({
+              code: 'SECURITY_SESSION_EXPIRED',
+              message: 'Your security session expired. Try again.',
+            }, 403)
+          : response({}, 204)
+      }
+      if (url.startsWith('/api/v1/reporter/incidents')) {
+        return response({ incidents: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.change(await screen.findByLabelText('Login name'), { target: { value: 'retry-reporter' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'retry-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Report and track incidents' })).toBeInTheDocument()
+    expect(loginTokens).toEqual(['stale-csrf', 'fresh-csrf'])
+    expect(sessionRequests).toBe(3)
+  })
+
   it('creates a Reporter account without exposing a role selector', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
