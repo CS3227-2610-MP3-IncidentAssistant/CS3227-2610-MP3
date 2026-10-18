@@ -138,10 +138,14 @@ route while signed out or under another role exposes no protected data.
 
 A missing or invalid CSRF token returns a stable, non-sensitive
 `SECURITY_SESSION_EXPIRED` response rather than the protected-resource
-unavailable response. During Reporter registration or login, React refreshes
-the anonymous security session and retries that pre-handler rejection at most
-once with the new token. Registration retains all entered values if refresh or
-retry fails. Login retains the login name but clears the password after a failed
+unavailable response. The session endpoint establishes the current SPA CSRF
+cookie, and React reads that cookie at request time rather than retaining a
+token in component state. For a replayable request, React refreshes the trusted
+session representation and retries that pre-handler rejection at most once
+with the current token. An authenticated mutation is not retried if refresh
+reports an anonymous session; protected React state is cleared and the user
+must sign in again. Registration retains all entered values if refresh or retry
+fails. Login retains the login name but clears the password after a failed
 attempt, while the automatic retry reuses the credentials only in memory.
 
 ### REP-INC-01 — My incidents
@@ -307,7 +311,10 @@ password and satisfying the approved credential rules. Success stores only a
 new salted hash, rotates or invalidates sessions as specified, and creates a
 secret-free audit event atomically.
 
-Logout invalidates the server session and clears role-specific React state.
+Logout invalidates the server session and clears role-specific React state. A
+stale logout CSRF token triggers one session refresh and at most one retry; if
+refresh shows the server session is already anonymous, logout completes by
+clearing client state without an unsafe retry loop.
 Credentials and session identifiers are never written to browser persistence,
 logs, audit records, or URLs.
 
@@ -409,6 +416,11 @@ deployed evidence is recorded.
   protected routes expose no data to signed-out or non-Reporter sessions. A
   missing or stale CSRF token returns `SECURITY_SESSION_EXPIRED`; the browser
   refreshes its anonymous security session and retries login at most once.
+- [x] `REP-AC-02A` — React reads the current SPA CSRF cookie for each unsafe
+  request, recovers from the exact stale-token response with at most one retry,
+  does not retry an authenticated mutation after refresh reports an anonymous
+  session, and completes logout safely when another tab or authentication
+  rotation has replaced the prior token.
 - [ ] `REP-AC-03` — My incidents returns only the current Reporter's owned
   incidents, including their anonymous incidents and drafts, with bounded
   deterministic paging and the specified search/filter/sort semantics.
@@ -470,6 +482,10 @@ Current criterion status:
   covered, stale login CSRF refresh-and-single-retry behavior has React coverage,
   and a disabled Reporter's list request uses the safe denied response; complete
   session-rotation/invalidation and deployed evidence remain required.
+- `REP-AC-02A` is proved by the automated Spring and React evidence recorded in
+  [`test-evidence/2026-10-18-spa-csrf-flow.md`](test-evidence/2026-10-18-spa-csrf-flow.md).
+  Independent security review remains a release gate rather than part of this
+  behavior-level criterion.
 - `REP-AC-03` is partial: ownership-scoped basic search and bounded paging are
   implemented; the approved filters, sort fields, SLO state, drafts, and
   isolated PostgreSQL query evidence remain required.

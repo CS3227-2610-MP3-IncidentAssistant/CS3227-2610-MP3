@@ -2,9 +2,9 @@ export type SessionState = {
   authenticated: boolean
   loginName?: string
   role?: string
-  csrfHeader: string
-  csrfToken: string
 }
+
+export type SessionRefresher = () => Promise<SessionState>
 
 export type SloTarget = {
   category: string
@@ -47,12 +47,6 @@ export class ApiError extends Error {
   }
 }
 
-export function isSecuritySessionExpired(error: unknown): error is ApiError {
-  return error instanceof ApiError
-    && error.status === 403
-    && error.code === 'SECURITY_SESSION_EXPIRED'
-}
-
 export async function loadSession(signal?: AbortSignal): Promise<SessionState> {
   return requestJson<SessionState>('/api/v1/auth/session', { signal })
 }
@@ -61,52 +55,41 @@ export async function roleLogin(
   loginName: string,
   password: string,
   portal: 'REPORTER' | 'ADMINISTRATOR',
-  csrfToken: string,
+  refreshSession: SessionRefresher,
 ): Promise<void> {
   const rolePath = portal === 'REPORTER' ? 'reporter' : 'administrator'
-  const body = new URLSearchParams({ username: loginName, password, _csrf: csrfToken })
-  const response = await fetch(`/api/v1/auth/${rolePath}/login`, {
+  const body = new URLSearchParams({ username: loginName, password })
+  await csrfRequest(`/api/v1/auth/${rolePath}/login`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { code?: unknown } | null
-    const code = typeof body?.code === 'string' ? body.code : undefined
-    throw new ApiError(response.status, 'Sign-in failed', undefined, code)
-  }
+  }, refreshSession, { fallbackMessage: 'Sign-in failed' })
 }
 
 export async function registerAccount(
   loginName: string,
   password: string,
   passwordConfirmation: string,
-  session: SessionState,
+  refreshSession: SessionRefresher,
 ): Promise<void> {
-  const response = await fetch('/api/v1/auth/reporter/register', {
+  await csrfRequest('/api/v1/auth/reporter/register', {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      [session.csrfHeader]: session.csrfToken,
     },
     body: JSON.stringify({ loginName, password, passwordConfirmation }),
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { code?: unknown, message?: unknown } | null
-    const message = typeof body?.message === 'string' ? body.message : 'The account could not be created. Try again.'
-    const code = typeof body?.code === 'string' ? body.code : undefined
-    throw new ApiError(response.status, message, undefined, code)
-  }
+  }, refreshSession, { fallbackMessage: 'The account could not be created. Try again.' })
 }
 
-export async function logout(session: SessionState): Promise<void> {
-  const response = await fetch('/api/v1/auth/logout', {
+export async function logout(refreshSession: SessionRefresher): Promise<void> {
+  await csrfRequest('/api/v1/auth/logout', {
     method: 'POST', credentials: 'same-origin',
-    headers: { [session.csrfHeader]: session.csrfToken },
+  }, refreshSession, {
+    anonymousRefreshCompletesRequest: true,
+    fallbackMessage: 'Sign-out failed',
   })
-  if (!response.ok) throw new ApiError(response.status, 'Sign-out failed')
 }
 
 export async function loadDashboard(search: string, page: number, signal: AbortSignal): Promise<DashboardPage> {
@@ -153,28 +136,20 @@ export type IncidentSubmission = {
 
 export async function submitReporterIncident(
   submission: IncidentSubmission,
-  session: SessionState,
+  refreshSession: SessionRefresher,
 ): Promise<ReporterIncident> {
-  const response = await fetch('/api/v1/reporter/incidents', {
+  const response = await csrfRequest('/api/v1/reporter/incidents', {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      [session.csrfHeader]: session.csrfToken,
     },
     body: JSON.stringify(submission),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The incident could not be submitted. Try again.',
   })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as {
-      message?: unknown
-      fieldErrors?: unknown
-    } | null
-    const message = typeof body?.message === 'string'
-      ? body.message
-      : 'The incident could not be submitted. Try again.'
-    const fieldErrors = isFieldErrors(body?.fieldErrors) ? body.fieldErrors : undefined
-    throw new ApiError(response.status, message, fieldErrors)
-  }
+  if (!response) throw new ApiError(401, 'Authentication is required')
   return response.json() as Promise<ReporterIncident>
 }
 
@@ -187,4 +162,72 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', ...init })
   if (!response.ok) throw new ApiError(response.status, 'The requested data is unavailable')
   return response.json() as Promise<T>
+}
+
+type CsrfRequestOptions = {
+  authenticationRequired?: boolean
+  anonymousRefreshCompletesRequest?: boolean
+  fallbackMessage: string
+}
+
+type ErrorBody = {
+  code?: unknown
+  fieldErrors?: unknown
+  message?: unknown
+}
+
+async function csrfRequest(
+  url: string,
+  init: RequestInit,
+  refreshSession: SessionRefresher,
+  options: CsrfRequestOptions,
+): Promise<Response | null> {
+  let response = await sendCsrfRequest(url, init)
+  let errorBody = response.ok ? null : await readErrorBody(response)
+
+  if (isSecuritySessionResponse(response, errorBody)) {
+    const refreshedSession = await refreshSession()
+    if (!refreshedSession.authenticated) {
+      if (options.anonymousRefreshCompletesRequest) return null
+      if (options.authenticationRequired) {
+        throw new ApiError(401, 'Authentication is required', undefined, 'UNAUTHENTICATED')
+      }
+    }
+    response = await sendCsrfRequest(url, init)
+    errorBody = response.ok ? null : await readErrorBody(response)
+  }
+
+  if (!response.ok) {
+    const message = typeof errorBody?.message === 'string'
+      ? errorBody.message
+      : options.fallbackMessage
+    const code = typeof errorBody?.code === 'string' ? errorBody.code : undefined
+    const fieldErrors = isFieldErrors(errorBody?.fieldErrors) ? errorBody.fieldErrors : undefined
+    throw new ApiError(response.status, message, fieldErrors, code)
+  }
+  return response
+}
+
+function sendCsrfRequest(url: string, init: RequestInit): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const token = readCookie('XSRF-TOKEN')
+  if (token) headers.set('X-XSRF-TOKEN', token)
+  return fetch(url, { ...init, credentials: 'same-origin', headers })
+}
+
+function readCookie(name: string): string | undefined {
+  const prefix = `${encodeURIComponent(name)}=`
+  const cookie = document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
+  return cookie ? decodeURIComponent(cookie.substring(prefix.length)) : undefined
+}
+
+async function readErrorBody(response: Response): Promise<ErrorBody | null> {
+  return response.json().catch(() => null) as Promise<ErrorBody | null>
+}
+
+function isSecuritySessionResponse(response: Response, body: ErrorBody | null): boolean {
+  return response.status === 403 && body?.code === 'SECURITY_SESSION_EXPIRED'
 }

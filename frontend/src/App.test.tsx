@@ -1,19 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 const anonymousSession = {
   authenticated: false,
-  csrfHeader: 'X-CSRF-TOKEN',
-  csrfToken: 'test-csrf',
 }
 
 const administratorSession = {
   authenticated: true,
   loginName: 'operations-admin',
   role: 'ADMINISTRATOR',
-  csrfHeader: 'X-CSRF-TOKEN',
-  csrfToken: 'test-csrf',
 }
 
 const emptyDashboard = {
@@ -25,9 +21,12 @@ const emptyDashboard = {
   ],
 }
 
+beforeEach(() => setCsrfCookie('test-csrf'))
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  clearCsrfCookie()
 })
 
 describe('web authentication and administrator slice', () => {
@@ -84,10 +83,39 @@ describe('web authentication and administrator slice', () => {
     await waitFor(() => expect(screen.getByLabelText('Password')).toHaveValue(''))
   })
 
+  it('does not refresh or retry an authorization failure that is not a CSRF error', async () => {
+    let sessionRequests = 0
+    let loginRequests = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response(anonymousSession)
+      }
+      if (url === '/api/v1/auth/administrator/login' && init?.method === 'POST') {
+        loginRequests += 1
+        return response({ code: 'UNAVAILABLE', message: 'Resource unavailable' }, 403)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Administrator' }))
+    fireEvent.change(await screen.findByLabelText('Login name'), { target: { value: 'blocked-user' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'blocked-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in failed')
+    expect(loginRequests).toBe(1)
+    expect(sessionRequests).toBe(1)
+  })
+
   it.each([
     ['Reporter', '/api/v1/auth/reporter/login'],
     ['Administrator', '/api/v1/auth/administrator/login'],
   ])('refreshes an expired security session and retries %s sign-in once', async (portal, loginUrl) => {
+    setCsrfCookie('stale-csrf')
     let sessionRequests = 0
     const loginTokens: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -95,14 +123,11 @@ describe('web authentication and administrator slice', () => {
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') {
         sessionRequests += 1
-        return response({
-          ...anonymousSession,
-          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
-        })
+        if (sessionRequests === 2) setCsrfCookie('fresh-csrf')
+        return response(anonymousSession)
       }
       if (url === loginUrl && init?.method === 'POST') {
-        const body = init.body as URLSearchParams
-        loginTokens.push(body.get('_csrf') ?? '')
+        loginTokens.push(requestHeader(init, 'X-XSRF-TOKEN'))
         return loginTokens.length === 1
           ? response({
               code: 'SECURITY_SESSION_EXPIRED',
@@ -127,6 +152,7 @@ describe('web authentication and administrator slice', () => {
   })
 
   it('completes Reporter sign-in after refreshing an expired security session', async () => {
+    setCsrfCookie('stale-csrf')
     let sessionRequests = 0
     const loginTokens: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -135,22 +161,18 @@ describe('web authentication and administrator slice', () => {
       if (url === '/api/v1/auth/session') {
         sessionRequests += 1
         if (sessionRequests === 3) {
+          setCsrfCookie('authenticated-csrf')
           return response({
             authenticated: true,
             loginName: 'retry-reporter',
             role: 'REPORTER',
-            csrfHeader: 'X-CSRF-TOKEN',
-            csrfToken: 'authenticated-csrf',
           })
         }
-        return response({
-          ...anonymousSession,
-          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
-        })
+        if (sessionRequests === 2) setCsrfCookie('fresh-csrf')
+        return response(anonymousSession)
       }
       if (url === '/api/v1/auth/reporter/login' && init?.method === 'POST') {
-        const body = init.body as URLSearchParams
-        loginTokens.push(body.get('_csrf') ?? '')
+        loginTokens.push(requestHeader(init, 'X-XSRF-TOKEN'))
         return loginTokens.length === 1
           ? response({
               code: 'SECURITY_SESSION_EXPIRED',
@@ -204,6 +226,7 @@ describe('web authentication and administrator slice', () => {
   })
 
   it('refreshes an expired security session and retries registration once', async () => {
+    setCsrfCookie('stale-csrf')
     let sessionRequests = 0
     const registrationTokens: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -211,13 +234,11 @@ describe('web authentication and administrator slice', () => {
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') {
         sessionRequests += 1
-        return response({
-          ...anonymousSession,
-          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
-        })
+        if (sessionRequests === 2) setCsrfCookie('fresh-csrf')
+        return response(anonymousSession)
       }
       if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') {
-        const token = (init.headers as Record<string, string>)['X-CSRF-TOKEN']
+        const token = requestHeader(init, 'X-XSRF-TOKEN')
         registrationTokens.push(token)
         return token === 'stale-csrf'
           ? response({
@@ -243,6 +264,7 @@ describe('web authentication and administrator slice', () => {
   })
 
   it('preserves registration fields when security-session recovery fails', async () => {
+    setCsrfCookie('stale-csrf')
     let sessionRequests = 0
     let registrationRequests = 0
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -250,10 +272,8 @@ describe('web authentication and administrator slice', () => {
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') {
         sessionRequests += 1
-        return response({
-          ...anonymousSession,
-          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
-        })
+        if (sessionRequests === 2) setCsrfCookie('fresh-csrf')
+        return response(anonymousSession)
       }
       if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') {
         registrationRequests += 1
@@ -349,8 +369,76 @@ describe('web authentication and administrator slice', () => {
 
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/v1/admin/dashboard'))).toHaveLength(3)
   })
+
+  it('refreshes a stale cross-tab token and retries logout once', async () => {
+    setCsrfCookie('stale-tab-token')
+    let sessionRequests = 0
+    const logoutTokens: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        if (sessionRequests === 2) setCsrfCookie('current-tab-token')
+        return response(administratorSession)
+      }
+      if (url.startsWith('/api/v1/admin/dashboard')) return response(emptyDashboard)
+      if (url === '/api/v1/auth/logout' && init?.method === 'POST') {
+        logoutTokens.push(requestHeader(init, 'X-XSRF-TOKEN'))
+        return logoutTokens.length === 1
+          ? response({ code: 'SECURITY_SESSION_EXPIRED', message: 'Security session expired.' }, 403)
+          : response({}, 204)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByRole('heading', { name: 'Choose your portal' })).toBeInTheDocument()
+    expect(logoutTokens).toEqual(['stale-tab-token', 'current-tab-token'])
+    expect(sessionRequests).toBe(2)
+  })
+
+  it('clears protected state without retrying logout when refresh is already anonymous', async () => {
+    let sessionRequests = 0
+    let logoutRequests = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response(sessionRequests === 1 ? administratorSession : anonymousSession)
+      }
+      if (url.startsWith('/api/v1/admin/dashboard')) return response(emptyDashboard)
+      if (url === '/api/v1/auth/logout' && init?.method === 'POST') {
+        logoutRequests += 1
+        return response({ code: 'SECURITY_SESSION_EXPIRED', message: 'Security session expired.' }, 403)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByRole('heading', { name: 'Choose your portal' })).toBeInTheDocument()
+    expect(logoutRequests).toBe(1)
+    expect(sessionRequests).toBe(2)
+  })
 })
 
 function response(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
+}
+
+function requestHeader(init: RequestInit | undefined, name: string): string {
+  return new Headers(init?.headers).get(name) ?? ''
+}
+
+function setCsrfCookie(value: string) {
+  document.cookie = `XSRF-TOKEN=${encodeURIComponent(value)}; Path=/`
+}
+
+function clearCsrfCookie() {
+  document.cookie = 'XSRF-TOKEN=; Path=/; Max-Age=0'
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
 import {
-  isSecuritySessionExpired,
   loadSession,
   logout,
   registerAccount,
@@ -33,7 +32,7 @@ export function App() {
 
   const session = sessionState.session
   async function signOut() {
-    await logout(session)
+    await logout(sessionState.refresh)
     sessionState.clear()
     setPortal(null)
   }
@@ -55,7 +54,7 @@ export function App() {
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
       >
-        <ReporterDashboard session={session} />
+        <ReporterDashboard onRefreshSession={sessionState.refresh} />
       </ReporterShell>
     )
   }
@@ -65,7 +64,6 @@ export function App() {
   return (
     <PortalLogin
       portal={portal}
-      session={session}
       onBack={() => setPortal(null)}
       onRefreshSession={sessionState.refresh}
     />
@@ -140,9 +138,8 @@ function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
   )
 }
 
-function PortalLogin({ portal, session, onBack, onRefreshSession }: {
+function PortalLogin({ portal, onBack, onRefreshSession }: {
   portal: Portal
-  session: SessionState
   onBack: () => void
   onRefreshSession: () => Promise<SessionState>
 }) {
@@ -158,13 +155,7 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
     setSubmitting(true)
     setError('')
     try {
-      try {
-        await roleLogin(loginName, password, portal, session.csrfToken)
-      } catch (error) {
-        if (!isSecuritySessionExpired(error)) throw error
-        const refreshedSession = await onRefreshSession()
-        await roleLogin(loginName, password, portal, refreshedSession.csrfToken)
-      }
+      await roleLogin(loginName, password, portal, onRefreshSession)
       await onRefreshSession()
     } catch {
       setError('Sign-in failed. Check your credentials and portal, then try again.')
@@ -176,7 +167,6 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
   if (registering) {
     return (
       <ReporterRegistration
-        session={session}
         onRefreshSession={onRefreshSession}
         onReturn={() => setRegistering(false)}
       />
@@ -229,8 +219,7 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
   )
 }
 
-function ReporterRegistration({ session, onRefreshSession, onReturn }: {
-  session: SessionState
+function ReporterRegistration({ onRefreshSession, onReturn }: {
   onRefreshSession: () => Promise<SessionState>
   onReturn: () => void
 }) {
@@ -250,13 +239,7 @@ function ReporterRegistration({ session, onRefreshSession, onReturn }: {
     }
     setSubmitting(true)
     try {
-      try {
-        await registerAccount(loginName, password, confirmation, session)
-      } catch (error) {
-        if (!isSecuritySessionExpired(error)) throw error
-        const refreshedSession = await onRefreshSession()
-        await registerAccount(loginName, password, confirmation, refreshedSession)
-      }
+      await registerAccount(loginName, password, confirmation, onRefreshSession)
       setPassword('')
       setConfirmation('')
       setSuccessful(true)

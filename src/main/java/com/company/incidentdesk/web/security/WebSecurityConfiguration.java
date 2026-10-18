@@ -16,7 +16,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,10 +36,6 @@ public class WebSecurityConfiguration {
 
     @Bean
     SecurityFilterChain webSecurity(HttpSecurity http, UserDetailsService users) throws Exception {
-        CookieCsrfTokenRepository csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrf.setCookiePath("/");
-        csrf.setHeaderName("X-CSRF-TOKEN");
-
         http
                 .userDetailsService(users)
                 .authorizeHttpRequests(requests -> requests
@@ -54,7 +49,7 @@ public class WebSecurityConfiguration {
                         .requestMatchers("/api/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
-                .csrf(csrfConfig -> csrfConfig.csrfTokenRepository(csrf))
+                .csrf(csrf -> csrf.spa())
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.changeSessionId()))
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/v1/auth/*/login")

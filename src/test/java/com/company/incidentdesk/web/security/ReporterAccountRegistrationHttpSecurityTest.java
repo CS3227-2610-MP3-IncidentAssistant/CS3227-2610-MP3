@@ -70,7 +70,7 @@ class ReporterAccountRegistrationHttpSecurityTest {
     @Test
     void acceptsCsrfProtectedRegistrationWithoutDisclosingPlaintext(CapturedOutput output) throws Exception {
         String response = mvc.perform(post("/api/v1/auth/reporter/register")
-                        .with(csrf().asHeader())
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isCreated())

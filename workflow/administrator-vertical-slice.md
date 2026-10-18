@@ -119,6 +119,12 @@ session and retries login at most once with the new token. The automatic retry
 reuses credentials only in memory; a failed attempt retains the login name and
 clears the password.
 
+The session endpoint establishes the current SPA CSRF cookie. React reads the
+cookie immediately before unsafe requests rather than retaining a token in
+component state. Recovery is limited to the exact stale-token response and one
+retry. An authenticated mutation is not retried if refresh reports an anonymous
+session; protected client state is cleared and reauthentication is required.
+
 ### ADM-INC-01 — Company incident dashboard
 
 The Dashboard shows one current SLO summary for every incident category and a
@@ -398,7 +404,9 @@ secret-free audit event are atomic; plaintext and hashes never enter logs or
 client persistence.
 
 Logout invalidates the server session, clears privileged React state, and
-returns to public role entry. If transient notifications are retained, they
+returns to public role entry. A stale logout CSRF token triggers one session
+refresh and at most one retry; an already-anonymous refreshed session completes
+logout by clearing client state. If transient notifications are retained, they
 must be scoped to the authenticated account/session and never leak anonymous
 identity or protected records across sessions. Persistent notification history
 is not required by this slice.
@@ -498,8 +506,9 @@ The administrator slice is acceptable when:
   and target filters without secrets, unnecessary content, or anonymous
   identity.
 - [ ] Password change and logout use server-side sessions, CSRF protection,
-  secret-free logging and auditing, session invalidation, and client cache
-  clearing.
+  request-time SPA tokens, bounded exact-error recovery, secret-free logging
+  and auditing, session invalidation, and client cache clearing. Recovery does
+  not retry an authenticated mutation after the refreshed session is anonymous.
 - [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
   reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
 - [ ] The required automated, accessibility, and deployed checks below are

@@ -5,7 +5,7 @@ import {
   submitReporterIncident,
   type IncidentSubmission,
   type ReporterIncidentPage,
-  type SessionState,
+  type SessionRefresher,
 } from '../api'
 
 const emptyPage: ReporterIncidentPage = {
@@ -16,7 +16,7 @@ const emptyPage: ReporterIncidentPage = {
   totalPages: 1,
 }
 
-export function ReporterDashboard({ session }: { session: SessionState }) {
+export function ReporterDashboard({ onRefreshSession }: { onRefreshSession: SessionRefresher }) {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState({ search: '', page: 0, revision: 0 })
   const [result, setResult] = useState<ReporterIncidentPage>(emptyPage)
@@ -72,7 +72,7 @@ export function ReporterDashboard({ session }: { session: SessionState }) {
           </p>
         </div>
       </header>
-      <IncidentForm session={session} onSubmitted={reload} />
+      <IncidentForm onRefreshSession={onRefreshSession} onSubmitted={reload} />
       <section className="incident-panel" aria-labelledby="my-incidents-heading">
         <div className="section-heading">
           <div>
@@ -165,7 +165,10 @@ function IncidentTable({ incidents }: { incidents: ReporterIncidentPage['inciden
   )
 }
 
-function IncidentForm({ session, onSubmitted }: { session: SessionState, onSubmitted: () => void }) {
+function IncidentForm({ onRefreshSession, onSubmitted }: {
+  onRefreshSession: SessionRefresher
+  onSubmitted: () => void
+}) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<IncidentSubmission['category'] | ''>('')
@@ -186,7 +189,10 @@ function IncidentForm({ session, onSubmitted }: { session: SessionState, onSubmi
     }
     setSubmitting(true)
     try {
-      await submitReporterIncident({ title, description, category, anonymous, submissionKey }, session)
+      await submitReporterIncident(
+        { title, description, category, anonymous, submissionKey },
+        onRefreshSession,
+      )
       setTitle('')
       setDescription('')
       setCategory('')

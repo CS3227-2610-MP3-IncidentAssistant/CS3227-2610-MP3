@@ -42,6 +42,8 @@ a separate static frontend.
 - `decisions/ADR-001-web-persistence-and-session-foundation.md`: accepted web,
   migration, authentication, shared-session, and administrator-bootstrap
   foundation.
+- `decisions/ADR-002-spa-csrf-token-flow.md`: accepted cookie-backed SPA CSRF
+  flow with request-time token reads and bounded stale-token recovery.
 
 Create one record in `decisions/` for each material choice. At minimum cover:
 
