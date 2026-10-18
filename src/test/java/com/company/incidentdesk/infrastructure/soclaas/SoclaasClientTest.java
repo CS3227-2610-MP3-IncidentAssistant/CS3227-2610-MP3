@@ -233,12 +233,11 @@ class SoclaasClientTest {
     }
 
     @Test
-    void catalogRetriesOnlyOnceAndUnavailableStartupDoesNotFail() throws Exception {
+    void catalogRetriesOnlyOnceAndRejectedCatalogIsNeverRetried() {
         modelStatus = 503;
         catalog = "";
         try (var client = client(new MockEnvironment())) {
-            new SoclaasConfiguration().validateSoclaasModel(client)
-                    .run(new org.springframework.boot.DefaultApplicationArguments(new String[0]));
+            assertCategory("AI_UNAVAILABLE", client::validateModel);
             assertEquals(2, modelCalls.get());
             assertCategory("AI_UNAVAILABLE", () -> client.complete("system", "{}"));
             modelStatus = 401;
