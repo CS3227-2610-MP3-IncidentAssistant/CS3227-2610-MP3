@@ -5,8 +5,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
 /** Converts a Neon PostgreSQL URI into explicit JDBC connection settings. */
-record NeonDatabaseUrl(String jdbcUrl, String username, String password) {
-    static NeonDatabaseUrl parse(String value) {
+public record NeonDatabaseUrl(String jdbcUrl, String username, String password) {
+    public static NeonDatabaseUrl parse(String value) {
         URI uri;
         try {
             uri = URI.create(value);

@@ -10,6 +10,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.postgresql.util.PSQLException;
 
 import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
 
@@ -31,10 +32,25 @@ public class JdbcTemporaryAccountRegistrationStore implements TemporaryAccountRe
             transactions.executeWithoutResult(status -> persist(registration));
             return RegistrationOutcome.CREATED;
         } catch (DuplicateKeyException exception) {
-            return RegistrationOutcome.DUPLICATE;
+            return isDuplicateLoginName(exception)
+                    ? RegistrationOutcome.DUPLICATE
+                    : RegistrationOutcome.UNAVAILABLE;
         } catch (DataAccessException exception) {
             return RegistrationOutcome.UNAVAILABLE;
         }
+    }
+
+    private static boolean isDuplicateLoginName(DuplicateKeyException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof PSQLException postgresException
+                    && postgresException.getServerErrorMessage() != null) {
+                return "accounts_login_name_key".equals(
+                        postgresException.getServerErrorMessage().getConstraint());
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     private void persist(TemporaryAccountRegistration registration) {

@@ -97,7 +97,7 @@ Before the application can ship, all of the following are required:
 
 ## Acceptance criteria
 
-- [ ] A valid interim request creates an enabled account of the requested
+- [x] A valid interim request creates an enabled account of the requested
   client-selected role with an adaptive salted password hash and a successful
   `ACCOUNT_REGISTERED` audit event in one transaction.
 - [x] The React registration form validates password confirmation, submits the
@@ -107,11 +107,11 @@ Before the application can ship, all of the following are required:
   rejected without account, credential, or success-audit persistence.
 - [x] Registration validation, duplicate, and unavailable outcomes are shown
   in React using the stable legacy-equivalent JavaFX messages.
-- [ ] A case-sensitive duplicate login returns the stable duplicate outcome;
+- [x] A case-sensitive duplicate login returns the stable duplicate outcome;
   concurrent duplicate attempts produce exactly one account.
-- [ ] Persistence or audit failure rolls back the whole registration and
+- [x] Persistence or audit failure rolls back the whole registration and
   returns a safe response without secret or SQL disclosure.
-- [ ] CSRF protection applies to registration and plaintext credentials are
+- [x] CSRF protection applies to registration and plaintext credentials are
   absent from persistence, logs, audits, and responses.
 - [ ] **Release blocker:** public registration creates only `REPORTER`, no
   public role selector or privileged-registration path remains, tampered-role
@@ -122,9 +122,12 @@ Before the application can ship, all of the following are required:
 
 - Automated: `gradlew.bat --no-daemon check bootJar` passed on 2026-10-18
   (Java unit suite, frontend typecheck/lint and 7 component tests, packaging,
-  and repository verification). Focused service/controller tests also passed
-  with `gradlew.bat --no-daemon test --tests
+  and repository verification). Focused service, controller, HTTP security,
+  wiring, and PostgreSQL-adapter unit tests also passed with `gradlew.bat
+  --no-daemon test --tests
   "com.company.incidentdesk.web.security.TemporaryAccountRegistration*"
+  --tests
+  "com.company.incidentdesk.web.security.JdbcTemporaryAccountRegistrationStoreTest"
   -PfrontendSkipBuild=true`.
 - Local runtime: `gradlew.bat --no-daemon bootRun` started the real Spring
   application with the configured PostgreSQL datasource, validated both Flyway
@@ -134,9 +137,18 @@ Before the application can ship, all of the following are required:
   write. After the legacy-message change, the application was started on
   temporary port 18080 and the same request returned `INVALID_LOGIN_NAME` with
   `Enter a non-blank login name.` The server was then stopped.
-- Still required: isolated PostgreSQL transaction, audit-failure rollback,
-  concurrent duplicate, and HTTP CSRF/secret-absence evidence. The associated
-  criteria remain unticked.
+- Automated PostgreSQL tests cover transaction persistence, audit-failure
+  rollback, case-sensitive and concurrent duplicates, and database secret
+  absence. CI provisions an isolated PostgreSQL service for them. Local runs
+  can use `gradlew.bat registrationDatabaseTest`, which loads test-only values
+  from the git-ignored `.env.test.local`, requires an explicit isolation
+  acknowledgement, and rejects pooled or matching application/production
+  database URLs. On 2026-10-18, `gradlew.bat --no-daemon
+  registrationDatabaseTest -PfrontendSkipBuild=true` passed all three tests
+  against an isolated Neon PostgreSQL database using a direct endpoint. The
+  test run created a random schema, applied both real Flyway migrations, and
+  dropped the schema afterward. No connection credentials are recorded here.
+  The HTTP CSRF and response/log secret-absence tests also passed locally.
 - Manual/deployed: not run; public deployment is prohibited for this interim
   slice
 - Human approver/date for shipping: pending; cannot be approved while the

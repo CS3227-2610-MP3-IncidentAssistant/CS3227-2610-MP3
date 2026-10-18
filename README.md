@@ -93,6 +93,32 @@ React code, runs the frontend component tests, creates the production frontend
 bundle, compiles the Java application, runs the JUnit and Spring integration
 tests, and verifies the JavaFX distribution and shadow JAR.
 
+### Local PostgreSQL registration tests
+
+The normal build skips registration tests that require PostgreSQL when no test
+database is configured. To run them locally against a dedicated empty Neon
+test project or another isolated PostgreSQL database:
+
+1. Copy `.env.test.example` to the git-ignored `.env.test.local`.
+2. Paste the complete direct PostgreSQL URL for the test-only database into
+   `INCIDENT_DESK_TEST_DATABASE_URL`, using the same credential-bearing format
+   as `DATABASE_URL` in `.env.local`. A Neon direct endpoint does not contain
+   `-pooler` in its hostname.
+3. Keep `INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED=true` only after
+   confirming that the database contains no production or personal data.
+4. Run:
+
+```powershell
+.\gradlew.bat registrationDatabaseTest
+```
+
+The task refuses pooled Neon endpoints and any URL equal to the process's
+`DATABASE_URL` or `DATABASE_URL_UNPOOLED`. Each test run creates a random
+schema, applies the real Flyway migrations, runs the registration tests, and
+drops that schema. Environment variables already defined by the operating
+system take precedence over `.env.test.local`. Never commit the local file or
+use production credentials.
+
 For a production-style web smoke test, first complete the full build, then start
 the packaged application:
 

@@ -214,38 +214,140 @@ tasks.named('bootJar') {
     mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
 }
 
+def readEnvironmentFile = { File environmentFile, Set<String> allowedNames ->
+    Map<String, String> values = [:]
+    if (!environmentFile.exists()) {
+        return values
+    }
+
+    environmentFile.eachLine('UTF-8') { rawLine ->
+        String line = rawLine.trim()
+        if (line.isEmpty() || line.startsWith('#')) {
+            return
+        }
+
+        int separator = line.indexOf('=')
+        if (separator <= 0) {
+            throw new GradleException("Invalid ${environmentFile.name} entry; expected NAME=VALUE")
+        }
+
+        String name = line.substring(0, separator).trim()
+        String value = line.substring(separator + 1).trim()
+        if (!(name ==~ /[A-Za-z_][A-Za-z0-9_]*/)) {
+            throw new GradleException("Invalid ${environmentFile.name} variable name: ${name}")
+        }
+        if (allowedNames != null && !allowedNames.contains(name)) {
+            throw new GradleException("Unexpected variable in ${environmentFile.name}: ${name}")
+        }
+        if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"'))
+                || (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length() - 1)
+        }
+        values[name] = value
+    }
+    return values
+}
+
 tasks.named('bootRun') {
     mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
     doFirst {
         File localEnvironmentFile = layout.projectDirectory.file('.env.local').asFile
-        if (!localEnvironmentFile.exists()) {
-            return
-        }
-
-        localEnvironmentFile.eachLine('UTF-8') { rawLine ->
-            String line = rawLine.trim()
-            if (line.isEmpty() || line.startsWith('#')) {
-                return
-            }
-
-            int separator = line.indexOf('=')
-            if (separator <= 0) {
-                throw new GradleException("Invalid .env.local entry; expected NAME=VALUE")
-            }
-
-            String name = line.substring(0, separator).trim()
-            String value = line.substring(separator + 1).trim()
-            if (!(name ==~ /[A-Za-z_][A-Za-z0-9_]*/)) {
-                throw new GradleException("Invalid .env.local variable name: ${name}")
-            }
-            if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"'))
-                    || (value.startsWith("'") && value.endsWith("'")))) {
-                value = value.substring(1, value.length() - 1)
-            }
+        readEnvironmentFile(localEnvironmentFile, null).each { name, value ->
             if (!System.getenv().containsKey(name)) {
                 environment name, value
             }
         }
+    }
+}
+
+def registrationDatabaseEnvironmentNames = [
+    'INCIDENT_DESK_TEST_DATABASE_URL',
+    'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED'
+] as Set
+
+tasks.register('registrationDatabaseTest', Test) {
+    group = 'verification'
+    description = 'Runs account-registration integration tests against an explicitly isolated PostgreSQL database.'
+    dependsOn testClasses
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'com.company.incidentdesk.web.security.TemporaryAccountRegistrationPostgresTest'
+    }
+
+    doFirst {
+        File testEnvironmentFile = layout.projectDirectory.file('.env.test.local').asFile
+        Map<String, String> fileValues = readEnvironmentFile(
+                testEnvironmentFile,
+                registrationDatabaseEnvironmentNames)
+        Map<String, String> resolvedValues = [:]
+        registrationDatabaseEnvironmentNames.each { name ->
+            resolvedValues[name] = System.getenv().containsKey(name)
+                    ? System.getenv(name)
+                    : fileValues[name]
+        }
+
+        List<String> missingNames = resolvedValues.findAll { name, value ->
+            value == null || value.isBlank()
+        }.keySet().toList()
+        if (!missingNames.isEmpty()) {
+            throw new GradleException(
+                    "Missing isolated registration test configuration: ${missingNames.join(', ')}. "
+                    + 'Copy .env.test.example to .env.test.local and supply test-only values.')
+        }
+        if (!resolvedValues.INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED.equalsIgnoreCase('true')) {
+            throw new GradleException(
+                    'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED must be true before schema-mutating tests can run.')
+        }
+
+        String testUrl = resolvedValues.INCIDENT_DESK_TEST_DATABASE_URL
+        java.net.URI testUri
+        try {
+            testUri = new java.net.URI(testUrl)
+        } catch (java.net.URISyntaxException exception) {
+            throw new GradleException('INCIDENT_DESK_TEST_DATABASE_URL must be a valid PostgreSQL URI.', exception)
+        }
+        if (!(testUri.scheme in ['postgres', 'postgresql'])
+                || testUri.host == null
+                || testUri.rawUserInfo == null
+                || testUri.path == null
+                || testUri.path.length() <= 1) {
+            throw new GradleException(
+                    'INCIDENT_DESK_TEST_DATABASE_URL must include PostgreSQL credentials, host, and database.')
+        }
+        if (testUrl.toLowerCase(Locale.ROOT).contains('-pooler.')) {
+            throw new GradleException(
+                    'Registration database tests require a direct Neon endpoint, not a pooled endpoint.')
+        }
+
+        def databaseTarget = { String rawUrl ->
+            String uriValue = rawUrl.startsWith('jdbc:') ? rawUrl.substring('jdbc:'.length()) : rawUrl
+            try {
+                java.net.URI uri = new java.net.URI(uriValue)
+                int port = uri.port < 0 ? 5432 : uri.port
+                String host = uri.host?.toLowerCase(Locale.ROOT)?.replaceFirst(/-pooler(?=\.)/, '')
+                return "${host}:${port}${uri.rawPath}"
+            } catch (java.net.URISyntaxException ignored) {
+                return rawUrl
+            }
+        }
+        Map<String, String> localApplicationValues = readEnvironmentFile(
+                layout.projectDirectory.file('.env.local').asFile,
+                null)
+        Set<String> protectedTargets = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
+                .collect { name ->
+                    System.getenv().containsKey(name) ? System.getenv(name) : localApplicationValues[name]
+                }
+                .findAll { it != null && !it.isBlank() }
+                .collect(databaseTarget)
+                .toSet()
+        if (protectedTargets.contains(databaseTarget(testUrl))) {
+            throw new GradleException(
+                    'The registration test database URL must differ from DATABASE_URL and DATABASE_URL_UNPOOLED.')
+        }
+
+        resolvedValues.each { name, value -> environment name, value }
     }
 }
 
