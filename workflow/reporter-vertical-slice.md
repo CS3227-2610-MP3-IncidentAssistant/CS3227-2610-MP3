@@ -1,16 +1,40 @@
 # Reporter React + Spring Boot Vertical Slice
 
-Status: **Product-owner approved on 2026-10-18; implementation and independent
-security/architecture verification remain in progress.**
+Status: **Product-owner approved on 2026-10-18. The first Reporter walking
+slice is implemented locally and its required development code-quality findings
+are resolved. Broader feature implementation, independent security/architecture
+review, and release verification remain in progress.**
 
 This document specifies the Reporter experience to be migrated from the JavaFX
 application to a React browser interface backed by Spring Boot and PostgreSQL.
 It reconciles the current desktop surface with the canonical MP3 contracts and
-defines observable acceptance criteria before implementation begins.
+defines observable acceptance criteria for implementation and verification.
 
 The canonical policies under `.agents/` remain authoritative. If this draft and
 a canonical policy disagree, the canonical policy wins until a human approves
 and records a coordinated policy change.
+
+### Current implementation checkpoint
+
+The first walking slice currently provides:
+
+- role entry with generic wrong-portal authentication failure;
+- public registration only in the Reporter portal, with server-controlled
+  `REPORTER` creation, adaptive password hashing, and atomic registration audit;
+- an authenticated Reporter shell sharing the Administrator shell's responsive
+  labelled mobile navigation behavior;
+- a direct-submission form with required title, description, category,
+  explicit unchecked anonymity, CSRF protection, and duplicate-submission key;
+- a bounded, newest-first owned-incident list with basic text search and paging;
+- application-generated UTC submission timestamps and atomic PostgreSQL
+  incident/audit persistence; and
+- safe denied and disabled-Reporter list behavior that returns the same
+  non-enumerating unavailable response.
+
+This checkpoint does **not** yet provide drafts, incident detail, advanced
+filters and sorting, edit, withdrawal, reopen, attachments, promotion, AI
+assistance, own-password change, or the complete failure/concurrency and
+deployed evidence required by this specification.
 
 ## 1. Scope decision
 
@@ -411,6 +435,35 @@ deployed evidence is recorded.
   smoke checks pass for the exact release commit, and independent review and
   human release approval are recorded.
 
+Current criterion status:
+
+- `REP-AC-01` is partial: Reporter-only registration, hashing, CSRF, duplicate,
+  validation, rollback, and secret-absence paths have automated coverage;
+  complete tampered-request and exact-commit evidence remain required.
+- `REP-AC-02` is partial: role-gated login and Reporter route protection are
+  covered, and a disabled Reporter's list request now uses the safe denied
+  response; complete session-rotation/invalidation evidence remains required.
+- `REP-AC-03` is partial: ownership-scoped basic search and bounded paging are
+  implemented; the approved filters, sort fields, SLO state, drafts, and
+  isolated PostgreSQL query evidence remain required.
+- `REP-AC-04` is partial: valid direct submission, validation, UTC timestamps,
+  explicit anonymity, idempotency, and atomic incident/audit persistence are
+  implemented; draft save/resume/submit and isolated PostgreSQL evidence remain
+  required.
+- `REP-AC-05` and `REP-AC-06` are partial for list and direct-submission paths;
+  the remaining detail, mutation, attachment, and AI privacy paths are not yet
+  implemented or proved.
+- `REP-AC-07` through `REP-AC-11` remain open because their workflows are not
+  implemented in this walking slice.
+- `REP-AC-12` is partial for logout only; own-password change and complete
+  client-state/session verification remain required.
+- `REP-AC-13` is partial: the shared responsive shell and mobile menu behavior
+  have component coverage; manual narrow-width, keyboard, screen-reader, and
+  200% zoom verification remains required.
+- `REP-AC-14` is partial: local build, automated tests, and packaged-artifact
+  checks pass, while the exact release commit, isolated database, deployed
+  smoke, independent review, and human release approval remain outstanding.
+
 ### Required verification
 
 Automated evidence must include:
@@ -431,7 +484,24 @@ Automated evidence must include:
 
 Verification evidence:
 
-- Automated: pending implementation and approved isolated test environment.
+- Automated (partial walking-slice evidence, uncommitted working tree based on
+  `9bcfb43`): `gradlew.bat --no-daemon check bootJar` passed on 2026-10-18,
+  including Java tests, frontend typecheck/lint and 10 component tests,
+  production frontend build, Boot JAR creation, and packaged-artifact checks.
+  Focused Reporter and renamed registration tests also passed with
+  `gradlew.bat --no-daemon test --tests
+  "com.company.incidentdesk.web.security.ReporterAccountRegistration*"
+  --tests
+  "com.company.incidentdesk.web.security.JdbcReporterAccountRegistrationStoreTest"
+  --tests "com.company.incidentdesk.web.reporter.*"
+  -PfrontendSkipBuild=true`. This evidence does not prove the full criteria
+  above; isolated PostgreSQL Reporter integration checks remain pending.
+- Local runtime: `gradlew.bat --no-daemon bootRun
+  --args='--server.port=18080'` started the real Spring application on
+  2026-10-18 after validating all three Flyway migrations against the configured
+  development database. Non-mutating probes returned `UP` from `/health`, an
+  unauthenticated session from `/api/v1/auth/session`, HTTP 200 from `/`, and
+  the expected HTTP 400 from a CSRF-protected invalid Reporter registration.
 - Manual/deployed: pending.
 - Independent security/architecture review: pending.
 - Human release approver/date: pending.

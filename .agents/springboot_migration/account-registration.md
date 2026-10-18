@@ -1,9 +1,16 @@
-# Spring Boot Migration: Temporary Account Registration
+# Superseded Account-Registration Migration Slice
 
-Status: **Approved only as an interim migration slice; MUST be replaced before
-shipping**
+Status: **Superseded on 2026-10-18 by the approved Reporter vertical-slice
+specification at commit `9bcfb43`. Retained only as historical migration
+evidence.**
 
 Approved by: repository user request on 2026-10-18
+
+The client-selected-role contract below is no longer authoritative and must not
+be restored. Current registration behavior is governed by
+[`REP-AUTH-01`](../../workflow/reporter-vertical-slice.md#rep-auth-01--role-entry-registration-and-authentication)
+and its acceptance criteria: public registration is available only in the
+Reporter portal and always creates a Reporter.
 
 ## Objective
 
@@ -95,7 +102,7 @@ Before the application can ship, all of the following are required:
 5. Obtain the security/architecture, independent-review, and release approvals
    required by `workflow/README.md`.
 
-## Acceptance criteria
+## Historical acceptance criteria
 
 - [x] A valid interim request creates an enabled account of the requested
   client-selected role with an adaptive salted password hash and a successful

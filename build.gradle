@@ -273,7 +273,7 @@ tasks.register('registrationDatabaseTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform()
     filter {
-        includeTestsMatching 'com.company.incidentdesk.web.security.TemporaryAccountRegistrationPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.security.ReporterAccountRegistrationPostgresTest'
     }
 
     doFirst {

@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 describe('administrator web slice', () => {
-  it('shows the role-specific login without loading protected dashboard data', async () => {
+  it('shows role entry before the role-specific login without loading protected data', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/health') return response({ status: 'UP' })
@@ -42,6 +42,7 @@ describe('administrator web slice', () => {
 
     render(<App />)
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Administrator' }))
     expect(await screen.findByRole('heading', { name: 'Administrator sign in' })).toBeInTheDocument()
     expect(screen.queryByText('Company incidents')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/admin'))).toBe(false)
@@ -69,11 +70,12 @@ describe('administrator web slice', () => {
       const url = String(input)
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') return response(anonymousSession)
-      if (url === '/api/v1/auth/administrator/login' && init?.method === 'POST') return response({}, 401)
+      if (url === '/api/v1/auth/login' && init?.method === 'POST') return response({}, 401)
       throw new Error(`Unexpected request: ${url}`)
     }))
 
     render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Administrator' }))
     fireEvent.change(await screen.findByLabelText('Login name'), { target: { value: 'unknown' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'incorrect' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -82,32 +84,31 @@ describe('administrator web slice', () => {
     await waitFor(() => expect(screen.getByLabelText('Password')).toHaveValue(''))
   })
 
-  it('creates a temporary client-selected role account without signing it in', async () => {
+  it('creates a Reporter account without exposing a role selector', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') return response(anonymousSession)
-      if (url === '/api/v1/auth/register' && init?.method === 'POST') return response({}, 201)
+      if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') return response({}, 201)
       throw new Error(`Unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create a temporary migration account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Reporter account' }))
     fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'migration-admin' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'temporary-secret' } })
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'temporary-secret' } })
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'ADMINISTRATOR' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Account created')
-    expect(screen.getByRole('heading', { name: 'Create account' })).toBeInTheDocument()
-    const registrationCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/auth/register')
+    expect(await screen.findByRole('status')).toHaveTextContent('Reporter account created')
+    expect(screen.getByRole('heading', { name: 'Create Reporter account' })).toBeInTheDocument()
+    const registrationCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/auth/reporter/register')
     expect(registrationCall?.[1]?.body).toBe(JSON.stringify({
       loginName: 'migration-admin',
       password: 'temporary-secret',
       passwordConfirmation: 'temporary-secret',
-      role: 'ADMINISTRATOR',
     }))
   })
 
@@ -121,14 +122,15 @@ describe('administrator web slice', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create a temporary migration account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Reporter account' }))
     fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'reporter' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'one' } })
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'two' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Passwords do not match')
-    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/register')).toBe(false)
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/reporter/register')).toBe(false)
   })
 
   it('shows the legacy duplicate-login message returned by registration', async () => {
@@ -136,7 +138,7 @@ describe('administrator web slice', () => {
       const url = String(input)
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') return response(anonymousSession)
-      if (url === '/api/v1/auth/register' && init?.method === 'POST') {
+      if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') {
         return response({
           code: 'DUPLICATE_LOGIN_NAME',
           message: 'That case-sensitive login name is already registered.',
@@ -146,7 +148,8 @@ describe('administrator web slice', () => {
     }))
 
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create a temporary migration account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Reporter account' }))
     fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'existing' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'temporary-secret' } })
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'temporary-secret' } })

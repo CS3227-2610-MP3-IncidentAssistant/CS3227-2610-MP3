@@ -1,94 +1,151 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
-import {
-  administratorLogin,
-  loadSession,
-  logout,
-  registerAccount,
-  type RegistrationRole,
-  type SessionState,
-} from './api'
+import { loadSession, logout, registerAccount, roleLogin, type SessionState } from './api'
 import { useServiceHealth } from './health/useServiceHealth'
+import { ReporterDashboard } from './reporter/ReporterDashboard'
+import { ReporterShell } from './reporter/ReporterShell'
+
+type Portal = 'REPORTER' | 'ADMINISTRATOR'
 
 export function App() {
   const serviceHealth = useServiceHealth()
-  const sessionState = useAdministratorSession()
+  const sessionState = useSession()
+  const [portal, setPortal] = useState<Portal | null>(null)
 
   if (sessionState.failed) {
     return <SessionFailure onRetry={sessionState.reload} />
   }
   if (!sessionState.session) {
-    return <main className="auth-layout"><p role="status">Checking your session…</p></main>
-  }
-  if (!isAdministrator(sessionState.session)) {
-    return <AdministratorLogin session={sessionState.session} onAuthenticated={sessionState.reload} />
+    return (
+      <main className="auth-layout">
+        <p role="status">Checking your session…</p>
+      </main>
+    )
   }
 
   const session = sessionState.session
   async function signOut() {
     await logout(session)
     sessionState.clear()
+    setPortal(null)
   }
-
-  return <AdminShell
-    serviceHealth={serviceHealth}
-    loginName={session.loginName ?? 'Administrator'}
-    onLogout={signOut}
-  >
-    <AdminDashboard />
-  </AdminShell>
+  if (session.authenticated && session.role === 'ADMINISTRATOR') {
+    return (
+      <AdminShell
+        serviceHealth={serviceHealth}
+        loginName={session.loginName ?? 'Administrator'}
+        onLogout={signOut}
+      >
+        <AdminDashboard />
+      </AdminShell>
+    )
+  }
+  if (session.authenticated && session.role === 'REPORTER') {
+    return (
+      <ReporterShell
+        serviceHealth={serviceHealth}
+        loginName={session.loginName ?? 'Reporter'}
+        onLogout={signOut}
+      >
+        <ReporterDashboard session={session} />
+      </ReporterShell>
+    )
+  }
+  if (!portal) {
+    return <RoleEntry onSelect={setPortal} />
+  }
+  return (
+    <PortalLogin
+      portal={portal}
+      session={session}
+      onBack={() => setPortal(null)}
+      onAuthenticated={sessionState.reload}
+    />
+  )
 }
 
-function useAdministratorSession() {
+function useSession() {
   const [session, setSession] = useState<SessionState | null>(null)
   const [failed, setFailed] = useState(false)
-
   const receive = useCallback((next: SessionState) => {
     setSession(next)
     setFailed(false)
   }, [])
-  const reject = useCallback((error: unknown) => {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) setFailed(true)
-  }, [])
-  const reload = useCallback((signal?: AbortSignal) => {
-    return loadSession(signal).then(receive).catch(reject)
-  }, [receive, reject])
+  const reload = useCallback(
+    (signal?: AbortSignal) => loadSession(signal).then(receive).catch((error) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        setFailed(true)
+      }
+    }),
+    [receive],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
-    void Promise.resolve().then(() => reload(controller.signal))
+    void reload(controller.signal)
     return () => controller.abort()
   }, [reload])
-
-  const clear = useCallback(() => {
-    setSession((current) => current
+  return {
+    session,
+    failed,
+    reload: () => reload(),
+    clear: () => setSession((current) => current
       ? { ...current, authenticated: false, loginName: undefined, role: undefined }
-      : current)
-  }, [])
-  return { session, failed, reload: () => reload(), clear }
+      : current),
+  }
 }
 
-function isAdministrator(session: SessionState) {
-  return session.authenticated && session.role === 'ADMINISTRATOR'
+function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
+  return (
+    <main className="auth-layout">
+      <section className="auth-card" aria-labelledby="role-entry-heading">
+        <p className="eyebrow">Incident Desk</p>
+        <h1 id="role-entry-heading">Choose your portal</h1>
+        <p>Sign in through the portal that matches your current account role.</p>
+        <div className="portal-list">
+          <button className="primary-button" type="button" onClick={() => onSelect('REPORTER')}>
+            Reporter
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled
+            aria-describedby="responder-status"
+          >
+            Responder
+          </button>
+          <span id="responder-status" className="help-text">
+            Responder web workflow is in development.
+          </span>
+          <button className="secondary-button" type="button" onClick={() => onSelect('ADMINISTRATOR')}>
+            Administrator
+          </button>
+        </div>
+      </section>
+    </main>
+  )
 }
 
-function AdministratorLogin({ session, onAuthenticated }: {
+function PortalLogin({ portal, session, onBack, onAuthenticated }: {
+  portal: Portal
   session: SessionState
+  onBack: () => void
   onAuthenticated: () => Promise<void>
 }) {
-  const [creatingAccount, setCreatingAccount] = useState(false)
+  const [registering, setRegistering] = useState(false)
   const [loginName, setLoginName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const label = portal === 'REPORTER' ? 'Reporter' : 'Administrator'
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
     setError('')
     try {
-      await administratorLogin(loginName, password, session.csrfToken)
+      await roleLogin(loginName, password, portal, session.csrfToken)
       setPassword('')
       await onAuthenticated()
     } catch {
@@ -98,56 +155,63 @@ function AdministratorLogin({ session, onAuthenticated }: {
       setSubmitting(false)
     }
   }
-
-  if (creatingAccount) {
-    return <TemporaryRegistration session={session} onReturn={() => setCreatingAccount(false)} />
+  if (registering) {
+    return <ReporterRegistration session={session} onReturn={() => setRegistering(false)} />
   }
-
-  return <main className="auth-layout">
-    <section className="auth-card" aria-labelledby="login-heading">
-      <p className="eyebrow">Incident Desk</p>
-      <h1 id="login-heading">Administrator sign in</h1>
-      <p>Use an enabled administrator account.</p>
-      {error && <div className="form-error" role="alert">{error}</div>}
-      <form onSubmit={submit}>
-        <label htmlFor="login-name">Login name</label>
-        <input
-          id="login-name"
-          autoComplete="username"
-          required
-          maxLength={128}
-          value={loginName}
-          onChange={(event) => setLoginName(event.target.value)}
-        />
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <button className="primary-button" type="submit" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
+  return (
+    <main className="auth-layout">
+      <section className="auth-card" aria-labelledby="login-heading">
+        <p className="eyebrow">Incident Desk</p>
+        <h1 id="login-heading">{label} sign in</h1>
+        <p>Use an enabled {label.toLowerCase()} account.</p>
+        {error && <div className="form-error" role="alert">{error}</div>}
+        <form onSubmit={(event) => void submit(event)}>
+          <label htmlFor="login-name">Login name</label>
+          <input
+            id="login-name"
+            autoComplete="username"
+            required
+            maxLength={128}
+            value={loginName}
+            onChange={(event) => setLoginName(event.target.value)}
+          />
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+        {portal === 'REPORTER' && (
+          <button
+            className="ghost-button auth-switch"
+            type="button"
+            onClick={() => setRegistering(true)}
+          >
+            Create Reporter account
+          </button>
+        )}
+        <button className="ghost-button auth-switch" type="button" onClick={onBack}>
+          Choose another portal
         </button>
-      </form>
-      <button className="ghost-button auth-switch" type="button" onClick={() => setCreatingAccount(true)}>
-        Create a temporary migration account
-      </button>
-    </section>
-  </main>
+      </section>
+    </main>
+  )
 }
 
-function TemporaryRegistration({ session, onReturn }: { session: SessionState, onReturn: () => void }) {
+function ReporterRegistration({ session, onReturn }: { session: SessionState, onReturn: () => void }) {
   const [loginName, setLoginName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [role, setRole] = useState<RegistrationRole>('REPORTER')
   const [feedback, setFeedback] = useState('')
   const [successful, setSuccessful] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setFeedback('')
@@ -158,62 +222,82 @@ function TemporaryRegistration({ session, onReturn }: { session: SessionState, o
     }
     setSubmitting(true)
     try {
-      await registerAccount(loginName, password, confirmation, role, session)
+      await registerAccount(loginName, password, confirmation, session)
       setPassword('')
       setConfirmation('')
       setSuccessful(true)
-      setFeedback('Account created. Return to sign in when you are ready.')
-    } catch (reason) {
+      setFeedback('Reporter account created. Return to sign in when you are ready.')
+    } catch (error) {
       setPassword('')
       setConfirmation('')
-      setFeedback(reason instanceof Error ? reason.message : 'The account could not be created. Try again.')
+      setFeedback(error instanceof Error ? error.message : 'The account could not be created. Try again.')
     } finally {
       setSubmitting(false)
     }
   }
-
-  return <main className="auth-layout">
-    <section className="auth-card" aria-labelledby="registration-heading">
-      <p className="eyebrow">Temporary migration workflow</p>
-      <h1 id="registration-heading">Create account</h1>
-      <p className="migration-warning" role="note">
-        Development only. Client-selected roles are insecure and this workflow must be replaced before shipping.
-      </p>
-      {feedback && <div className={successful ? 'form-success' : 'form-error'} role={successful ? 'status' : 'alert'}>
-        {feedback}
-      </div>}
-      <form onSubmit={submit}>
-        <label htmlFor="registration-login-name">Login name</label>
-        <input id="registration-login-name" autoComplete="username" required maxLength={128}
-          value={loginName} onChange={(event) => setLoginName(event.target.value)} />
-        <label htmlFor="registration-password">Password</label>
-        <input id="registration-password" type="password" autoComplete="new-password" required maxLength={128}
-          value={password} onChange={(event) => setPassword(event.target.value)} />
-        <label htmlFor="registration-confirmation">Confirm password</label>
-        <input id="registration-confirmation" type="password" autoComplete="new-password" required maxLength={128}
-          value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
-        <label htmlFor="registration-role">Role</label>
-        <select id="registration-role" value={role}
-          onChange={(event) => setRole(event.target.value as RegistrationRole)}>
-          <option value="REPORTER">Reporter</option>
-          <option value="RESPONDER">Responder</option>
-          <option value="ADMINISTRATOR">Administrator</option>
-        </select>
-        <button className="primary-button" type="submit" disabled={submitting}>
-          {submitting ? 'Creating account…' : 'Create account'}
+  return (
+    <main className="auth-layout">
+      <section className="auth-card" aria-labelledby="registration-heading">
+        <p className="eyebrow">Reporter portal</p>
+        <h1 id="registration-heading">Create Reporter account</h1>
+        {feedback && (
+          <div
+            className={successful ? 'form-success' : 'form-error'}
+            role={successful ? 'status' : 'alert'}
+          >
+            {feedback}
+          </div>
+        )}
+        <form onSubmit={(event) => void submit(event)}>
+          <label htmlFor="registration-login-name">Login name</label>
+          <input
+            id="registration-login-name"
+            autoComplete="username"
+            required
+            maxLength={128}
+            value={loginName}
+            onChange={(event) => setLoginName(event.target.value)}
+          />
+          <label htmlFor="registration-password">Password</label>
+          <input
+            id="registration-password"
+            type="password"
+            autoComplete="new-password"
+            required
+            maxLength={128}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <label htmlFor="registration-confirmation">Confirm password</label>
+          <input
+            id="registration-confirmation"
+            type="password"
+            autoComplete="new-password"
+            required
+            maxLength={128}
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+          />
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+        <button className="ghost-button auth-switch" type="button" onClick={onReturn}>
+          Return to sign in
         </button>
-      </form>
-      <button className="ghost-button auth-switch" type="button" onClick={onReturn}>Return to sign in</button>
-    </section>
-  </main>
+      </section>
+    </main>
+  )
 }
 
 function SessionFailure({ onRetry }: { onRetry: () => void }) {
-  return <main className="auth-layout">
-    <section className="auth-card" role="alert">
-      <h1>Session unavailable</h1>
-      <p>The service could not check your session. No protected data was loaded.</p>
-      <button className="primary-button" type="button" onClick={onRetry}>Try again</button>
-    </section>
-  </main>
+  return (
+    <main className="auth-layout">
+      <section className="auth-card" role="alert">
+        <h1>Session unavailable</h1>
+        <p>The service could not check your session. No protected data was loaded.</p>
+        <button className="primary-button" type="button" onClick={onRetry}>Try again</button>
+      </section>
+    </main>
+  )
 }

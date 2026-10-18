@@ -28,10 +28,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
 @ExtendWith(OutputCaptureExtension.class)
-class TemporaryAccountRegistrationHttpSecurityTest {
+class ReporterAccountRegistrationHttpSecurityTest {
     private static final String PASSWORD = "plain-text-registration-secret";
 
     private AnnotationConfigWebApplicationContext context;
@@ -57,7 +57,7 @@ class TemporaryAccountRegistrationHttpSecurityTest {
 
     @Test
     void rejectsRegistrationWithoutCsrfBeforePersistence() throws Exception {
-        mvc.perform(post("/api/v1/auth/register")
+        mvc.perform(post("/api/v1/auth/reporter/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isNotFound());
@@ -67,7 +67,7 @@ class TemporaryAccountRegistrationHttpSecurityTest {
 
     @Test
     void acceptsCsrfProtectedRegistrationWithoutDisclosingPlaintext(CapturedOutput output) throws Exception {
-        String response = mvc.perform(post("/api/v1/auth/register")
+        String response = mvc.perform(post("/api/v1/auth/reporter/register")
                         .with(csrf().asHeader())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
@@ -87,8 +87,7 @@ class TemporaryAccountRegistrationHttpSecurityTest {
                 {
                   "loginName": "csrf-reporter",
                   "password": "%s",
-                  "passwordConfirmation": "%s",
-                  "role": "REPORTER"
+                  "passwordConfirmation": "%s"
                 }
                 """.formatted(PASSWORD, PASSWORD);
     }
@@ -126,24 +125,24 @@ class TemporaryAccountRegistrationHttpSecurityTest {
         }
 
         @Bean
-        TemporaryAccountRegistrationService registrationService(
+        ReporterAccountRegistrationService registrationService(
                 RecordingStore store,
                 PasswordEncoder encoder) {
-            return new TemporaryAccountRegistrationService(store, encoder);
+            return new ReporterAccountRegistrationService(store, encoder);
         }
 
         @Bean
-        TemporaryAccountRegistrationController registrationController(
-                TemporaryAccountRegistrationService service) {
-            return new TemporaryAccountRegistrationController(service);
+        ReporterAccountRegistrationController registrationController(
+                ReporterAccountRegistrationService service) {
+            return new ReporterAccountRegistrationController(service);
         }
     }
 
-    private static final class RecordingStore implements TemporaryAccountRegistrationStore {
-        private TemporaryAccountRegistration saved;
+    private static final class RecordingStore implements ReporterAccountRegistrationStore {
+        private ReporterAccountRegistration saved;
 
         @Override
-        public RegistrationOutcome register(TemporaryAccountRegistration registration) {
+        public RegistrationOutcome register(ReporterAccountRegistration registration) {
             saved = registration;
             return RegistrationOutcome.CREATED;
         }

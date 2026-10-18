@@ -13,9 +13,9 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
-class JdbcTemporaryAccountRegistrationStoreTest {
+class JdbcReporterAccountRegistrationStoreTest {
     @Test
     void mapsOnlyTheLoginNameConstraintToDuplicate() {
         assertEquals(RegistrationOutcome.DUPLICATE, outcomeForConstraint("accounts_login_name_key"));
@@ -32,8 +32,8 @@ class JdbcTemporaryAccountRegistrationStoreTest {
         doThrow(new DuplicateKeyException("constraint violation", postgres))
                 .when(transactions).executeWithoutResult(any());
 
-        JdbcTemporaryAccountRegistrationStore store =
-                new JdbcTemporaryAccountRegistrationStore(jdbc, transactions);
-        return store.register(mock(TemporaryAccountRegistration.class));
+        JdbcReporterAccountRegistrationStore store =
+                new JdbcReporterAccountRegistrationStore(jdbc, transactions);
+        return store.register(mock(ReporterAccountRegistration.class));
     }
 }

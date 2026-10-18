@@ -12,22 +12,22 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.postgresql.util.PSQLException;
 
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
-/** PostgreSQL adapter that commits an interim account and audit atomically. */
+/** PostgreSQL adapter that commits a Reporter account and audit atomically. */
 @Repository
 @ConditionalOnBean(DataSource.class)
-public class JdbcTemporaryAccountRegistrationStore implements TemporaryAccountRegistrationStore {
+public class JdbcReporterAccountRegistrationStore implements ReporterAccountRegistrationStore {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
 
-    public JdbcTemporaryAccountRegistrationStore(JdbcTemplate jdbc, TransactionTemplate transactions) {
+    public JdbcReporterAccountRegistrationStore(JdbcTemplate jdbc, TransactionTemplate transactions) {
         this.jdbc = jdbc;
         this.transactions = transactions;
     }
 
     @Override
-    public RegistrationOutcome register(TemporaryAccountRegistration registration) {
+    public RegistrationOutcome register(ReporterAccountRegistration registration) {
         try {
             transactions.executeWithoutResult(status -> persist(registration));
             return RegistrationOutcome.CREATED;
@@ -35,7 +35,7 @@ public class JdbcTemporaryAccountRegistrationStore implements TemporaryAccountRe
             return isDuplicateLoginName(exception)
                     ? RegistrationOutcome.DUPLICATE
                     : RegistrationOutcome.UNAVAILABLE;
-        } catch (DataAccessException exception) {
+        } catch (DataAccessException ignored) {
             return RegistrationOutcome.UNAVAILABLE;
         }
     }
@@ -53,7 +53,7 @@ public class JdbcTemporaryAccountRegistrationStore implements TemporaryAccountRe
         return false;
     }
 
-    private void persist(TemporaryAccountRegistration registration) {
+    private void persist(ReporterAccountRegistration registration) {
         jdbc.update("INSERT INTO accounts (id, login_name, role, status) VALUES (?, ?, ?, 'ENABLED')",
                 registration.accountId(), registration.loginName(), registration.role().name());
         jdbc.update("INSERT INTO account_credentials (account_id, password_hash) VALUES (?, ?)",

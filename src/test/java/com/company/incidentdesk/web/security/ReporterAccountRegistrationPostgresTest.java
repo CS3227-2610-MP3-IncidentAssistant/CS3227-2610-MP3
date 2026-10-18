@@ -34,10 +34,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
 @EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
-class TemporaryAccountRegistrationPostgresTest {
+class ReporterAccountRegistrationPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-18T09:00:00Z");
     private static final String SCHEMA = "registration_test_" + UUID.randomUUID().toString().replace("-", "");
 
@@ -87,12 +87,12 @@ class TemporaryAccountRegistrationPostgresTest {
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(4);
         UUID accountId = UUID.fromString("20000000-0000-0000-0000-000000000001");
         UUID auditId = UUID.fromString("20000000-0000-0000-0000-000000000002");
-        TemporaryAccountRegistrationService service = service(encoder, accountId, auditId);
+        ReporterAccountRegistrationService service = service(encoder, accountId, auditId);
 
         assertEquals(RegistrationOutcome.CREATED,
-                service.register("CaseSensitive", "database-secret", "database-secret", "RESPONDER"));
+                service.register("CaseSensitive", "database-secret", "database-secret"));
 
-        assertEquals("RESPONDER", jdbc.queryForObject(
+        assertEquals("REPORTER", jdbc.queryForObject(
                 "SELECT role FROM accounts WHERE login_name = 'CaseSensitive'", String.class));
         String hash = jdbc.queryForObject(
                 "SELECT password_hash FROM account_credentials WHERE account_id = ?", String.class, accountId);
@@ -109,10 +109,10 @@ class TemporaryAccountRegistrationPostgresTest {
     void treatsNamesAsCaseSensitiveAndAllowsExactlyOneConcurrentExactDuplicate() throws Exception {
         assertEquals(RegistrationOutcome.CREATED,
                 service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                        .register("ConcurrentName", "secret", "secret", "REPORTER"));
+                        .register("ConcurrentName", "secret", "secret"));
         assertEquals(RegistrationOutcome.CREATED,
                 service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                        .register("concurrentname", "secret", "secret", "REPORTER"));
+                        .register("concurrentname", "secret", "secret"));
 
         int attempts = 6;
         CountDownLatch ready = new CountDownLatch(attempts);
@@ -124,7 +124,7 @@ class TemporaryAccountRegistrationPostgresTest {
                     ready.countDown();
                     assertTrue(start.await(10, TimeUnit.SECONDS));
                     return service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                            .register("ExactDuplicate", "secret", "secret", "REPORTER");
+                            .register("ExactDuplicate", "secret", "secret");
                 }));
             }
             assertTrue(ready.await(10, TimeUnit.SECONDS));
@@ -159,7 +159,7 @@ class TemporaryAccountRegistrationPostgresTest {
 
         UUID accountId = UUID.fromString("20000000-0000-0000-0000-000000000011");
         RegistrationOutcome outcome = service(new BCryptPasswordEncoder(4), accountId, conflictingAuditId)
-                .register("rollback-user", "secret", "secret", "REPORTER");
+                .register("rollback-user", "secret", "secret");
 
         assertEquals(RegistrationOutcome.UNAVAILABLE, outcome);
         assertEquals(0, jdbc.queryForObject(
@@ -170,15 +170,15 @@ class TemporaryAccountRegistrationPostgresTest {
                 "SELECT COUNT(*) FROM audit_events WHERE id = ?", Integer.class, conflictingAuditId));
     }
 
-    private static TemporaryAccountRegistrationService service(
+    private static ReporterAccountRegistrationService service(
             BCryptPasswordEncoder encoder,
             UUID accountId,
             UUID auditId) {
         Deque<UUID> identifiers = new ArrayDeque<>(List.of(accountId, auditId));
-        JdbcTemporaryAccountRegistrationStore store = new JdbcTemporaryAccountRegistrationStore(
+        JdbcReporterAccountRegistrationStore store = new JdbcReporterAccountRegistrationStore(
                 jdbc,
                 new TransactionTemplate(new DataSourceTransactionManager(testDataSource)));
-        return new TemporaryAccountRegistrationService(
+        return new ReporterAccountRegistrationService(
                 store,
                 encoder,
                 Clock.fixed(NOW, ZoneOffset.UTC),

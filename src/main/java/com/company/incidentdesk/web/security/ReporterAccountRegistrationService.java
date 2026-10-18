@@ -16,31 +16,31 @@ import javax.sql.DataSource;
 import com.company.incidentdesk.domain.account.Role;
 
 /**
- * Temporary web-registration migration service.
+ * Public Reporter account-registration service.
  *
- * <p>This intentionally accepts a caller-selected role and must be replaced
- * before release as required by the registration migration specification.</p>
+ * <p>The HTTP boundary supplies no role; public registration always creates a
+ * Reporter as required by the approved Reporter slice.</p>
  */
 @Service
 @ConditionalOnBean(DataSource.class)
-final class TemporaryAccountRegistrationService {
+final class ReporterAccountRegistrationService {
     static final int MAX_LOGIN_NAME_LENGTH = 128;
     static final int MAX_PASSWORD_LENGTH = 128;
 
-    private final TemporaryAccountRegistrationStore store;
+    private final ReporterAccountRegistrationStore store;
     private final PasswordEncoder passwords;
     private final Clock clock;
     private final Supplier<UUID> identifiers;
 
     @Autowired
-    TemporaryAccountRegistrationService(
-            TemporaryAccountRegistrationStore store,
+    ReporterAccountRegistrationService(
+            ReporterAccountRegistrationStore store,
             PasswordEncoder passwords) {
         this(store, passwords, Clock.systemUTC(), UUID::randomUUID);
     }
 
-    TemporaryAccountRegistrationService(
-            TemporaryAccountRegistrationStore store,
+    ReporterAccountRegistrationService(
+            ReporterAccountRegistrationStore store,
             PasswordEncoder passwords,
             Clock clock,
             Supplier<UUID> identifiers) {
@@ -50,7 +50,7 @@ final class TemporaryAccountRegistrationService {
         this.identifiers = Objects.requireNonNull(identifiers, "identifiers");
     }
 
-    RegistrationOutcome register(String loginName, String password, String confirmation, String requestedRole) {
+    RegistrationOutcome register(String loginName, String password, String confirmation) {
         if (!validLoginName(loginName)) {
             return RegistrationOutcome.INVALID_LOGIN_NAME;
         }
@@ -60,23 +60,18 @@ final class TemporaryAccountRegistrationService {
         if (!password.equals(confirmation)) {
             return RegistrationOutcome.PASSWORD_MISMATCH;
         }
-        Role role = parseRole(requestedRole);
-        if (role == null) {
-            return RegistrationOutcome.INVALID_ROLE;
-        }
-
         String passwordHash;
         try {
             passwordHash = passwords.encode(password);
-        } catch (RuntimeException exception) {
+        } catch (RuntimeException ignored) {
             return RegistrationOutcome.UNAVAILABLE;
         }
 
         UUID accountId = identifiers.get();
         UUID auditId = identifiers.get();
         Instant occurredAt = clock.instant();
-        return store.register(new TemporaryAccountRegistration(
-                accountId, loginName, role, passwordHash, auditId, occurredAt));
+        return store.register(new ReporterAccountRegistration(
+                accountId, loginName, Role.REPORTER, passwordHash, auditId, occurredAt));
     }
 
     private static boolean validLoginName(String loginName) {
@@ -87,23 +82,11 @@ final class TemporaryAccountRegistrationService {
         return password != null && !password.isEmpty() && password.length() <= MAX_PASSWORD_LENGTH;
     }
 
-    private static Role parseRole(String requestedRole) {
-        if (requestedRole == null) {
-            return null;
-        }
-        try {
-            return Role.valueOf(requestedRole);
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
-    }
-
     enum RegistrationOutcome {
         CREATED,
         INVALID_LOGIN_NAME,
         INVALID_PASSWORD,
         PASSWORD_MISMATCH,
-        INVALID_ROLE,
         DUPLICATE,
         UNAVAILABLE
     }

@@ -40,17 +40,18 @@ public class WebSecurityConfiguration {
                 .userDetailsService(users)
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/", "/index.html", "/assets/**", "/health", "/api/v1/auth/session",
-                                "/api/v1/auth/register")
+                                "/api/v1/auth/reporter/register")
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
+                        .requestMatchers("/api/v1/reporter/**").hasRole("REPORTER")
                         .requestMatchers("/api/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
                 .csrf(csrfConfig -> csrfConfig.csrfTokenRepository(csrf))
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.changeSessionId()))
                 .formLogin(form -> form
-                        .loginProcessingUrl("/api/v1/auth/administrator/login")
-                        .successHandler(administratorSuccessHandler())
+                        .loginProcessingUrl("/api/v1/auth/login")
+                        .successHandler(rolePortalSuccessHandler())
                         .failureHandler((request, response, exception) -> writeJson(
                                 response, HttpServletResponse.SC_UNAUTHORIZED, GENERIC_LOGIN_FAILURE))
                         .permitAll())
@@ -77,9 +78,11 @@ public class WebSecurityConfiguration {
         return http.build();
     }
 
-    private static AuthenticationSuccessHandler administratorSuccessHandler() {
+    private static AuthenticationSuccessHandler rolePortalSuccessHandler() {
         return (request, response, authentication) -> {
-            if (!authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"))) {
+            String expectedRole = request.getParameter("portal");
+            if (expectedRole == null
+                    || !authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_" + expectedRole))) {
                 rejectWrongPortal(request, response);
                 return;
             }

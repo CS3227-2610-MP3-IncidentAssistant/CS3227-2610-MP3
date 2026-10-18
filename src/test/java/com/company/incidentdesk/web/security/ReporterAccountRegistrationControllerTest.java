@@ -11,21 +11,21 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationController.RegistrationRequest;
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationController.RegistrationResponse;
-import com.company.incidentdesk.web.security.TemporaryAccountRegistrationService.RegistrationOutcome;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationController.RegistrationRequest;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationController.RegistrationResponse;
+import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
 @SuppressWarnings("deprecation")
-class TemporaryAccountRegistrationControllerTest {
+class ReporterAccountRegistrationControllerTest {
     @Test
     void mapsRegistrationOutcomesToStableSafeResponses() {
         OutcomeStore store = new OutcomeStore();
-        TemporaryAccountRegistrationService service = new TemporaryAccountRegistrationService(
+        ReporterAccountRegistrationService service = new ReporterAccountRegistrationService(
                 store,
                 NoOpPasswordEncoder.getInstance(),
                 Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 UUID::randomUUID);
-        TemporaryAccountRegistrationController controller = new TemporaryAccountRegistrationController(service);
+        ReporterAccountRegistrationController controller = new ReporterAccountRegistrationController(service);
 
         assertResponse(controller, store, RegistrationOutcome.CREATED, HttpStatus.CREATED,
                 "ACCOUNT_CREATED", "Account created");
@@ -34,21 +34,21 @@ class TemporaryAccountRegistrationControllerTest {
         assertResponse(controller, store, RegistrationOutcome.UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE,
                 "REGISTRATION_UNAVAILABLE", "The account could not be created. Try again.");
 
-        var invalid = controller.register(new RegistrationRequest("", "secret", "secret", "REPORTER"));
+        var invalid = controller.register(new RegistrationRequest("", "secret", "secret"));
         assertEquals(HttpStatus.BAD_REQUEST, invalid.getStatusCode());
         assertEquals("INVALID_LOGIN_NAME", invalid.getBody().code());
         assertEquals("Enter a non-blank login name.", invalid.getBody().message());
     }
 
     private static void assertResponse(
-            TemporaryAccountRegistrationController controller,
+            ReporterAccountRegistrationController controller,
             OutcomeStore store,
             RegistrationOutcome outcome,
             HttpStatus expectedStatus,
             String expectedCode,
             String expectedMessage) {
         store.outcome = outcome;
-        var response = controller.register(new RegistrationRequest("name", "secret", "secret", "REPORTER"));
+        var response = controller.register(new RegistrationRequest("name", "secret", "secret"));
         RegistrationResponse body = response.getBody();
         assertEquals(expectedStatus, response.getStatusCode());
         assertEquals(expectedCode, body.code());
@@ -56,11 +56,11 @@ class TemporaryAccountRegistrationControllerTest {
         assertEquals("no-store", response.getHeaders().getCacheControl());
     }
 
-    private static final class OutcomeStore implements TemporaryAccountRegistrationStore {
+    private static final class OutcomeStore implements ReporterAccountRegistrationStore {
         private RegistrationOutcome outcome;
 
         @Override
-        public RegistrationOutcome register(TemporaryAccountRegistration registration) {
+        public RegistrationOutcome register(ReporterAccountRegistration registration) {
             return outcome;
         }
     }

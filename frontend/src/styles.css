@@ -22,7 +22,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button { font: inherit; }
-input { font: inherit; }
+input, select, textarea { font: inherit; }
 button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 232px 1fr; }
@@ -107,6 +107,21 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .status-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; color: var(--color-info); background: var(--color-info-soft); font-size: 12px; font-weight: 700; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px; }
 .pagination button { min-height: 40px; }
+.portal-list { display: grid; gap: 12px; margin-top: 24px; }
+.portal-list .help-text { margin-top: -8px; }
+.submission-card { margin-bottom: 28px; padding: 24px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-card); }
+.submission-card h2 { margin: 4px 0 18px; }
+.incident-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, .45fr); gap: 10px 20px; }
+.incident-form > label { font-size: 13px; font-weight: 700; }
+.incident-form input, .incident-form select, .incident-form textarea { min-width: 0; padding: 10px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.incident-form textarea, .incident-form #incident-description + .field-error { grid-column: 1 / -1; }
+.incident-form label[for="incident-description"] { grid-column: 1 / -1; }
+.incident-form .primary-button { justify-self: start; }
+.field-error { color: var(--color-danger); font-size: 13px; }
+.anonymous-control { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+.anonymous-control input { width: 20px; height: 20px; }
+.anonymous-control label { font-weight: 700; }
+.help-text { grid-column: 1 / -1; margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 920px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -123,6 +138,8 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
   .secondary-button { align-self: flex-start; }
   .filter-bar { grid-template-columns: 1fr; }
   .filter-bar label { grid-column: auto; }
+  .incident-form { grid-template-columns: 1fr; }
+  .incident-form textarea, .incident-form #incident-description + .field-error, .incident-form label[for="incident-description"] { grid-column: auto; }
 }
 
 @media (max-width: 480px) {

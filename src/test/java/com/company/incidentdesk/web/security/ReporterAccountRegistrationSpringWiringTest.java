@@ -14,7 +14,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
-class TemporaryAccountRegistrationSpringWiringTest {
+class ReporterAccountRegistrationSpringWiringTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withBean(DataSource.class, () -> mock(DataSource.class))
             .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class))
@@ -28,17 +28,17 @@ class TemporaryAccountRegistrationSpringWiringTest {
     void createsTheRegistrationControllerServiceAndRepositoryProxy() {
         contextRunner.run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context).hasSingleBean(TemporaryAccountRegistrationController.class);
-            assertThat(context).hasSingleBean(TemporaryAccountRegistrationService.class);
-            assertThat(context).hasSingleBean(TemporaryAccountRegistrationStore.class);
+            assertThat(context).hasSingleBean(ReporterAccountRegistrationController.class);
+            assertThat(context).hasSingleBean(ReporterAccountRegistrationService.class);
+            assertThat(context).hasSingleBean(ReporterAccountRegistrationStore.class);
         });
     }
 
     @Configuration(proxyBeanMethods = false)
     @Import({
-            TemporaryAccountRegistrationController.class,
-            TemporaryAccountRegistrationService.class,
-            JdbcTemporaryAccountRegistrationStore.class
+            ReporterAccountRegistrationController.class,
+            ReporterAccountRegistrationService.class,
+            JdbcReporterAccountRegistrationStore.class
     })
     static class RegistrationConfiguration {
     }
