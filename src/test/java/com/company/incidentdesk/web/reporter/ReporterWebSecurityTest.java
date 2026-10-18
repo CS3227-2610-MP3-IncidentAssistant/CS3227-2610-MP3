@@ -71,18 +71,31 @@ class ReporterWebSecurityTest {
     }
 
     @Test
-    void rolePortalAcceptsReporterAndGenericallyRejectsWrongRole() throws Exception {
-        mvc.perform(post("/api/v1/auth/login")
+    void roleSpecificLoginPathsAcceptOnlyTheirPersistedRole() throws Exception {
+        mvc.perform(post("/api/v1/auth/reporter/login")
                         .with(csrf())
                         .param("username", "reporter")
-                        .param("password", "test-secret")
-                        .param("portal", "REPORTER"))
+                        .param("password", "test-secret"))
                 .andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/auth/administrator/login")
+                        .with(csrf())
+                        .param("username", "reporter")
+                        .param("password", "test-secret"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/auth/administrator/login")
+                        .with(csrf())
+                        .param("username", "administrator")
+                        .param("password", "test-secret"))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/auth/reporter/login")
+                        .with(csrf())
+                        .param("username", "administrator")
+                        .param("password", "test-secret"))
+                .andExpect(status().isUnauthorized());
         mvc.perform(post("/api/v1/auth/login")
                         .with(csrf())
                         .param("username", "reporter")
-                        .param("password", "test-secret")
-                        .param("portal", "ADMINISTRATOR"))
+                        .param("password", "test-secret"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -95,7 +108,7 @@ class ReporterWebSecurityTest {
         UserDetailsService users(PasswordEncoder passwords) {
             return username -> User.withUsername(username)
                     .password(passwords.encode("test-secret"))
-                    .roles("REPORTER")
+                    .roles("administrator".equals(username) ? "ADMINISTRATOR" : "REPORTER")
                     .build();
         }
 

@@ -484,8 +484,8 @@ Automated evidence must include:
 
 Verification evidence:
 
-- Automated (partial walking-slice evidence, uncommitted working tree based on
-  `9bcfb43`): `gradlew.bat --no-daemon check bootJar` passed on 2026-10-18,
+- Automated (partial walking-slice evidence): `gradlew.bat --no-daemon check
+  bootJar` passed on 2026-10-18,
   including Java tests, frontend typecheck/lint and 10 component tests,
   production frontend build, Boot JAR creation, and packaged-artifact checks.
   Focused Reporter and renamed registration tests also passed with
@@ -502,6 +502,12 @@ Verification evidence:
   development database. Non-mutating probes returned `UP` from `/health`, an
   unauthenticated session from `/api/v1/auth/session`, HTTP 200 from `/`, and
   the expected HTTP 400 from a CSRF-protected invalid Reporter registration.
+  A Vite development server on port 5173 was then proxied to that isolated
+  backend: `/api/v1/auth/session` returned HTTP 200, a CSRF-protected `POST` to
+  `/api/v1/auth/reporter/register` reached server validation and returned the
+  expected HTTP 400, and invalid credentials sent to the role-specific `POST
+  /api/v1/auth/reporter/login` reached authentication and returned the expected
+  generic HTTP 401.
 - Manual/deployed: pending.
 - Independent security/architecture review: pending.
 - Human release approver/date: pending.

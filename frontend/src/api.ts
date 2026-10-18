@@ -52,10 +52,13 @@ export async function roleLogin(
   portal: 'REPORTER' | 'ADMINISTRATOR',
   csrfToken: string,
 ): Promise<void> {
-  const body = new URLSearchParams({ username: loginName, password, portal, _csrf: csrfToken })
-  const response = await fetch('/api/v1/auth/login', {
-    method: 'POST', credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+  const rolePath = portal === 'REPORTER' ? 'reporter' : 'administrator'
+  const body = new URLSearchParams({ username: loginName, password, _csrf: csrfToken })
+  const response = await fetch(`/api/v1/auth/${rolePath}/login`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
   })
   if (!response.ok) throw new ApiError(response.status, 'Sign-in failed')
 }

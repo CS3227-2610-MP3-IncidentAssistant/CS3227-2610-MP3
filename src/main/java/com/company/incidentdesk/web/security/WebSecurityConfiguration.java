@@ -20,10 +20,12 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/** Same-origin browser security for the React application and administrator API. */
+/** Same-origin browser security for the React application and role-specific APIs. */
 @Configuration(proxyBeanMethods = false)
 public class WebSecurityConfiguration {
+    private static final String ADMINISTRATOR_LOGIN_PATH = "/api/v1/auth/administrator/login";
     private static final String GENERIC_LOGIN_FAILURE = "{\"code\":\"AUTHENTICATION_FAILED\",\"message\":\"Sign-in failed\"}";
+    private static final String REPORTER_LOGIN_PATH = "/api/v1/auth/reporter/login";
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -42,6 +44,8 @@ public class WebSecurityConfiguration {
                         .requestMatchers("/", "/index.html", "/assets/**", "/health", "/api/v1/auth/session",
                                 "/api/v1/auth/reporter/register")
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, REPORTER_LOGIN_PATH, ADMINISTRATOR_LOGIN_PATH)
+                        .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/v1/reporter/**").hasRole("REPORTER")
                         .requestMatchers("/api/**").denyAll()
@@ -50,7 +54,7 @@ public class WebSecurityConfiguration {
                 .csrf(csrfConfig -> csrfConfig.csrfTokenRepository(csrf))
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.changeSessionId()))
                 .formLogin(form -> form
-                        .loginProcessingUrl("/api/v1/auth/login")
+                        .loginProcessingUrl("/api/v1/auth/*/login")
                         .successHandler(rolePortalSuccessHandler())
                         .failureHandler((request, response, exception) -> writeJson(
                                 response, HttpServletResponse.SC_UNAUTHORIZED, GENERIC_LOGIN_FAILURE))
@@ -80,7 +84,7 @@ public class WebSecurityConfiguration {
 
     private static AuthenticationSuccessHandler rolePortalSuccessHandler() {
         return (request, response, authentication) -> {
-            String expectedRole = request.getParameter("portal");
+            String expectedRole = expectedRole(request.getRequestURI());
             if (expectedRole == null
                     || !authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_" + expectedRole))) {
                 rejectWrongPortal(request, response);
@@ -88,6 +92,14 @@ public class WebSecurityConfiguration {
             }
             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
             response.setHeader("Cache-Control", "no-store");
+        };
+    }
+
+    private static String expectedRole(String loginPath) {
+        return switch (loginPath) {
+        case REPORTER_LOGIN_PATH -> "REPORTER";
+        case ADMINISTRATOR_LOGIN_PATH -> "ADMINISTRATOR";
+        default -> null;
         };
     }
 

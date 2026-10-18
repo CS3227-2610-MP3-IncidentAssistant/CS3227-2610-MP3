@@ -70,7 +70,7 @@ describe('administrator web slice', () => {
       const url = String(input)
       if (url === '/health') return response({ status: 'UP' })
       if (url === '/api/v1/auth/session') return response(anonymousSession)
-      if (url === '/api/v1/auth/login' && init?.method === 'POST') return response({}, 401)
+      if (url === '/api/v1/auth/administrator/login' && init?.method === 'POST') return response({}, 401)
       throw new Error(`Unexpected request: ${url}`)
     }))
 
