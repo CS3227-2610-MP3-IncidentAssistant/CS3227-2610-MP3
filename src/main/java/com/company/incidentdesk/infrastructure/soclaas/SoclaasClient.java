@@ -60,10 +60,21 @@ public final class SoclaasClient implements AutoCloseable {
 
     /** Accepts trusted instructions and an already allowlisted JSON object, never a client-selected prompt policy. */
     public Completion complete(String system, String dataJson) {
-        requireEnabled();
         if (validatedAt == 0 || System.nanoTime() - validatedAt > Duration.ofMinutes(15).toNanos()) {
             throw failure(SoclaasException.Category.AI_UNAVAILABLE);
         }
+        return completeRequest(system, dataJson);
+    }
+
+    // Gateway admission already verified the shared catalog snapshot and bound it to this configured model.
+    // Other instances need not perform another catalog GET after every shared refresh.
+    Completion completeAdmitted(AiGatewayControl.Ticket ticket, String system, String dataJson) {
+        java.util.Objects.requireNonNull(ticket);
+        return completeRequest(system, dataJson);
+    }
+
+    private Completion completeRequest(String system, String dataJson) {
+        requireEnabled();
         if (system == null || system.isBlank() || dataJson == null
                 || utf8(dataJson) > settings.maxInputBytes()
                 || (long) utf8(system) + utf8(dataJson) + 256 > settings.maxInputTokens()) {
