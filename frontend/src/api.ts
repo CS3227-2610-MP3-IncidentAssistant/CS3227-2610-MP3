@@ -59,6 +59,31 @@ export async function administratorLogin(
   if (!response.ok) throw new ApiError(response.status, 'Sign-in failed')
 }
 
+export type RegistrationRole = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
+
+export async function registerAccount(
+  loginName: string,
+  password: string,
+  passwordConfirmation: string,
+  role: RegistrationRole,
+  session: SessionState,
+): Promise<void> {
+  const response = await fetch('/api/v1/auth/register', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      [session.csrfHeader]: session.csrfToken,
+    },
+    body: JSON.stringify({ loginName, password, passwordConfirmation, role }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: unknown } | null
+    const message = typeof body?.message === 'string' ? body.message : 'The account could not be created. Try again.'
+    throw new ApiError(response.status, message)
+  }
+}
+
 export async function logout(session: SessionState): Promise<void> {
   const response = await fetch('/api/v1/auth/logout', {
     method: 'POST', credentials: 'same-origin',

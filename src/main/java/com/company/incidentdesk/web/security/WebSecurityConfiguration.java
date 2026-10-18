@@ -39,7 +39,8 @@ public class WebSecurityConfiguration {
         http
                 .userDetailsService(users)
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/", "/index.html", "/assets/**", "/health", "/api/v1/auth/session")
+                        .requestMatchers("/", "/index.html", "/assets/**", "/health", "/api/v1/auth/session",
+                                "/api/v1/auth/register")
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/**").denyAll()

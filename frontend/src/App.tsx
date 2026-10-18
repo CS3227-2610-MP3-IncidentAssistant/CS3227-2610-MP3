@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
-import { administratorLogin, loadSession, logout, type SessionState } from './api'
+import {
+  administratorLogin,
+  loadSession,
+  logout,
+  registerAccount,
+  type RegistrationRole,
+  type SessionState,
+} from './api'
 import { useServiceHealth } from './health/useServiceHealth'
 
 export function App() {
@@ -70,6 +77,7 @@ function AdministratorLogin({ session, onAuthenticated }: {
   session: SessionState
   onAuthenticated: () => Promise<void>
 }) {
+  const [creatingAccount, setCreatingAccount] = useState(false)
   const [loginName, setLoginName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -91,11 +99,15 @@ function AdministratorLogin({ session, onAuthenticated }: {
     }
   }
 
+  if (creatingAccount) {
+    return <TemporaryRegistration session={session} onReturn={() => setCreatingAccount(false)} />
+  }
+
   return <main className="auth-layout">
     <section className="auth-card" aria-labelledby="login-heading">
       <p className="eyebrow">Incident Desk</p>
       <h1 id="login-heading">Administrator sign in</h1>
-      <p>Use an enabled administrator account. This portal does not create accounts.</p>
+      <p>Use an enabled administrator account.</p>
       {error && <div className="form-error" role="alert">{error}</div>}
       <form onSubmit={submit}>
         <label htmlFor="login-name">Login name</label>
@@ -120,6 +132,78 @@ function AdministratorLogin({ session, onAuthenticated }: {
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      <button className="ghost-button auth-switch" type="button" onClick={() => setCreatingAccount(true)}>
+        Create a temporary migration account
+      </button>
+    </section>
+  </main>
+}
+
+function TemporaryRegistration({ session, onReturn }: { session: SessionState, onReturn: () => void }) {
+  const [loginName, setLoginName] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [role, setRole] = useState<RegistrationRole>('REPORTER')
+  const [feedback, setFeedback] = useState('')
+  const [successful, setSuccessful] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setFeedback('')
+    setSuccessful(false)
+    if (password !== confirmation) {
+      setFeedback('Passwords do not match.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await registerAccount(loginName, password, confirmation, role, session)
+      setPassword('')
+      setConfirmation('')
+      setSuccessful(true)
+      setFeedback('Account created. Return to sign in when you are ready.')
+    } catch (reason) {
+      setPassword('')
+      setConfirmation('')
+      setFeedback(reason instanceof Error ? reason.message : 'The account could not be created. Try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return <main className="auth-layout">
+    <section className="auth-card" aria-labelledby="registration-heading">
+      <p className="eyebrow">Temporary migration workflow</p>
+      <h1 id="registration-heading">Create account</h1>
+      <p className="migration-warning" role="note">
+        Development only. Client-selected roles are insecure and this workflow must be replaced before shipping.
+      </p>
+      {feedback && <div className={successful ? 'form-success' : 'form-error'} role={successful ? 'status' : 'alert'}>
+        {feedback}
+      </div>}
+      <form onSubmit={submit}>
+        <label htmlFor="registration-login-name">Login name</label>
+        <input id="registration-login-name" autoComplete="username" required maxLength={128}
+          value={loginName} onChange={(event) => setLoginName(event.target.value)} />
+        <label htmlFor="registration-password">Password</label>
+        <input id="registration-password" type="password" autoComplete="new-password" required maxLength={128}
+          value={password} onChange={(event) => setPassword(event.target.value)} />
+        <label htmlFor="registration-confirmation">Confirm password</label>
+        <input id="registration-confirmation" type="password" autoComplete="new-password" required maxLength={128}
+          value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+        <label htmlFor="registration-role">Role</label>
+        <select id="registration-role" value={role}
+          onChange={(event) => setRole(event.target.value as RegistrationRole)}>
+          <option value="REPORTER">Reporter</option>
+          <option value="RESPONDER">Responder</option>
+          <option value="ADMINISTRATOR">Administrator</option>
+        </select>
+        <button className="primary-button" type="submit" disabled={submitting}>
+          {submitting ? 'Creating account…' : 'Create account'}
+        </button>
+      </form>
+      <button className="ghost-button auth-switch" type="button" onClick={onReturn}>Return to sign in</button>
     </section>
   </main>
 }

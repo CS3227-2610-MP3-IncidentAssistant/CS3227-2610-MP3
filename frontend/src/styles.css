@@ -88,9 +88,12 @@ button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2p
 .auth-card > p:not(.eyebrow) { color: var(--color-text-muted); line-height: 1.5; }
 .auth-card form { display: grid; gap: 10px; margin-top: 24px; }
 .auth-card label, .filter-bar label { font-size: 13px; font-weight: 700; }
-.auth-card input, .filter-bar input { min-height: 42px; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; }
+.auth-card input, .auth-card select, .filter-bar input { min-height: 42px; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
 .auth-card .primary-button { margin-top: 10px; }
 .form-error { margin-top: 16px; padding: 12px; border-radius: 8px; color: var(--color-danger); background: #fce4e4; }
+.form-success { margin-top: 16px; padding: 12px; border-radius: 8px; color: #14532d; background: #dcfce7; }
+.migration-warning { padding: 12px; border: 1px solid #f0b429; border-radius: 8px; color: #713f12 !important; background: #fef3c7; font-weight: 700; }
+.auth-switch { width: 100%; margin-top: 16px; }
 .filter-bar { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: end; padding: 16px 22px; border-bottom: 1px solid var(--color-border); }
 .filter-bar label { grid-column: 1 / -1; }
 .panel-state { padding: 32px 22px; }
