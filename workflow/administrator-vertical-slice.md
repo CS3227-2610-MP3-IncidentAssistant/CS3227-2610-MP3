@@ -1,6 +1,7 @@
 # Administrator React + Spring Boot Vertical Slice
 
-Status: **Draft — awaiting product-owner and security/architecture approval.**
+Status: **Product-owner approved on 2026-10-18; implementation and independent
+security/architecture verification remain in progress.**
 
 This document specifies the administrator experience to be migrated from the
 JavaFX application to a React browser interface backed by Spring Boot and
@@ -23,7 +24,7 @@ minimum administrator MVP. It therefore includes current desktop features that
 - detailed operational statistics; and
 - the full application audit-log interface.
 
-Approving this specification schedules those features earlier; it does not
+Approval of this specification schedules those features earlier; it does not
 weaken any lifecycle, privacy, authorization, audit, or transaction rule. The
 team must record product-owner approval before implementation starts.
 
@@ -545,22 +546,27 @@ skipped checks, sanitized outputs, and remaining risks under
 
 ## 11. Decisions required before implementation
 
-1. Approve pulling the current desktop parity features listed in section 1
-   into this vertical slice despite their current post-MVP label.
-2. Approve the Administrator provisioning workflow and credential-delivery
-   mechanism in a security ADR.
-3. Confirm centrally enforced text, page-size, password, and request limits.
-4. Confirm whether notifications remain in the first web slice.
-5. Decide whether incident-scoped audit history is implemented now or the
-   JavaFX placeholder is simply omitted.
-6. Confirm the SoC LLM provider/model, limits, and data-retention terms before
-   ADM-AI-01 implementation.
-7. Approve the React asset deployment topology, API URI conventions, session
-   cookie policy, and attachment storage in the architecture records.
+1. Full desktop-parity scope is scheduled in this slice despite the current
+   post-MVP labels.
+2. Administrator provisioning, migration, session, credential-delivery, API,
+   cookie, and asset-topology decisions are recorded in the architecture ADRs.
+3. Centrally enforced text, page-size, password, and request limits must be
+   recorded before the affected endpoint is enabled.
+4. Persistent notification history is deferred; transient notifications are
+   permitted only where they meet ADM-SELF-01.
+5. Incident-scoped audit history is omitted from the incident page; the global
+   privacy-safe audit interface remains in scope.
+6. The SoC LLM provider/model, limits, and data-retention terms remain open.
+   ADM-AI-01 may be built and tested against the deterministic fake provider,
+   but its production integration and acceptance criterion remain unticked
+   until those values receive human approval.
+7. The single-origin React/Spring Boot topology and Neon storage direction are
+   approved in `.agents/deployment_strategy.md`; remaining implementation
+   choices are recorded in the architecture ADRs.
 
 ## 12. Approval
 
-- Product owner: TODO
-- Security/architecture reviewer: TODO
-- Approved scope/date: TODO
-- Review evidence: TODO
+- Product owner: repository user (approval provided in the current Codex chat)
+- Security/architecture reviewer: pending independent review
+- Approved scope/date: full administrator feature-parity scope, 2026-10-18
+- Review evidence: `reviews/2026-10-18-administrator-slice-specification.md`

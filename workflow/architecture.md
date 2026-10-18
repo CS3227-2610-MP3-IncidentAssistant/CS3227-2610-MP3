@@ -1,7 +1,7 @@
 # MP3 Architecture
 
-Status: **TODO — record approved choices and replace provisional statements
-with implemented evidence.**
+Status: **Implementation in progress — deployment direction and web persistence
+foundation selected; independent architecture/security review pending.**
 
 ## Proposed shape
 
@@ -30,6 +30,10 @@ a separate static frontend.
 - Reused MP2 components and replaced components: TODO
 
 ## Architecture decisions
+
+- `decisions/ADR-001-web-persistence-and-session-foundation.md`: accepted web,
+  migration, authentication, shared-session, and administrator-bootstrap
+  foundation.
 
 Create one record in `decisions/` for each material choice. At minimum cover:
 

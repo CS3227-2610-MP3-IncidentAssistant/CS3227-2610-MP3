@@ -17,6 +17,11 @@ minimal health endpoint. Start it with:
 .\gradlew.bat bootRun
 ```
 
+For local development, `bootRun` loads the git-ignored `.env.local` file when
+present. Variables already supplied by the operating environment take
+precedence. Invalid bootstrap configuration stops startup with the affected
+variable name, without printing its value.
+
 Then request `http://localhost:8080/health`. The endpoint returns only the
 aggregate application status. The existing JavaFX launcher remains available
 while the web migration is in progress.
@@ -48,10 +53,12 @@ neon deploy
 ```
 
 Neon pulls the branch variables into the git-ignored `.env.local` (or `.env`
-when that file already exists). The Spring backend reads `DATABASE_URL` and the
-standard `AWS_*` variables from its process environment. Production must also
-set `INCIDENT_DESK_NEON_REQUIRED=true` so missing configuration fails startup;
-local development remains available without provider credentials. See
+when that file already exists). The Gradle `bootRun` task loads `.env.local`
+into the Spring backend process for local development; existing process
+environment variables win. Packaged and production runs read `DATABASE_URL`
+and the standard `AWS_*` variables from their process environment. Production
+must also set `INCIDENT_DESK_NEON_REQUIRED=true` so missing configuration fails
+startup; local development remains available without provider credentials. See
 `.env.example` for variable names and safe defaults. Keep
 `DATABASE_URL_UNPOOLED` reserved for future versioned migrations.
 

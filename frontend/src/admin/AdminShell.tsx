@@ -4,6 +4,8 @@ import type { HealthState } from '../health/useServiceHealth'
 type AdminShellProps = {
   children: ReactNode
   serviceHealth: HealthState
+  loginName: string
+  onLogout: () => Promise<void>
 }
 
 const navigation = [
@@ -20,7 +22,7 @@ const healthLabels: Record<HealthState, string> = {
   unavailable: 'Service unavailable',
 }
 
-export function AdminShell({ children, serviceHealth }: AdminShellProps) {
+export function AdminShell({ children, serviceHealth, loginName, onLogout }: AdminShellProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -32,7 +34,8 @@ export function AdminShell({ children, serviceHealth }: AdminShellProps) {
       />
 
       <div className="workspace">
-        <AdminTopBar menuOpen={menuOpen} onMenuToggle={() => setMenuOpen((open) => !open)} />
+        <AdminTopBar menuOpen={menuOpen} loginName={loginName} onLogout={onLogout}
+          onMenuToggle={() => setMenuOpen((open) => !open)} />
         {children}
       </div>
     </div>
@@ -93,10 +96,12 @@ function AdminNavigation({ menuOpen, onNavigate, serviceHealth }: AdminNavigatio
 
 type AdminTopBarProps = {
   menuOpen: boolean
+  loginName: string
+  onLogout: () => Promise<void>
   onMenuToggle: () => void
 }
 
-function AdminTopBar({ menuOpen, onMenuToggle }: AdminTopBarProps) {
+function AdminTopBar({ menuOpen, loginName, onLogout, onMenuToggle }: AdminTopBarProps) {
   return (
     <header className="topbar">
       <button
@@ -111,7 +116,9 @@ function AdminTopBar({ menuOpen, onMenuToggle }: AdminTopBarProps) {
       </button>
       <div className="actor">
         <span className="role-badge">Administrator</span>
+        <span className="actor__name">{loginName}</span>
         <span className="avatar" aria-hidden="true">A</span>
+        <button className="ghost-button" type="button" onClick={() => void onLogout()}>Sign out</button>
       </div>
     </header>
   )

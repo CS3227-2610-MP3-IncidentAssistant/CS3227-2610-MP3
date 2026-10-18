@@ -71,7 +71,12 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.56.0')
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.session:spring-session-jdbc'
+    implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.postgresql:postgresql'
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:url-connection-client'
@@ -107,6 +112,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -210,6 +216,37 @@ tasks.named('bootJar') {
 
 tasks.named('bootRun') {
     mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
+    doFirst {
+        File localEnvironmentFile = layout.projectDirectory.file('.env.local').asFile
+        if (!localEnvironmentFile.exists()) {
+            return
+        }
+
+        localEnvironmentFile.eachLine('UTF-8') { rawLine ->
+            String line = rawLine.trim()
+            if (line.isEmpty() || line.startsWith('#')) {
+                return
+            }
+
+            int separator = line.indexOf('=')
+            if (separator <= 0) {
+                throw new GradleException("Invalid .env.local entry; expected NAME=VALUE")
+            }
+
+            String name = line.substring(0, separator).trim()
+            String value = line.substring(separator + 1).trim()
+            if (!(name ==~ /[A-Za-z_][A-Za-z0-9_]*/)) {
+                throw new GradleException("Invalid .env.local variable name: ${name}")
+            }
+            if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"'))
+                    || (value.startsWith("'") && value.endsWith("'")))) {
+                value = value.substring(1, value.length() - 1)
+            }
+            if (!System.getenv().containsKey(name)) {
+                environment name, value
+            }
+        }
+    }
 }
 
 tasks.register('neonServiceSmoke', JavaExec) {

@@ -37,6 +37,11 @@ class HealthEndpointIntegrationTest {
     }
 
     @Test
+    void deniesUnknownApiRoutesByDefault() throws Exception {
+        assertEquals(401, get("/api/v1/not-yet-defined").statusCode());
+    }
+
+    @Test
     void servesTheReactApplicationFromTheWebArtifact() throws Exception {
         HttpResponse<String> response = get("/", "text/html");
 

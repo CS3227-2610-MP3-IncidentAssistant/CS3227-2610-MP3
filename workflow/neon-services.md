@@ -38,6 +38,10 @@ separate versioned-schema implementation slice.
 - Neon pulls `DATABASE_URL`, `DATABASE_URL_UNPOOLED`,
   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, and
   `AWS_REGION` into a git-ignored local environment file after deployment.
+- Local `bootRun` loads `.env.local` into the backend process without
+  overriding variables already supplied by the operating environment.
+  Packaged and production runs continue to require process environment
+  configuration and do not depend on a local file.
 - `INCIDENT_DESK_ATTACHMENT_BUCKET` may override the bucket name and defaults
   to `incident-attachments`.
 - Local development may start without Neon configuration. Production sets
