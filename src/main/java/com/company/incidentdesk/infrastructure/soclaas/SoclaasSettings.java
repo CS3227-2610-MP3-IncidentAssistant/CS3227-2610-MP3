@@ -13,11 +13,21 @@ public final class SoclaasSettings {
     private final String apiKey;
     private final String model;
     private final Map<String, Integer> limits;
+    private final int revision;
+    private final AiUsagePolicy.Limits usageLimits;
 
     private SoclaasSettings(boolean enabled, String apiKey, String model, Environment environment) {
         this.enabled = enabled;
         this.apiKey = apiKey;
         this.model = model;
+        int configuredRevision = 1;
+        if (enabled) {
+            try { configuredRevision = Integer.parseInt(environment.getProperty("AI_CONFIGURATION_REVISION", "1")); }
+            catch (NumberFormatException unsafe) { throw invalid("AI_CONFIGURATION_REVISION"); }
+            if (configuredRevision < 1) { throw invalid("AI_CONFIGURATION_REVISION"); }
+        }
+        this.revision = configuredRevision;
+        this.usageLimits = enabled ? AiUsagePolicy.Limits.from(environment) : null;
         // Validated values so later environment mutation cannot alter an active client.
         this.limits = Map.of("AI_CONNECT_TIMEOUT_MS", readLimit(environment, "AI_CONNECT_TIMEOUT_MS", 3000),
                 "AI_REQUEST_TIMEOUT_MS", readLimit(environment, "AI_REQUEST_TIMEOUT_MS", 30000),
@@ -52,6 +62,9 @@ public final class SoclaasSettings {
     public String model() {
         return model;
     }
+
+    int revision() { return revision; }
+    AiUsagePolicy.Limits usageLimits() { return usageLimits; }
 
     String apiKey() {
         return apiKey;
