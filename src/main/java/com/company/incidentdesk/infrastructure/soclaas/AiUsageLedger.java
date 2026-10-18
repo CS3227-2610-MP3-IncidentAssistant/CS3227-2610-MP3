@@ -41,12 +41,23 @@ public final class AiUsageLedger {
 
     AiUsageLedger(JdbcTemplate jdbc, PlatformTransactionManager manager, Clock clock, Limits configured,
             Supplier<UUID> identifiers) {
+        this(jdbc, manager, clock, configured, identifiers, false);
+    }
+
+    static AiUsageLedger participating(JdbcTemplate jdbc, PlatformTransactionManager manager, Clock clock,
+            Limits configured) {
+        return new AiUsageLedger(jdbc, manager, clock, configured, UUID::randomUUID, true);
+    }
+
+    private AiUsageLedger(JdbcTemplate jdbc, PlatformTransactionManager manager, Clock clock, Limits configured,
+            Supplier<UUID> identifiers, boolean participate) {
         this.jdbc = Objects.requireNonNull(jdbc);
         this.clock = Objects.requireNonNull(clock);
         this.configured = Objects.requireNonNull(configured);
         this.identifiers = Objects.requireNonNull(identifiers);
         transactions = new TransactionTemplate(manager);
-        transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transactions.setPropagationBehavior(participate ? TransactionDefinition.PROPAGATION_REQUIRED
+                : TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         transactions.setTimeout(4);
     }

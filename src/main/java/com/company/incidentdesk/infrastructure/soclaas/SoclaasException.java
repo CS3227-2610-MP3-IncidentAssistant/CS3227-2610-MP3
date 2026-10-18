@@ -4,7 +4,7 @@ package com.company.incidentdesk.infrastructure.soclaas;
 public final class SoclaasException extends RuntimeException {
     /** Stable categories understood by the later gateway integration. */
     public enum Category {
-        AI_RATE_LIMITED, AI_TIMEOUT, AI_UNAVAILABLE, AI_REJECTED, AI_INVALID_RESPONSE, AI_OUTPUT_TOO_LARGE
+        AI_RATE_LIMITED, AI_BUDGET_EXHAUSTED, AI_TIMEOUT, AI_UNAVAILABLE, AI_REJECTED, AI_INVALID_RESPONSE, AI_OUTPUT_TOO_LARGE
     }
 
     private final Category category;
