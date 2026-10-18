@@ -9,6 +9,7 @@ is the central index: it links to those criteria but does not duplicate them.
 - [Spring Boot health-endpoint acceptance criteria](../.agents/springboot_migration/health-endpoint.md#acceptance-criteria)
 - [Temporary account-registration migration acceptance criteria](../.agents/springboot_migration/account-registration.md#acceptance-criteria)
 - [Administrator vertical-slice acceptance criteria and evidence](administrator-vertical-slice.md#9-acceptance-criteria-and-evidence)
+- [Reporter vertical-slice acceptance criteria and evidence](reporter-vertical-slice.md#9-acceptance-criteria-and-evidence)
 - [SoCLaaS AI feature and gateway acceptance criteria](ai-features.md#7-acceptance-criteria)
 - [Neon PostgreSQL and Object Storage acceptance criteria](neon-services.md#acceptance-criteria)
 

@@ -12,8 +12,23 @@ outcome.
 
 ### Reporter
 
-TODO: List retained web workflows and the advisory description-improvement AI
-feature.
+The approved Reporter vertical slice preserves the complete current desktop
+Reporter surface, exposes the existing draft workflow, and adds the MP3
+advisory description-improvement feature. An authenticated Reporter can:
+
+- create, save, submit, search, filter, sort, and inspect only their own
+  incidents, including incidents submitted anonymously;
+- edit or withdraw an eligible incident, reopen a resolved incident with a
+  required explanatory follow-up, and view lifecycle and resolution history;
+- upload and view authorized PNG/JPEG attachments within the approved limits;
+- request Responder promotion and track the request status; and
+- request an advisory AI description improvement that changes only local form
+  state until the Reporter separately saves or submits it.
+
+Detailed behavior, denied/stale/failure paths, data boundaries, and required
+evidence are specified in `reporter-vertical-slice.md`. Product-owner approval
+schedules its full feature-parity scope and field limits for implementation,
+including capabilities classified as post-MVP in `.agents/mvp-scope.md`.
 
 ### Responder
 
