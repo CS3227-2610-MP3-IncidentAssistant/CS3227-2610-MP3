@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('administrator web slice', () => {
+describe('web authentication and administrator slice', () => {
   it('shows role entry before the role-specific login without loading protected data', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -110,6 +110,85 @@ describe('administrator web slice', () => {
       password: 'temporary-secret',
       passwordConfirmation: 'temporary-secret',
     }))
+  })
+
+  it('refreshes an expired security session and retries registration once', async () => {
+    let sessionRequests = 0
+    const registrationTokens: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response({
+          ...anonymousSession,
+          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
+        })
+      }
+      if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') {
+        const token = (init.headers as Record<string, string>)['X-CSRF-TOKEN']
+        registrationTokens.push(token)
+        return token === 'stale-csrf'
+          ? response({
+              code: 'SECURITY_SESSION_EXPIRED',
+              message: 'Your security session expired. Try again.',
+            }, 403)
+          : response({}, 201)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Reporter account' }))
+    fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'retry-reporter' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'retry-secret' } })
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'retry-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Reporter account created')
+    expect(registrationTokens).toEqual(['stale-csrf', 'fresh-csrf'])
+    expect(sessionRequests).toBe(2)
+  })
+
+  it('preserves registration fields when security-session recovery fails', async () => {
+    let sessionRequests = 0
+    let registrationRequests = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response({
+          ...anonymousSession,
+          csrfToken: sessionRequests === 1 ? 'stale-csrf' : 'fresh-csrf',
+        })
+      }
+      if (url === '/api/v1/auth/reporter/register' && init?.method === 'POST') {
+        registrationRequests += 1
+        return registrationRequests === 1
+          ? response({
+              code: 'SECURITY_SESSION_EXPIRED',
+              message: 'Your security session expired. Try again.',
+            }, 403)
+          : response({ message: 'The account could not be created. Try again.' }, 503)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Reporter account' }))
+    fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'preserved-reporter' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'preserved-secret' } })
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'preserved-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be created')
+    expect(screen.getByLabelText('Login name')).toHaveValue('preserved-reporter')
+    expect(screen.getByLabelText('Password')).toHaveValue('preserved-secret')
+    expect(screen.getByLabelText('Confirm password')).toHaveValue('preserved-secret')
+    expect(registrationRequests).toBe(2)
   })
 
   it('rejects mismatched registration passwords before calling the API', async () => {

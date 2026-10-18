@@ -37,9 +37,20 @@ export type DashboardPage = {
 }
 
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string, readonly fieldErrors?: Record<string, string>) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly fieldErrors?: Record<string, string>,
+    readonly code?: string,
+  ) {
     super(message)
   }
+}
+
+export function isSecuritySessionExpired(error: unknown): error is ApiError {
+  return error instanceof ApiError
+    && error.status === 403
+    && error.code === 'SECURITY_SESSION_EXPIRED'
 }
 
 export async function loadSession(signal?: AbortSignal): Promise<SessionState> {
@@ -79,9 +90,10 @@ export async function registerAccount(
     body: JSON.stringify({ loginName, password, passwordConfirmation }),
   })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: unknown } | null
+    const body = await response.json().catch(() => null) as { code?: unknown, message?: unknown } | null
     const message = typeof body?.message === 'string' ? body.message : 'The account could not be created. Try again.'
-    throw new ApiError(response.status, message)
+    const code = typeof body?.code === 'string' ? body.code : undefined
+    throw new ApiError(response.status, message, undefined, code)
   }
 }
 

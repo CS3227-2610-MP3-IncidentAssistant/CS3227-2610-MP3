@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -16,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,6 +28,7 @@ public class WebSecurityConfiguration {
     private static final String ADMINISTRATOR_LOGIN_PATH = "/api/v1/auth/administrator/login";
     private static final String GENERIC_LOGIN_FAILURE = "{\"code\":\"AUTHENTICATION_FAILED\",\"message\":\"Sign-in failed\"}";
     private static final String REPORTER_LOGIN_PATH = "/api/v1/auth/reporter/login";
+    private static final String SECURITY_SESSION_EXPIRED = "{\"code\":\"SECURITY_SESSION_EXPIRED\",\"message\":\"Your security session expired. Try again.\"}";
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -70,9 +73,8 @@ public class WebSecurityConfiguration {
                         .authenticationEntryPoint((request, response, exception) -> writeJson(response,
                                 HttpServletResponse.SC_UNAUTHORIZED,
                                 "{\"code\":\"UNAUTHENTICATED\",\"message\":\"Authentication is required\"}"))
-                        .accessDeniedHandler((request, response, exception) -> writeJson(response,
-                                HttpServletResponse.SC_NOT_FOUND,
-                                "{\"code\":\"UNAVAILABLE\",\"message\":\"Resource unavailable\"}")))
+                        .accessDeniedHandler((ignoredRequest, response, exception) ->
+                                writeAccessDenied(response, exception)))
                 .headers(headers -> headers
                         .contentSecurityPolicy(csp -> csp.policyDirectives(
                                 "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"))
@@ -108,6 +110,16 @@ public class WebSecurityConfiguration {
             request.getSession(false).invalidate();
         }
         writeJson(response, HttpServletResponse.SC_UNAUTHORIZED, GENERIC_LOGIN_FAILURE);
+    }
+
+    private static void writeAccessDenied(HttpServletResponse response, AccessDeniedException exception)
+            throws IOException {
+        if (exception instanceof CsrfException) {
+            writeJson(response, HttpServletResponse.SC_FORBIDDEN, SECURITY_SESSION_EXPIRED);
+            return;
+        }
+        writeJson(response, HttpServletResponse.SC_NOT_FOUND,
+                "{\"code\":\"UNAVAILABLE\",\"message\":\"Resource unavailable\"}");
     }
 
     private static void writeJson(HttpServletResponse response, int status, String json) throws IOException {

@@ -136,6 +136,13 @@ authentication failure.
 Successful login rotates the session identifier. Direct access to a Reporter
 route while signed out or under another role exposes no protected data.
 
+A missing or invalid CSRF token returns a stable, non-sensitive
+`SECURITY_SESSION_EXPIRED` response rather than the protected-resource
+unavailable response. During Reporter registration, React refreshes the
+anonymous security session and retries that pre-handler rejection at most once
+with the new token. The form retains all entered values if refresh or retry
+fails, so recovery never depends on re-entering credentials.
+
 ### REP-INC-01 — My incidents
 
 The list contains only incidents whose protected reporter identifier matches
@@ -384,7 +391,10 @@ deployed evidence is recorded.
 
 - [ ] `REP-AC-01` — Public registration is available only from the Reporter
   portal, creates only a Reporter, stores no plaintext password, and rejects
-  duplicate, invalid, and tampered privileged-role requests generically.
+  duplicate, invalid, and tampered privileged-role requests generically. A
+  missing or stale CSRF token returns `SECURITY_SESSION_EXPIRED`; the browser
+  refreshes its security session, retries registration at most once, and
+  preserves the form if recovery fails.
 - [ ] `REP-AC-02` — Reporter login rotates the session, rejects wrong-role,
   unknown, disabled, and invalid-credential attempts without enumeration, and
   protected routes expose no data to signed-out or non-Reporter sessions.
@@ -438,8 +448,9 @@ deployed evidence is recorded.
 Current criterion status:
 
 - `REP-AC-01` is partial: Reporter-only registration, hashing, CSRF, duplicate,
-  validation, rollback, and secret-absence paths have automated coverage;
-  complete tampered-request and exact-commit evidence remain required.
+  validation, rollback, secret-absence, and stale-CSRF recovery paths have
+  automated coverage; complete tampered-request and exact-commit evidence
+  remain required.
 - `REP-AC-02` is partial: role-gated login and Reporter route protection are
   covered, and a disabled Reporter's list request now uses the safe denied
   response; complete session-rotation/invalidation evidence remains required.
@@ -469,7 +480,8 @@ Current criterion status:
 Automated evidence must include:
 
 - Spring controller/security tests for role portal, registration, CSRF,
-  generic denial, cache/security headers, and session rotation/invalidation;
+  stable CSRF-expiry recovery, generic denial, cache/security headers, and
+  session rotation/invalidation;
 - application/domain tests for all allowed and invalid Reporter transitions;
 - repository integration tests for paging, ownership scope, atomic audit,
   optimistic concurrency, restart persistence, and promotion uniqueness;
@@ -486,7 +498,7 @@ Verification evidence:
 
 - Automated (partial walking-slice evidence): `gradlew.bat --no-daemon check
   bootJar` passed on 2026-10-18,
-  including Java tests, frontend typecheck/lint and 10 component tests,
+  including Java tests, frontend typecheck/lint and 12 component tests,
   production frontend build, Boot JAR creation, and packaged-artifact checks.
   Focused Reporter and renamed registration tests also passed with
   `gradlew.bat --no-daemon test --tests
@@ -508,6 +520,11 @@ Verification evidence:
   expected HTTP 400, and invalid credentials sent to the role-specific `POST
   /api/v1/auth/reporter/login` reached authentication and returned the expected
   generic HTTP 401.
+  A subsequent isolated runtime check proved the stale-CSRF recovery contract:
+  registration without a valid token returned HTTP 403 with
+  `SECURITY_SESSION_EXPIRED`; `/api/v1/auth/session` then returned a fresh
+  token, and repeating the same non-mutating invalid registration reached
+  controller validation and returned the expected HTTP 400.
 - Manual/deployed: pending.
 - Independent security/architecture review: pending.
 - Human release approver/date: pending.

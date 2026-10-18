@@ -60,7 +60,9 @@ class ReporterAccountRegistrationHttpSecurityTest {
         mvc.perform(post("/api/v1/auth/reporter/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"))
+                .andExpect(jsonPath("$.message").value("Your security session expired. Try again."));
 
         assertNull(store.saved);
     }

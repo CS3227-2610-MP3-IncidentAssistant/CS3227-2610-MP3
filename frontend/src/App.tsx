@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
-import { loadSession, logout, registerAccount, roleLogin, type SessionState } from './api'
+import {
+  isSecuritySessionExpired,
+  loadSession,
+  logout,
+  registerAccount,
+  roleLogin,
+  type SessionState,
+} from './api'
 import { useServiceHealth } from './health/useServiceHealth'
 import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
@@ -60,7 +67,7 @@ export function App() {
       portal={portal}
       session={session}
       onBack={() => setPortal(null)}
-      onAuthenticated={sessionState.reload}
+      onRefreshSession={sessionState.refresh}
     />
   )
 }
@@ -80,6 +87,11 @@ function useSession() {
     }),
     [receive],
   )
+  const refresh = useCallback(async () => {
+    const next = await loadSession()
+    receive(next)
+    return next
+  }, [receive])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -90,6 +102,7 @@ function useSession() {
     session,
     failed,
     reload: () => reload(),
+    refresh,
     clear: () => setSession((current) => current
       ? { ...current, authenticated: false, loginName: undefined, role: undefined }
       : current),
@@ -127,11 +140,11 @@ function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
   )
 }
 
-function PortalLogin({ portal, session, onBack, onAuthenticated }: {
+function PortalLogin({ portal, session, onBack, onRefreshSession }: {
   portal: Portal
   session: SessionState
   onBack: () => void
-  onAuthenticated: () => Promise<void>
+  onRefreshSession: () => Promise<SessionState>
 }) {
   const [registering, setRegistering] = useState(false)
   const [loginName, setLoginName] = useState('')
@@ -147,7 +160,7 @@ function PortalLogin({ portal, session, onBack, onAuthenticated }: {
     try {
       await roleLogin(loginName, password, portal, session.csrfToken)
       setPassword('')
-      await onAuthenticated()
+      await onRefreshSession()
     } catch {
       setPassword('')
       setError('Sign-in failed. Check your credentials and portal, then try again.')
@@ -156,7 +169,13 @@ function PortalLogin({ portal, session, onBack, onAuthenticated }: {
     }
   }
   if (registering) {
-    return <ReporterRegistration session={session} onReturn={() => setRegistering(false)} />
+    return (
+      <ReporterRegistration
+        session={session}
+        onRefreshSession={onRefreshSession}
+        onReturn={() => setRegistering(false)}
+      />
+    )
   }
   return (
     <main className="auth-layout">
@@ -205,7 +224,11 @@ function PortalLogin({ portal, session, onBack, onAuthenticated }: {
   )
 }
 
-function ReporterRegistration({ session, onReturn }: { session: SessionState, onReturn: () => void }) {
+function ReporterRegistration({ session, onRefreshSession, onReturn }: {
+  session: SessionState
+  onRefreshSession: () => Promise<SessionState>
+  onReturn: () => void
+}) {
   const [loginName, setLoginName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -222,14 +245,18 @@ function ReporterRegistration({ session, onReturn }: { session: SessionState, on
     }
     setSubmitting(true)
     try {
-      await registerAccount(loginName, password, confirmation, session)
+      try {
+        await registerAccount(loginName, password, confirmation, session)
+      } catch (error) {
+        if (!isSecuritySessionExpired(error)) throw error
+        const refreshedSession = await onRefreshSession()
+        await registerAccount(loginName, password, confirmation, refreshedSession)
+      }
       setPassword('')
       setConfirmation('')
       setSuccessful(true)
       setFeedback('Reporter account created. Return to sign in when you are ready.')
     } catch (error) {
-      setPassword('')
-      setConfirmation('')
       setFeedback(error instanceof Error ? error.message : 'The account could not be created. Try again.')
     } finally {
       setSubmitting(false)
