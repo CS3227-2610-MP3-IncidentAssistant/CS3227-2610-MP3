@@ -1,11 +1,12 @@
 package com.company.incidentdesk.infrastructure.soclaas;
 
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-/** Wires only the provider adapter; no controller or production AI admission is introduced. */
+/** Validates local settings immediately; remote failure affects AI alone. */
 @Configuration(proxyBeanMethods = false)
 public class SoclaasConfiguration {
     @Bean
@@ -19,14 +20,12 @@ public class SoclaasConfiguration {
     }
 
     @Bean
-    ApplicationRunner validateSoclaasModel(SoclaasClient client) {
+    ApplicationRunner initializeAiGateway(SoclaasSettings settings, ObjectProvider<AiGatewayMaintenance> maintenance) {
         return arguments -> {
-            try {
-                client.validateModel();
-            } catch (SoclaasException failure) {
-                System.getLogger(SoclaasConfiguration.class.getName()).log(System.Logger.Level.INFO,
-                        "SoCLaaS adapter unavailable: {0}", failure.category());
-            }
+            if (!settings.enabled()) { return; }
+            var gateway = maintenance.getIfAvailable();
+            if (gateway == null) { throw new IllegalArgumentException("AI requires shared PostgreSQL persistence"); }
+            gateway.start();
         };
     }
 }
