@@ -6,6 +6,63 @@ nav_order: 3
 
 # Incident Desk Developer Guide
 
+## MP3 SoCLaaS provider adapter
+
+Issue #2 adds `infrastructure.soclaas`, a backend-only provider adapter using
+Java 25's HTTP client and the application's existing Jackson JSON dependency.
+It does not add Spring AI, a public AI endpoint, role-specific AI features, or
+database usage controls. Keep `AI_ENABLED=false` until issues #3 and #4 supply
+the required admission, authorization, shared circuits, and audit integration.
+
+Copy only the variable names/placeholders from `.env.example` into a private
+environment configuration. Enabled operation requires `SOCLAAS_API_KEY` and
+`SOCLAAS_MODEL`; the sole allowed `SOCLAAS_BASE_URL` is
+`https://soclaas-api.comp.nus.edu.sg/v1`. No credential file is loaded by the
+adapter. Never place these settings in frontend configuration or committed files.
+The optional numeric limits can be lowered but cannot exceed the specification.
+
+`SoclaasClient.validateModel()` fetches the authenticated model catalog and
+returns the selected record, including unmodified metadata for subsequent
+price validation. It does not validate prices or budgets. Startup attempts this
+check when enabled; provider failure is contained and does not fail normal web
+startup or its health endpoint. Configuration errors fail before connection.
+Successful catalog access lasts at most 15 minutes; the later gateway must
+refresh it and enforce the separate price/budget freshness policy. Calling
+`complete(system, dataJson)` without a current successful lookup fails closed.
+
+Only trusted backend code may provide the system instructions and the already
+authorized, allowlisted JSON data object. There is no arbitrary-prompt browser
+endpoint. The client sends one system and one user-data message without tools
+or streaming. It never interprets or persists returned text. Browser integrations
+must display it using normal text escaping and retain separate human actions.
+
+The 30-second deadline includes the complete response body. Responses are
+cancelled before retaining more than 64 KiB. Error bodies are cancelled and
+discarded; only safe categories, numeric HTTP status, and a validated numeric
+`Retry-After` delay (up to one day) cross the adapter boundary. These internal
+hints are for shared circuits, not browser responses. No generation request is
+automatically retried because provider acceptance may be ambiguous. A catalog
+GET may retry once with jitter for 502/503/504 before accepting a body, within
+the same deadline. Connect failures and interrupted/expired requests do not
+trigger generation retries.
+
+Without a model-specific tokenizer, input estimation uses UTF-8 byte count plus
+256 message-framing tokens as a conservative bound. This can reject text below
+the 16-KiB byte limit. Output must fit 16 KiB and the configured token cap;
+missing/malformed usage remains unknown and uses a conservative byte-based
+output bound. Numeric usage is not automatically equivalent to validated cost.
+`Completion.toString()` and catalog stringification omit provider content.
+
+Run deterministic adapter tests without a real key:
+
+```powershell
+.\gradlew.bat test --tests 'com.company.incidentdesk.infrastructure.soclaas.*'
+```
+
+The governing contract is `workflow/ai-features.md`; the implementation plan is
+`workflow/plans/issue-2-soclaas-provider-adapter.md`. Adapter tests alone do not
+satisfy full gateway acceptance or establish production readiness.
+
 ## Table of Contents
 
 - [Introduction](#introduction)

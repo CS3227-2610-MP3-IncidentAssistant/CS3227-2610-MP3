@@ -324,8 +324,39 @@ is admitted only after the applicable local/circuit limit permits it.
 - Security/architecture approver/date: pending.
 - Provider-retention risk acceptance: pending.
 
-No criterion is checked because this change specifies behavior but does not
-implement or verify it.
+No broad gateway criterion is checked yet. Issue #2 implements and verifies the
+adapter portion only; remaining integration and release evidence is described
+below.
+
+## Issue #2 adapter progress
+
+The repository user confirmed agreement with this specification and authorized
+issue #2 implementation in the working session on 2026-10-18. This is not an
+independent security review or release approval.
+
+The provider adapter in `infrastructure.soclaas` uses Java's built-in HTTP client
+and existing Jackson support; Spring AI is not required. It has no public route
+and cannot mutate application state. Production AI remains disabled by default.
+The developer guide documents the conservative byte-based token estimate and
+explicit caller responsibility for authorized, allowlisted input.
+
+`AI-GW-01` is partial: provider configuration/model checks are implemented; shared
+budget/limit validation and circuit integration belong to issues #3 and #4.
+`AI-GW-02` has adapter contract coverage for the two allowed paths, redirect
+rejection, non-streaming messages, and absence of tools. Broader release evidence
+is still required. `AI-GW-03` and `AI-GW-04` have adapter-level redaction and
+failure tests, not a full history/image/observability or integrated release audit.
+All broad acceptance checkboxes therefore remain open.
+
+The initial provider probe found lower key policy than the published defaults:
+30 requests/minute, 50,000,000 daily and 500,000,000 monthly microdollars. Issue #3
+must reconcile its configuration and examples with verified key policy: 20
+application requests/minute and 37,500,000 daily/375,000,000 monthly microdollars
+preserve the intended reserves. These observations do not replace production-key
+verification or authorize increased limits.
+
+See [adapter plan](plans/issue-2-soclaas-provider-adapter.md) and
+[verification evidence](test-evidence/2026-10-18-soclaas-provider-adapter.md).
 
 ## 9. Traceability
 
