@@ -89,12 +89,22 @@ export function RoleShell({
           </ul>
         </nav>
 
-        <div className="sidebar__status">
-          <span className={`status-dot status-dot--${serviceHealth}`} aria-hidden="true" />
-          <span>
-            <strong>{healthLabels[serviceHealth]}</strong>
-            <small>Spring Boot health</small>
-          </span>
+        <div className="sidebar__footer">
+          <div className="sidebar__actor">
+            <span className="avatar" aria-hidden="true">{actorInitial}</span>
+            <span className="sidebar__identity">
+              <strong>{loginName}</strong>
+              <small>{roleLabel}</small>
+            </span>
+          </div>
+          <button className="sidebar__sign-out" type="button" onClick={signOut}>Sign out</button>
+          <div className="sidebar__status">
+            <span className={`status-dot status-dot--${serviceHealth}`} aria-hidden="true" />
+            <span>
+              <strong>{healthLabels[serviceHealth]}</strong>
+              <small>Spring Boot health</small>
+            </span>
+          </div>
         </div>
       </aside>
 
@@ -110,12 +120,6 @@ export function RoleShell({
             <span aria-hidden="true">☰</span>
             <span>Menu</span>
           </button>
-          <div className="actor">
-            <span className="role-badge">{roleLabel}</span>
-            <span className="actor__name">{loginName}</span>
-            <span className="avatar" aria-hidden="true">{actorInitial}</span>
-            <button className="ghost-button" type="button" onClick={signOut}>Sign out</button>
-          </div>
         </header>
         {children}
       </div>

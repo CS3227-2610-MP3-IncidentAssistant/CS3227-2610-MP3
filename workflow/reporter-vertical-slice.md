@@ -374,6 +374,14 @@ authorization and privacy boundaries may not be weakened.
   `.agents/STYLE_GUIDE.md`; do not create an unrelated Reporter theme.
 - Forms have persistent labels, field errors, an accessible summary, useful
   autocomplete, visible focus, and keyboard operation.
+- In the new-incident form, each persistent label sits immediately above its
+  control. The Title control fills the available content width, and the
+  Category control appears immediately below the Category label; labels must
+  not consume a separate wide column beside their controls.
+- At wide widths, the signed-in Reporter identity, role, and logout action are
+  anchored in a visually separated block at the bottom of the left sidebar;
+  they do not occupy a desktop top bar. At narrow widths, the top bar contains
+  the accessible control that opens the sidebar menu.
 - The anonymity checkbox is explicitly labelled and described; its persisted
   value is shown after save or submission.
 - Buttons prevent accidental duplicate submissions without treating browser
@@ -442,7 +450,11 @@ deployed evidence is recorded.
   and complete clearing of Reporter data from client memory.
 - [ ] `REP-AC-13` — The Reporter routes satisfy responsive reflow, keyboard and
   focus operation, semantic labels, error identification, screen-reader status,
-  safe untrusted-text rendering, and 200% zoom requirements.
+  safe untrusted-text rendering, and 200% zoom requirements. In the new-incident
+  form, labels render above their controls, Title fills the available width,
+  and Category renders directly below its label. The account block appears at
+  the bottom of the sidebar behind a separator, while the narrow layout retains
+  an accessible menu trigger.
 - [ ] `REP-AC-14` — Required Java, React, isolated PostgreSQL, concurrency,
   migration, privacy, security, accessibility, packaged-artifact, and deployed
   smoke checks pass for the exact release commit, and independent review and
@@ -472,9 +484,10 @@ Current criterion status:
   implemented in this walking slice.
 - `REP-AC-12` is partial for logout only; own-password change and complete
   client-state/session verification remain required.
-- `REP-AC-13` is partial: the shared responsive shell and mobile menu behavior
-  have component coverage; manual narrow-width, keyboard, screen-reader, and
-  200% zoom verification remains required.
+- `REP-AC-13` is partial: the shared responsive shell, bottom-sidebar account
+  block, mobile menu, and single-column new-incident form layout are implemented;
+  manual verification of field alignment, narrow-width reflow, keyboard use,
+  screen-reader output, and 200% zoom remains required.
 - `REP-AC-14` is partial: local build, automated tests, and packaged-artifact
   checks pass, while the exact release commit, isolated database, deployed
   smoke, independent review, and human release approval remain outstanding.

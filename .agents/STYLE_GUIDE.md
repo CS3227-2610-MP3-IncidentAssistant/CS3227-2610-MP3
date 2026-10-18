@@ -48,6 +48,9 @@ tokens deliberately; do not introduce one-off variants for individual pages.
 - Use an 8px spacing rhythm where practical.
 - Use a full sidebar near 232px on wide screens. At narrower widths, collapse
   it to an accessible menu rather than an icon-only navigation with no labels.
+- On authenticated role pages, place the signed-in account identity and logout
+  action in a separated block anchored to the bottom of the sidebar. Reserve
+  the top bar for the accessible menu trigger when the sidebar is collapsed.
 - Use approximately 32px horizontal content padding on wide screens, 24px at
   medium widths, and 16px on narrow screens.
 - Metrics move from four columns to two and then one. Forms and detail layouts

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 
@@ -29,11 +29,16 @@ describe('Reporter walking slice', () => {
 
     render(<App />)
 
-    const menuButton = await screen.findByRole('button', { name: 'Menu' })
+    const navigation = await screen.findByLabelText('Reporter navigation')
+    expect(within(navigation).getByText('case-reporter')).toBeInTheDocument()
+    expect(within(navigation).getByText('Reporter')).toBeInTheDocument()
+    expect(within(navigation).getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+
+    const menuButton = screen.getByRole('button', { name: 'Menu' })
     expect(menuButton).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(menuButton)
     expect(menuButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByLabelText('Reporter navigation')).toHaveClass('sidebar--open')
+    expect(navigation).toHaveClass('sidebar--open')
   })
 
   it('renders only the authenticated Reporter incidents and explicit anonymity state', async () => {
