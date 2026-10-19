@@ -309,11 +309,62 @@ the one-time environment/CLI/bootstrap mechanism approved under
 `.agents/mp2-grade-improvements.md`. Reuse is rejected and audited without
 exposing credentials.
 
+The bootstrap runs only when both `INCIDENT_DESK_BOOTSTRAP_ADMIN_LOGIN` and
+`INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD` are configured. If neither is set,
+startup continues without creating an account; if only one is set or either
+value fails validation, startup fails without exposing the supplied value. The
+bootstrap refuses to create a first Administrator when a prior bootstrap
+marker or any Administrator account already exists. Competing startup attempts
+are serialized by a database uniqueness reservation so only one can create the
+account. The account, salted password hash, one-time marker, and success audit
+commit atomically. A rejected replay is audited; a failed transaction leaves
+no partial account, credential, marker, or success audit. Rejection records,
+logs, and errors contain no password or bootstrap secret.
+Bootstrap audit events identify the trusted application as actor `SYSTEM`
+with no actor account ID. A successful event targets the created account; a
+rejection targets the `administrator-bootstrap` application operation. This
+audit-only actor does not represent an account role or grant authorization.
+
+The public Reporter registration request cannot choose or alter a role or
+account status. Forged `role`, `status`, or similar privilege fields cannot
+create a Responder or Administrator, and there is no public privileged
+registration route.
+
 After bootstrap, only an authenticated Administrator may create another
 Administrator through a dedicated operation. No public form, login portal,
 query parameter, or client-supplied role selector can create a privileged
 account. Exact credential delivery and whether this control shares the Accounts
 page require an approved security ADR before implementation.
+
+### ADM-ACC-06 acceptance criteria — bootstrap and public registration
+
+- [x] `ADM-ACC-06-A`: Public Reporter registration creates only a Reporter.
+  Forged `role` and `status` fields cannot alter the persisted role, and
+  unauthenticated Administrator/Responder registration routes are denied
+  without creating an account.
+- [x] `ADM-ACC-06-B`: Bootstrap is inactive when both configuration values are
+  absent, fails safely when configuration is partial or invalid, and never
+  includes supplied values in errors or logs.
+- [x] `ADM-ACC-06-C`: With valid configuration and no existing Administrator
+  or bootstrap marker, bootstrap stores a salted password hash and commits the
+  account, marker, and success audit together. The audit actor is `SYSTEM`
+  with no account ID, and its target is the created Administrator account.
+- [x] `ADM-ACC-06-D`: A replay, an existing Administrator without a marker, or
+  a competing startup cannot create another Administrator; rejection is
+  audited as actor `SYSTEM` with no account ID and without credentials.
+  Concurrent startup is verified against isolated PostgreSQL.
+- [x] `ADM-ACC-06-E`: An injected persistence/audit failure leaves no partial
+  account, credential, marker, or success audit.
+- [x] `ADM-ACC-06-F`: First-run, secret-removal, failed-startup recovery, and
+  administrator-access recovery instructions match the deployed configuration
+  and never require committing or recording bootstrap values. If no supported
+  self-service or break-glass recovery flow exists, the runbook must state that
+  limitation and give safe escalation guidance instead of inventing a recovery
+  path.
+- [ ] `ADM-ACC-06-G`: Later Administrator provisioning remains unavailable
+  until its credential-delivery and security/architecture design receives the
+  required independent human approval; then its denied and allowed paths are
+  verified.
 
 ### ADM-SLO-01 — Versioned category targets
 
@@ -565,6 +616,11 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-INC-03/04/05 | incident lifecycle, authorization matrix, audit | service + PostgreSQL conflict/atomicity + E2E tests |
 | ADM-ACC-01/02/03 | requirements, authorization matrix, security | service + MVC + session invalidation + E2E tests |
 | ADM-ACC-04/05/06 | requirements, security, audit, MP2 improvements | credential/tombstone/bootstrap security tests |
+| ADM-ACC-06-A/B | authorization matrix, security, issue #5 | forged-role HTTP tests, route-denial tests, bootstrap configuration unit tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-C/D | persistence, audit, MP2 improvements, issue #5 | isolated PostgreSQL success, system actor/target attribution, replay, pre-existing-admin, and concurrent-startup tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-E | persistence, audit, issue #5 | isolated PostgreSQL audit-write failure and transaction rollback test; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-F | deployment, issue #5 | first-run/recovery runbook and deployment-workflow configuration review |
+| ADM-ACC-06-G | security ADR gate, issue #5 | named independent approval plus protected route/mutation tests; currently blocked |
 | ADM-SLO-01 | SLO, audit | calculation + versioning + PostgreSQL tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
@@ -592,6 +648,11 @@ skipped checks, sanitized outputs, and remaining risks under
 7. The single-origin React/Spring Boot topology and Neon storage direction are
    approved in `.agents/deployment_strategy.md`; remaining implementation
    choices are recorded in the architecture ADRs.
+
+For the bounded issue #5 work, criteria `ADM-ACC-06-A` through
+`ADM-ACC-06-F` are in scope. Criterion `ADM-ACC-06-G` remains gated: no later
+Administrator provisioning endpoint or UI may be added until the required
+independent security/architecture approval is recorded.
 
 ## 12. Approval
 

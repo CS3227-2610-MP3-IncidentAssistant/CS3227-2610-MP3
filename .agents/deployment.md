@@ -39,6 +39,9 @@ GitHub Actions must automate:
 The production deployment job uses a GitHub `production` environment with
 environment secrets and an approval or branch protection gate where available.
 Pull requests and untrusted forks never receive production or SoC LLM secrets.
+The checked-in deployment workflow does not provision the first Administrator
+bootstrap secrets. Production bootstrap therefore requires a separately
+approved secret-store procedure; see `docs/AdministratorBootstrap.md`.
 
 ## Operations
 

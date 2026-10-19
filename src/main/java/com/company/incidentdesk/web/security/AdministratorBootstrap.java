@@ -78,12 +78,24 @@ public final class AdministratorBootstrap implements ApplicationRunner {
 
     private BootstrapOutcome bootstrap(String login, String password) {
         Instant now = clock.instant();
-        boolean completed = Boolean.TRUE.equals(jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM application_settings WHERE setting_key = ?)",
-                Boolean.class,
-                BOOTSTRAP_MARKER));
-        if (completed) {
-            audit(null, "ADMINISTRATOR_BOOTSTRAP_REJECTED", "FAILURE", now,
+        boolean administratorExists = Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM accounts WHERE role = 'ADMINISTRATOR')",
+                Boolean.class));
+        if (administratorExists) {
+            audit("APPLICATION_DATA", "administrator-bootstrap",
+                    "ADMINISTRATOR_BOOTSTRAP_REJECTED", "FAILURE", now,
+                    Map.of("reason", "administrator_already_exists"));
+            return BootstrapOutcome.ALREADY_COMPLETED;
+        }
+
+        int markerReserved = jdbc.update("""
+                INSERT INTO application_settings (setting_key, setting_value, changed_at)
+                VALUES (?, 'pending', ?)
+                ON CONFLICT (setting_key) DO NOTHING
+                """, BOOTSTRAP_MARKER, Timestamp.from(now));
+        if (markerReserved == 0) {
+            audit("APPLICATION_DATA", "administrator-bootstrap",
+                    "ADMINISTRATOR_BOOTSTRAP_REJECTED", "FAILURE", now,
                     Map.of("reason", "already_completed"));
             return BootstrapOutcome.ALREADY_COMPLETED;
         }
@@ -93,21 +105,31 @@ public final class AdministratorBootstrap implements ApplicationRunner {
                 accountId, login);
         jdbc.update("INSERT INTO account_credentials (account_id, password_hash) VALUES (?, ?)",
                 accountId, passwords.encode(password));
-        jdbc.update("INSERT INTO application_settings (setting_key, setting_value, changed_at) VALUES (?, ?, ?)",
-                BOOTSTRAP_MARKER, accountId.toString(), Timestamp.from(now));
-        audit(accountId, "ADMINISTRATOR_BOOTSTRAPPED", "SUCCESS", now, Map.of("role", "ADMINISTRATOR"));
+        int markerUpdated = jdbc.update("UPDATE application_settings SET setting_value = ? WHERE setting_key = ?",
+                accountId.toString(), BOOTSTRAP_MARKER);
+        if (markerUpdated != 1) {
+            throw new IllegalStateException("Administrator bootstrap marker could not be finalized");
+        }
+        audit("ACCOUNT", accountId.toString(), "ADMINISTRATOR_BOOTSTRAPPED", "SUCCESS", now,
+                Map.of("role", "ADMINISTRATOR"));
         return BootstrapOutcome.CREATED;
     }
 
-    private void audit(UUID actorId, String action, String outcome, Instant occurredAt, Map<String, String> details) {
+    private void audit(
+            String targetType,
+            String targetIdentifier,
+            String action,
+            String outcome,
+            Instant occurredAt,
+            Map<String, String> details) {
         jdbc.update("""
                 INSERT INTO audit_events (
                     id, occurred_at, actor_account_id, actor_role, action,
                     target_type, target_identifier, outcome, details
-                ) VALUES (?, ?, ?, 'ADMINISTRATOR', ?, 'ACCOUNT', ?, ?, CAST(? AS jsonb))
+                ) VALUES (?, ?, NULL, 'SYSTEM', ?, ?, ?, ?, CAST(? AS jsonb))
                 """,
-                UUID.randomUUID(), Timestamp.from(occurredAt), actorId, action,
-                actorId == null ? "bootstrap" : actorId.toString(), outcome, toJson(details));
+                UUID.randomUUID(), Timestamp.from(occurredAt), action,
+                targetType, targetIdentifier, outcome, toJson(details));
     }
 
     private Optional<String> nonBlank(String name) {
