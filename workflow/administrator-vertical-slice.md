@@ -338,24 +338,24 @@ page require an approved security ADR before implementation.
 
 ### ADM-ACC-06 acceptance criteria — bootstrap and public registration
 
-- [ ] `ADM-ACC-06-A`: Public Reporter registration creates only a Reporter.
+- [x] `ADM-ACC-06-A`: Public Reporter registration creates only a Reporter.
   Forged `role` and `status` fields cannot alter the persisted role, and
   unauthenticated Administrator/Responder registration routes are denied
   without creating an account.
-- [ ] `ADM-ACC-06-B`: Bootstrap is inactive when both configuration values are
+- [x] `ADM-ACC-06-B`: Bootstrap is inactive when both configuration values are
   absent, fails safely when configuration is partial or invalid, and never
   includes supplied values in errors or logs.
-- [ ] `ADM-ACC-06-C`: With valid configuration and no existing Administrator
+- [x] `ADM-ACC-06-C`: With valid configuration and no existing Administrator
   or bootstrap marker, bootstrap stores a salted password hash and commits the
   account, marker, and success audit together. The audit actor is `SYSTEM`
   with no account ID, and its target is the created Administrator account.
-- [ ] `ADM-ACC-06-D`: A replay, an existing Administrator without a marker, or
+- [x] `ADM-ACC-06-D`: A replay, an existing Administrator without a marker, or
   a competing startup cannot create another Administrator; rejection is
   audited as actor `SYSTEM` with no account ID and without credentials.
   Concurrent startup is verified against isolated PostgreSQL.
-- [ ] `ADM-ACC-06-E`: An injected persistence/audit failure leaves no partial
+- [x] `ADM-ACC-06-E`: An injected persistence/audit failure leaves no partial
   account, credential, marker, or success audit.
-- [ ] `ADM-ACC-06-F`: First-run, secret-removal, failed-startup recovery, and
+- [x] `ADM-ACC-06-F`: First-run, secret-removal, failed-startup recovery, and
   administrator-access recovery instructions match the deployed configuration
   and never require committing or recording bootstrap values. If no supported
   self-service or break-glass recovery flow exists, the runbook must state that
