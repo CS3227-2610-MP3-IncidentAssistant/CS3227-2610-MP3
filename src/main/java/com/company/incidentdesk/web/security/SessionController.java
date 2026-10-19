@@ -1,7 +1,12 @@
 package com.company.incidentdesk.web.security;
 
 import java.util.Optional;
+import java.util.List;
 
+import com.company.incidentdesk.domain.account.Account;
+import com.company.incidentdesk.domain.account.Role;
+import com.company.incidentdesk.persistence.AccountRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -10,12 +15,24 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Supplies the browser's current trusted actor and CSRF request token. */
+/** Supplies the current trusted actor and forces creation of the SPA CSRF cookie. */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class SessionController {
+    private final AccountRepository accounts;
+
+    public SessionController() {
+        this.accounts = null;
+    }
+
+    @Autowired(required = false)
+    public SessionController(AccountRepository accounts) {
+        this.accounts = accounts;
+    }
+
     @GetMapping("/session")
     ResponseEntity<SessionRepresentation> session(Authentication authentication, CsrfToken csrf) {
+        csrf.getToken();
         boolean authenticated = authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal());
         String role = authenticated
@@ -26,12 +43,19 @@ public class SessionController {
                         .findFirst()
                         .orElse(null)
                 : null;
+        List<String> responderCategories = authenticated && Role.RESPONDER.name().equals(role) && accounts != null
+                ? accounts.findByLoginName(authentication.getName())
+                        .filter(Account::isEnabled)
+                        .filter(account -> account.role() == Role.RESPONDER)
+                        .map(account -> account.responderAccess().categories().stream()
+                                .sorted().map(Enum::name).toList())
+                        .orElseGet(List::of)
+                : List.of();
         SessionRepresentation body = new SessionRepresentation(
                 authenticated,
                 authenticated ? Optional.of(authentication.getName()) : Optional.empty(),
                 Optional.ofNullable(role),
-                csrf.getHeaderName(),
-                csrf.getToken());
+                responderCategories);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
@@ -39,7 +63,6 @@ public class SessionController {
             boolean authenticated,
             Optional<String> loginName,
             Optional<String> role,
-            String csrfHeader,
-            String csrfToken) {
+            List<String> responderCategories) {
     }
 }

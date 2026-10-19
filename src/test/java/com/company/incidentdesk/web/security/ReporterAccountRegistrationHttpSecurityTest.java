@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
+import com.company.incidentdesk.domain.account.Role;
 import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -70,7 +71,7 @@ class ReporterAccountRegistrationHttpSecurityTest {
     @Test
     void acceptsCsrfProtectedRegistrationWithoutDisclosingPlaintext(CapturedOutput output) throws Exception {
         String response = mvc.perform(post("/api/v1/auth/reporter/register")
-                        .with(csrf().asHeader())
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isCreated())
@@ -80,8 +81,47 @@ class ReporterAccountRegistrationHttpSecurityTest {
                 .getContentAsString();
 
         assertEquals("encoded-registration-password", store.saved.passwordHash());
+        assertEquals(Role.REPORTER, store.saved.role());
         assertFalse(response.contains(PASSWORD));
         assertFalse(output.getAll().contains(PASSWORD));
+    }
+
+    @Test
+    void forgedAdministratorRoleAndStatusCannotChangePublicRegistrationRole() throws Exception {
+        String request = """
+                {
+                  "loginName": "forged-admin",
+                  "password": "%s",
+                  "passwordConfirmation": "%s",
+                  "role": "ADMINISTRATOR",
+                  "status": "ENABLED"
+                }
+                """.formatted(PASSWORD, PASSWORD);
+
+        mvc.perform(post("/api/v1/auth/reporter/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated());
+
+        assertEquals(Role.REPORTER, store.saved.role());
+    }
+
+    @Test
+    void publicPrivilegedRegistrationRoutesAreDeniedBeforePersistence() throws Exception {
+        for (String path : new String[] {
+                "/api/v1/auth/administrator/register",
+                "/api/v1/auth/responder/register"
+        }) {
+            mvc.perform(post(path)
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(validRequest()))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+        }
+
+        assertNull(store.saved);
     }
 
     private static String validRequest() {

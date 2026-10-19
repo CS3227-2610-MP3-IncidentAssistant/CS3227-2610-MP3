@@ -113,6 +113,18 @@ offers no public registration, role selector, or self-service privileged
 account creation. Direct navigation to an administrator route while signed out
 or under another role exposes no protected page data.
 
+A missing or stale login CSRF token returns the stable, non-sensitive
+`SECURITY_SESSION_EXPIRED` response. React refreshes the anonymous security
+session and retries login at most once with the new token. The automatic retry
+reuses credentials only in memory; a failed attempt retains the login name and
+clears the password.
+
+The session endpoint establishes the current SPA CSRF cookie. React reads the
+cookie immediately before unsafe requests rather than retaining a token in
+component state. Recovery is limited to the exact stale-token response and one
+retry. An authenticated mutation is not retried if refresh reports an anonymous
+session; protected client state is cleared and reauthentication is required.
+
 ### ADM-INC-01 — Company incident dashboard
 
 The Dashboard shows one current SLO summary for every incident category and a
@@ -233,15 +245,16 @@ session-expired, and failure states reveal no privileged data.
 
 For each pending Reporter-to-Responder request, an Administrator can review the
 requester, requested categories, request time, and optional comments, then
-approve, reject, or cancel.
+approve or reject it. Approval requires selecting at least one category from
+the request's requested categories. The decision cannot grant categories the
+Reporter did not request. Cancellation is not part of this promotion workflow.
 
 Approval changes the existing account to `RESPONDER`, grants exactly the
-approved/requested category set defined by the request, preserves the account
-identifier and historical references, records the decision and access change
-atomically, and invalidates existing sessions so the user must reauthenticate
-through the Responder portal. Rejection changes neither role nor category
-access. Both decisions retain request history and create the required audit
-event. Cancel changes nothing.
+selected non-empty subset, preserves the account identifier and historical
+references, records the selected categories and decision atomically, and
+invalidates existing sessions so the user must reauthenticate through the
+Responder portal. Rejection changes neither role nor category access. Both
+decisions retain request history and create the required audit event.
 
 Only a still-pending request for an enabled Reporter can be decided. Duplicate
 or stale decisions fail without a second mutation or success audit.
@@ -297,11 +310,62 @@ the one-time environment/CLI/bootstrap mechanism approved under
 `.agents/mp2-grade-improvements.md`. Reuse is rejected and audited without
 exposing credentials.
 
+The bootstrap runs only when both `INCIDENT_DESK_BOOTSTRAP_ADMIN_LOGIN` and
+`INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD` are configured. If neither is set,
+startup continues without creating an account; if only one is set or either
+value fails validation, startup fails without exposing the supplied value. The
+bootstrap refuses to create a first Administrator when a prior bootstrap
+marker or any Administrator account already exists. Competing startup attempts
+are serialized by a database uniqueness reservation so only one can create the
+account. The account, salted password hash, one-time marker, and success audit
+commit atomically. A rejected replay is audited; a failed transaction leaves
+no partial account, credential, marker, or success audit. Rejection records,
+logs, and errors contain no password or bootstrap secret.
+Bootstrap audit events identify the trusted application as actor `SYSTEM`
+with no actor account ID. A successful event targets the created account; a
+rejection targets the `administrator-bootstrap` application operation. This
+audit-only actor does not represent an account role or grant authorization.
+
+The public Reporter registration request cannot choose or alter a role or
+account status. Forged `role`, `status`, or similar privilege fields cannot
+create a Responder or Administrator, and there is no public privileged
+registration route.
+
 After bootstrap, only an authenticated Administrator may create another
 Administrator through a dedicated operation. No public form, login portal,
 query parameter, or client-supplied role selector can create a privileged
 account. Exact credential delivery and whether this control shares the Accounts
 page require an approved security ADR before implementation.
+
+### ADM-ACC-06 acceptance criteria — bootstrap and public registration
+
+- [x] `ADM-ACC-06-A`: Public Reporter registration creates only a Reporter.
+  Forged `role` and `status` fields cannot alter the persisted role, and
+  unauthenticated Administrator/Responder registration routes are denied
+  without creating an account.
+- [x] `ADM-ACC-06-B`: Bootstrap is inactive when both configuration values are
+  absent, fails safely when configuration is partial or invalid, and never
+  includes supplied values in errors or logs.
+- [x] `ADM-ACC-06-C`: With valid configuration and no existing Administrator
+  or bootstrap marker, bootstrap stores a salted password hash and commits the
+  account, marker, and success audit together. The audit actor is `SYSTEM`
+  with no account ID, and its target is the created Administrator account.
+- [x] `ADM-ACC-06-D`: A replay, an existing Administrator without a marker, or
+  a competing startup cannot create another Administrator; rejection is
+  audited as actor `SYSTEM` with no account ID and without credentials.
+  Concurrent startup is verified against isolated PostgreSQL.
+- [x] `ADM-ACC-06-E`: An injected persistence/audit failure leaves no partial
+  account, credential, marker, or success audit.
+- [x] `ADM-ACC-06-F`: First-run, secret-removal, failed-startup recovery, and
+  administrator-access recovery instructions match the deployed configuration
+  and never require committing or recording bootstrap values. If no supported
+  self-service or break-glass recovery flow exists, the runbook must state that
+  limitation and give safe escalation guidance instead of inventing a recovery
+  path.
+- [ ] `ADM-ACC-06-G`: Later Administrator provisioning remains unavailable
+  until its credential-delivery and security/architecture design receives the
+  required independent human approval; then its denied and allowed paths are
+  verified.
 
 ### ADM-SLO-01 — Versioned category targets
 
@@ -392,7 +456,9 @@ secret-free audit event are atomic; plaintext and hashes never enter logs or
 client persistence.
 
 Logout invalidates the server session, clears privileged React state, and
-returns to public role entry. If transient notifications are retained, they
+returns to public role entry. A stale logout CSRF token triggers one session
+refresh and at most one retry; an already-anonymous refreshed session completes
+logout by clearing client state. If transient notifications are retained, they
 must be scoped to the authenticated account/session and never leak anonymous
 identity or protected records across sessions. Persistent notification history
 is not required by this slice.
@@ -465,7 +531,9 @@ The administrator slice is acceptable when:
   route or API representation; denied and missing resources do not leak data.
 - [ ] The Administrator portal shares the backend identity store, accepts only
   the persisted Administrator role, uses generic failures, rotates the session
-  on success, and exposes no public registration or role-selection path.
+  on success, and exposes no public registration or role-selection path. A
+  missing or stale CSRF token refreshes the anonymous security session and
+  retries login at most once without weakening CSRF protection.
 - [ ] The dashboard provides server-paginated company incidents with the
   specified search, filters, sorting, stable tie-breaker, privacy-safe identity
   options, SLO overview, and stale-response protection.
@@ -490,8 +558,9 @@ The administrator slice is acceptable when:
   and target filters without secrets, unnecessary content, or anonymous
   identity.
 - [ ] Password change and logout use server-side sessions, CSRF protection,
-  secret-free logging and auditing, session invalidation, and client cache
-  clearing.
+  request-time SPA tokens, bounded exact-error recovery, secret-free logging
+  and auditing, session invalidation, and client cache clearing. Recovery does
+  not retry an authenticated mutation after the refreshed session is anonymous.
 - [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
   reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
 - [ ] The required automated, accessibility, and deployed checks below are
@@ -525,6 +594,16 @@ The following suites are required before the slice can be called complete:
 8. Deployment smoke test over HTTPS using the exact release commit and an
    isolated non-production dataset.
 
+Partial automated evidence: on 2026-10-18, working tree based on `541825c`,
+`npm.cmd test -- --run src/App.test.tsx` passed all 12 focused tests,
+`npm.cmd run check` passed typecheck, lint, and all 15 React tests,
+`npm.cmd run build` produced the production frontend, and
+`gradlew.bat --no-daemon check` completed successfully. The parameterized React
+tests cover Administrator and Reporter login, successful fresh-token recovery,
+generic retry failure, bounded retry count, retained login name, and cleared
+password. The criterion remains open pending its other required and deployed
+evidence.
+
 Evidence must record exact commands, commit SHA, environment, passed/failed/
 skipped checks, sanitized outputs, and remaining risks under
 `workflow/test-evidence/`. Agent output alone does not satisfy an approval gate.
@@ -538,6 +617,11 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-INC-03/04/05 | incident lifecycle, authorization matrix, audit | service + PostgreSQL conflict/atomicity + E2E tests |
 | ADM-ACC-01/02/03 | requirements, authorization matrix, security | service + MVC + session invalidation + E2E tests |
 | ADM-ACC-04/05/06 | requirements, security, audit, MP2 improvements | credential/tombstone/bootstrap security tests |
+| ADM-ACC-06-A/B | authorization matrix, security, issue #5 | forged-role HTTP tests, route-denial tests, bootstrap configuration unit tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-C/D | persistence, audit, MP2 improvements, issue #5 | isolated PostgreSQL success, system actor/target attribution, replay, pre-existing-admin, and concurrent-startup tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-E | persistence, audit, issue #5 | isolated PostgreSQL audit-write failure and transaction rollback test; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
+| ADM-ACC-06-F | deployment, issue #5 | first-run/recovery runbook and deployment-workflow configuration review |
+| ADM-ACC-06-G | security ADR gate, issue #5 | named independent approval plus protected route/mutation tests; currently blocked |
 | ADM-SLO-01 | SLO, audit | calculation + versioning + PostgreSQL tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
@@ -565,6 +649,11 @@ skipped checks, sanitized outputs, and remaining risks under
 7. The single-origin React/Spring Boot topology and Neon storage direction are
    approved in `.agents/deployment_strategy.md`; remaining implementation
    choices are recorded in the architecture ADRs.
+
+For the bounded issue #5 work, criteria `ADM-ACC-06-A` through
+`ADM-ACC-06-F` are in scope. Criterion `ADM-ACC-06-G` remains gated: no later
+Administrator provisioning endpoint or UI may be added until the required
+independent security/architecture approval is recorded.
 
 ## 12. Approval
 

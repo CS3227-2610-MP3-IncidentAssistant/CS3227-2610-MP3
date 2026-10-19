@@ -16,7 +16,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +27,7 @@ public class WebSecurityConfiguration {
     private static final String ADMINISTRATOR_LOGIN_PATH = "/api/v1/auth/administrator/login";
     private static final String GENERIC_LOGIN_FAILURE = "{\"code\":\"AUTHENTICATION_FAILED\",\"message\":\"Sign-in failed\"}";
     private static final String REPORTER_LOGIN_PATH = "/api/v1/auth/reporter/login";
+    private static final String RESPONDER_LOGIN_PATH = "/api/v1/auth/responder/login";
     private static final String SECURITY_SESSION_EXPIRED = "{\"code\":\"SECURITY_SESSION_EXPIRED\",\"message\":\"Your security session expired. Try again.\"}";
 
     @Bean
@@ -37,24 +37,21 @@ public class WebSecurityConfiguration {
 
     @Bean
     SecurityFilterChain webSecurity(HttpSecurity http, UserDetailsService users) throws Exception {
-        CookieCsrfTokenRepository csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrf.setCookiePath("/");
-        csrf.setHeaderName("X-CSRF-TOKEN");
-
         http
                 .userDetailsService(users)
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/", "/index.html", "/assets/**", "/health", "/api/v1/auth/session",
                                 "/api/v1/auth/reporter/register")
                         .permitAll()
-                        .requestMatchers(HttpMethod.POST, REPORTER_LOGIN_PATH, ADMINISTRATOR_LOGIN_PATH)
+                        .requestMatchers(HttpMethod.POST, REPORTER_LOGIN_PATH, ADMINISTRATOR_LOGIN_PATH,
+                                RESPONDER_LOGIN_PATH)
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/v1/reporter/**").hasRole("REPORTER")
                         .requestMatchers("/api/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
-                .csrf(csrfConfig -> csrfConfig.csrfTokenRepository(csrf))
+                .csrf(csrf -> csrf.spa())
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.changeSessionId()))
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/v1/auth/*/login")
@@ -100,6 +97,7 @@ public class WebSecurityConfiguration {
     private static String expectedRole(String loginPath) {
         return switch (loginPath) {
         case REPORTER_LOGIN_PATH -> "REPORTER";
+        case RESPONDER_LOGIN_PATH -> "RESPONDER";
         case ADMINISTRATOR_LOGIN_PATH -> "ADMINISTRATOR";
         default -> null;
         };

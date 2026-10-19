@@ -63,7 +63,7 @@ anonymous status cannot be removed after submission.
 | Reporter workspace | Submit incident, anonymity control, own-incident table, search/filter/sort, refresh, open detail | Preserve with server-side paging and trusted request identity |
 | Incident detail | View lifecycle, resolution history, comments, and images; edit, withdraw, or reopen when eligible | Preserve with transaction-safe HTTP operations and stale-version checks |
 | Draft support | Domain/application support exists but is not exposed as a complete web workflow | Include save, resume, edit, attach, and submit |
-| Promotion workflow | Select requested categories, add optional comments, and track the latest request | Preserve with PostgreSQL persistence and session-safe role change |
+| Promotion workflow | Select requested categories, add optional comments, and track request history and outcomes | Preserve with PostgreSQL persistence and session-safe role change |
 | AI assistance | Required by MP3 but not a completed desktop production integration | Add the approved advisory description-improvement workflow |
 | Authenticated shell | Own password change, logout, and notification affordance | Preserve password/logout; persistent notifications remain deferred |
 
@@ -138,10 +138,15 @@ route while signed out or under another role exposes no protected data.
 
 A missing or invalid CSRF token returns a stable, non-sensitive
 `SECURITY_SESSION_EXPIRED` response rather than the protected-resource
-unavailable response. During Reporter registration, React refreshes the
-anonymous security session and retries that pre-handler rejection at most once
-with the new token. The form retains all entered values if refresh or retry
-fails, so recovery never depends on re-entering credentials.
+unavailable response. The session endpoint establishes the current SPA CSRF
+cookie, and React reads that cookie at request time rather than retaining a
+token in component state. For a replayable request, React refreshes the trusted
+session representation and retries that pre-handler rejection at most once
+with the current token. An authenticated mutation is not retried if refresh
+reports an anonymous session; protected React state is cleared and the user
+must sign in again. Registration retains all entered values if refresh or retry
+fails. Login retains the login name but clears the password after a failed
+attempt, while the automatic retry reuses the credentials only in memory.
 
 ### REP-INC-01 — My incidents
 
@@ -264,16 +269,19 @@ incident categories, add optional comments within the approved limit, and
 submit a promotion request. The server derives the requester from the session,
 persists `PENDING`, and commits the request and audit event atomically.
 
-The Reporter can view the current request's requested categories, submitted
-time, status, and privacy-safe decision outcome. They cannot approve, reject,
-or alter a submitted request. A duplicate pending request, empty categories,
-tampered actor or role, denial, or persistence failure creates no second request
-or misleading audit.
+The Reporter can view their promotion-request history, including requested
+categories, submitted time, status, and privacy-safe decision outcome. An
+approved outcome identifies the categories granted. They cannot approve,
+reject, or alter a submitted request. A duplicate pending request, empty
+categories, tampered actor or role, denial, or persistence failure creates no
+second request or misleading audit. A new request may be submitted after the
+prior request is decided; prior decisions remain in history.
 
-Approval changes the same account to `RESPONDER`, grants only approved
-categories, preserves identity/history, invalidates existing sessions, and
-requires sign-in through the Responder portal. Rejection leaves role and access
-unchanged.
+An Administrator may approve a non-empty subset of the requested categories;
+an unrequested category cannot be granted through promotion. Approval changes
+the same account to `RESPONDER`, grants exactly that approved subset, preserves
+identity/history, invalidates existing sessions, and requires sign-in through
+the Responder portal. Rejection leaves role and access unchanged.
 
 ### REP-AI-01 — Advisory description improvement
 
@@ -306,7 +314,10 @@ password and satisfying the approved credential rules. Success stores only a
 new salted hash, rotates or invalidates sessions as specified, and creates a
 secret-free audit event atomically.
 
-Logout invalidates the server session and clears role-specific React state.
+Logout invalidates the server session and clears role-specific React state. A
+stale logout CSRF token triggers one session refresh and at most one retry; if
+refresh shows the server session is already anonymous, logout completes by
+clearing client state without an unsafe retry loop.
 Credentials and session identifiers are never written to browser persistence,
 logs, audit records, or URLs.
 
@@ -373,6 +384,14 @@ authorization and privacy boundaries may not be weakened.
   `.agents/STYLE_GUIDE.md`; do not create an unrelated Reporter theme.
 - Forms have persistent labels, field errors, an accessible summary, useful
   autocomplete, visible focus, and keyboard operation.
+- In the new-incident form, each persistent label sits immediately above its
+  control. The Title control fills the available content width, and the
+  Category control appears immediately below the Category label; labels must
+  not consume a separate wide column beside their controls.
+- At wide widths, the signed-in Reporter identity, role, and logout action are
+  anchored in a visually separated block at the bottom of the left sidebar;
+  they do not occupy a desktop top bar. At narrow widths, the top bar contains
+  the accessible control that opens the sidebar menu.
 - The anonymity checkbox is explicitly labelled and described; its persisted
   value is shown after save or submission.
 - Buttons prevent accidental duplicate submissions without treating browser
@@ -397,7 +416,14 @@ deployed evidence is recorded.
   preserves the form if recovery fails.
 - [ ] `REP-AC-02` — Reporter login rotates the session, rejects wrong-role,
   unknown, disabled, and invalid-credential attempts without enumeration, and
-  protected routes expose no data to signed-out or non-Reporter sessions.
+  protected routes expose no data to signed-out or non-Reporter sessions. A
+  missing or stale CSRF token returns `SECURITY_SESSION_EXPIRED`; the browser
+  refreshes its anonymous security session and retries login at most once.
+- [x] `REP-AC-02A` — React reads the current SPA CSRF cookie for each unsafe
+  request, recovers from the exact stale-token response with at most one retry,
+  does not retry an authenticated mutation after refresh reports an anonymous
+  session, and completes logout safely when another tab or authentication
+  rotation has replaced the prior token.
 - [ ] `REP-AC-03` — My incidents returns only the current Reporter's owned
   incidents, including their anonymous incidents and drafts, with bounded
   deterministic paging and the specified search/filter/sort semantics.
@@ -426,9 +452,11 @@ deployed evidence is recorded.
   keys, anonymous generic names, safe response headers, and failed-write
   compensation; unsupported media and spoofed extensions fail safely.
 - [ ] `REP-AC-10` — A Reporter can create at most one pending promotion request
-  with at least one category and track its status; tampered, duplicate, denied,
-  stale, and persistence-failed requests create neither a second request nor a
-  misleading audit, and an approved role change invalidates the old session.
+  with at least one valid category, view request history and the approved
+  category outcome, and cannot decide or alter requests; tampered, duplicate,
+  denied, stale, and persistence-failed requests create neither a second
+  request nor a misleading audit, while an approved role change invalidates
+  old sessions and requires sign-in through the Responder portal.
 - [ ] `REP-AC-11` — Reporter AI requests are reauthorized, send only title,
   normalized category, and current description within the approved limits,
   exclude all identity and unrelated data, render safe bounded plain text, and
@@ -439,7 +467,11 @@ deployed evidence is recorded.
   and complete clearing of Reporter data from client memory.
 - [ ] `REP-AC-13` — The Reporter routes satisfy responsive reflow, keyboard and
   focus operation, semantic labels, error identification, screen-reader status,
-  safe untrusted-text rendering, and 200% zoom requirements.
+  safe untrusted-text rendering, and 200% zoom requirements. In the new-incident
+  form, labels render above their controls, Title fills the available width,
+  and Category renders directly below its label. The account block appears at
+  the bottom of the sidebar behind a separator, while the narrow layout retains
+  an accessible menu trigger.
 - [ ] `REP-AC-14` — Required Java, React, isolated PostgreSQL, concurrency,
   migration, privacy, security, accessibility, packaged-artifact, and deployed
   smoke checks pass for the exact release commit, and independent review and
@@ -452,8 +484,13 @@ Current criterion status:
   automated coverage; complete tampered-request and exact-commit evidence
   remain required.
 - `REP-AC-02` is partial: role-gated login and Reporter route protection are
-  covered, and a disabled Reporter's list request now uses the safe denied
-  response; complete session-rotation/invalidation evidence remains required.
+  covered, stale login CSRF refresh-and-single-retry behavior has React coverage,
+  and a disabled Reporter's list request uses the safe denied response; complete
+  session-rotation/invalidation and deployed evidence remain required.
+- `REP-AC-02A` is proved by the automated Spring and React evidence recorded in
+  [`test-evidence/2026-10-18-spa-csrf-flow.md`](test-evidence/2026-10-18-spa-csrf-flow.md).
+  Independent security review remains a release gate rather than part of this
+  behavior-level criterion.
 - `REP-AC-03` is partial: ownership-scoped basic search and bounded paging are
   implemented; the approved filters, sort fields, SLO state, drafts, and
   isolated PostgreSQL query evidence remain required.
@@ -468,9 +505,10 @@ Current criterion status:
   implemented in this walking slice.
 - `REP-AC-12` is partial for logout only; own-password change and complete
   client-state/session verification remain required.
-- `REP-AC-13` is partial: the shared responsive shell and mobile menu behavior
-  have component coverage; manual narrow-width, keyboard, screen-reader, and
-  200% zoom verification remains required.
+- `REP-AC-13` is partial: the shared responsive shell, bottom-sidebar account
+  block, mobile menu, and single-column new-incident form layout are implemented;
+  manual verification of field alignment, narrow-width reflow, keyboard use,
+  screen-reader output, and 200% zoom remains required.
 - `REP-AC-14` is partial: local build, automated tests, and packaged-artifact
   checks pass, while the exact release commit, isolated database, deployed
   smoke, independent review, and human release approval remain outstanding.
@@ -496,6 +534,14 @@ Automated evidence must include:
 
 Verification evidence:
 
+- Automated (partial stale-login recovery evidence): on 2026-10-18, working
+  tree based on `541825c`, `npm.cmd test -- --run src/App.test.tsx` passed all
+  12 focused tests, `npm.cmd run check` passed typecheck, lint, and all 15 React
+  tests, `npm.cmd run build` produced the production frontend, and
+  `gradlew.bat --no-daemon check` completed successfully. The parameterized
+  React tests cover Reporter and Administrator login, successful fresh-token
+  recovery, generic retry failure, bounded retry count, retained login name,
+  and cleared password.
 - Automated (partial walking-slice evidence): `gradlew.bat --no-daemon check
   bootJar` passed on 2026-10-18,
   including Java tests, frontend typecheck/lint and 12 component tests,

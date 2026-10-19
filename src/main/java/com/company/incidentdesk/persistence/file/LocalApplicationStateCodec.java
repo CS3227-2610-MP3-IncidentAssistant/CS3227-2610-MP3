@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.company.incidentdesk.domain.attachment.AttachmentId;
@@ -57,7 +58,7 @@ import com.company.incidentdesk.persistence.StorageFailureCode;
 
 /** Deterministic binary schema for the aggregate local application state. */
 final class LocalApplicationStateCodec implements DataCodec<LocalApplicationState> {
-    static final int SCHEMA_VERSION = 1;
+    static final int SCHEMA_VERSION = 2;
     private static final int MIN_SUPPORTED_SCHEMA_VERSION = 1;
     private static final int MAGIC = 0x49444B31; // IDK1
     private static final int MAX_RECORDS = 1_000_000;
@@ -75,7 +76,7 @@ final class LocalApplicationStateCodec implements DataCodec<LocalApplicationStat
             writeComments(output, state.comments());
             writeAudits(output, state.auditEvents());
             writeAttachments(output, state.attachments());
-            writePromotionRequests(output, state.promotionRequests());
+            writePromotionRequests(output, state.promotionRequests(), state.schemaVersion());
             writeSloTargetVersions(output, state.sloTargetVersions());
         }
         return bytes.toByteArray();
@@ -101,7 +102,7 @@ final class LocalApplicationStateCodec implements DataCodec<LocalApplicationStat
             List<IncidentComment> comments = readComments(input);
             List<AuditEvent> auditEvents = readAudits(input);
             Map<AttachmentId, IncidentAttachment> attachments = readAttachments(input);
-            Map<PromotionRequestId, ResponderPromotionRequest> promotionRequests = readPromotionRequests(input);
+            Map<PromotionRequestId, ResponderPromotionRequest> promotionRequests = readPromotionRequests(input, version);
             Map<SloTargetVersionId, SloTargetVersion> sloTargetVersions = readSloTargetVersions(input);
             LocalApplicationState state = new LocalApplicationState(
                     accounts, credentials, incidents, comments, auditEvents, promotionRequests,
@@ -199,7 +200,7 @@ final class LocalApplicationStateCodec implements DataCodec<LocalApplicationStat
     }
 
     private static void writePromotionRequests(DataOutputStream output,
-            Map<PromotionRequestId, ResponderPromotionRequest> requests) throws IOException {
+            Map<PromotionRequestId, ResponderPromotionRequest> requests, int schemaVersion) throws IOException {
         output.writeUTF("promotions");
         output.writeInt(requests.size());
         for (ResponderPromotionRequest request : requests.values().stream()
@@ -218,10 +219,18 @@ final class LocalApplicationStateCodec implements DataCodec<LocalApplicationStat
             output.writeUTF(request.status().name());
             writeOptionalAccountId(output, request.decidedBy());
             writeOptionalInstant(output, request.decidedAt());
+            if (schemaVersion >= 2) {
+                Set<IncidentCategory> approved = request.approvedCategories().orElse(Set.of());
+                output.writeInt(approved.size());
+                for (IncidentCategory category : approved.stream().sorted().toList()) {
+                    output.writeUTF(category.name());
+                }
+            }
         }
     }
 
-    private static Map<PromotionRequestId, ResponderPromotionRequest> readPromotionRequests(DataInputStream input)
+    private static Map<PromotionRequestId, ResponderPromotionRequest> readPromotionRequests(
+            DataInputStream input, int schemaVersion)
             throws IOException {
         if (!"promotions".equals(input.readUTF())) {
             throw new IOException("invalid promotions section");
@@ -241,8 +250,24 @@ final class LocalApplicationStateCodec implements DataCodec<LocalApplicationStat
             PromotionRequestStatus status = readEnum(input, PromotionRequestStatus.class);
             Optional<AccountId> decidedBy = readOptionalAccountId(input);
             Optional<Instant> decidedAt = readOptionalInstant(input);
+            Optional<Set<IncidentCategory>> approvedCategories;
+            if (schemaVersion >= 2) {
+                EnumSet<IncidentCategory> approved = EnumSet.noneOf(IncidentCategory.class);
+                int approvedCount = readCount(input);
+                for (int category = 0; category < approvedCount; category++) {
+                    approved.add(readEnum(input, IncidentCategory.class));
+                }
+                approvedCategories = status == PromotionRequestStatus.PENDING
+                        ? Optional.empty() : Optional.of(Set.copyOf(approved));
+            } else {
+                approvedCategories = switch (status) {
+                case PENDING -> Optional.empty();
+                case APPROVED -> Optional.of(Set.copyOf(categories));
+                case REJECTED -> Optional.of(Set.of());
+                };
+            }
             requireUnique(requests.put(id, new ResponderPromotionRequest(id, requesterId, categories, comments,
-                    requestedAt, status, decidedBy, decidedAt)), "promotion request identifier");
+                    requestedAt, status, decidedBy, decidedAt, approvedCategories)), "promotion request identifier");
         }
         return requests;
     }

@@ -25,6 +25,7 @@ import com.company.incidentdesk.application.event.ApplicationEvent;
 import com.company.incidentdesk.application.result.ApplicationErrorCode;
 import com.company.incidentdesk.application.session.AuthenticatedSession;
 import com.company.incidentdesk.application.session.SessionProvider;
+import com.company.incidentdesk.application.attachment.AttachmentLimits;
 import com.company.incidentdesk.domain.account.Account;
 import com.company.incidentdesk.domain.account.AccountId;
 import com.company.incidentdesk.domain.account.AccountStatus;
@@ -33,7 +34,18 @@ import com.company.incidentdesk.domain.account.PromotionRequestStatus;
 import com.company.incidentdesk.domain.account.ResponderAccess;
 import com.company.incidentdesk.domain.account.Role;
 import com.company.incidentdesk.domain.audit.AuditAction;
+import com.company.incidentdesk.domain.audit.AuditActorVisibility;
 import com.company.incidentdesk.domain.audit.AuditEventId;
+import com.company.incidentdesk.domain.audit.AuditEvidenceReference;
+import com.company.incidentdesk.domain.audit.AuditEvidenceType;
+import com.company.incidentdesk.domain.audit.AuditOutcome;
+import com.company.incidentdesk.domain.audit.AuditTarget;
+import com.company.incidentdesk.domain.audit.AuditTargetType;
+import com.company.incidentdesk.domain.attachment.AttachmentId;
+import com.company.incidentdesk.domain.attachment.AttachmentType;
+import com.company.incidentdesk.domain.attachment.IncidentAttachment;
+import com.company.incidentdesk.domain.incident.IncidentId;
+import com.company.incidentdesk.domain.incident.IncidentLifecycle;
 import com.company.incidentdesk.domain.incident.IncidentCategory;
 import com.company.incidentdesk.persistence.AuditQuery;
 import com.company.incidentdesk.persistence.AuditSortDirection;
@@ -64,13 +76,13 @@ class PromotionRequestServiceTest {
             assertInstanceOf(PromotionRequestedEvent.class, events.getFirst());
             sessions.accountId = ADMIN_ID;
 
-            var approved = service.decide(requestId, true);
+            var approved = service.decide(requestId, true, Set.of(IncidentCategory.IT));
 
             assertTrue(approved.isSuccess());
             assertEquals(PromotionRequestStatus.APPROVED, approved.value().orElseThrow().status());
             Account promoted = store.findById(REPORTER_ID).orElseThrow();
             assertEquals(Role.RESPONDER, promoted.role());
-            assertEquals(Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES),
+            assertEquals(Set.of(IncidentCategory.IT),
                     promoted.responderAccess().categories());
             assertInstanceOf(PromotionDecisionEvent.class, events.getLast());
             assertEquals(List.of(AuditAction.RESPONDER_PROMOTION_REQUESTED,
@@ -81,7 +93,97 @@ class PromotionRequestServiceTest {
         try (LocalApplicationStore reopened = new LocalApplicationStore(directory)) {
             assertEquals(PromotionRequestStatus.APPROVED,
                     reopened.findPromotionRequest(requestId).orElseThrow().status());
+            assertEquals(Set.of(IncidentCategory.IT), reopened.findPromotionRequest(requestId).orElseThrow()
+                    .approvedCategories().orElseThrow());
             assertEquals(Role.RESPONDER, reopened.findById(REPORTER_ID).orElseThrow().role());
+        }
+    }
+
+    @Test
+    void attachmentWriteAfterSubsetApprovalPreservesApprovedCategoriesAcrossRestart() {
+        PromotionRequestId requestId = new PromotionRequestId(new UUID(0, 30));
+        IncidentId incidentId = new IncidentId(new UUID(0, 31));
+        IncidentAttachment attachment = new IncidentAttachment(new AttachmentId(new UUID(0, 32)), incidentId,
+                AttachmentType.PNG, 1, "proof.png", NOW);
+
+        try (LocalApplicationStore store = initializedStore()) {
+            var incident = new IncidentLifecycle(Clock.fixed(NOW, ZoneOffset.UTC)).submit(incidentId, REPORTER_ID,
+                    "Printer", "Broken", IncidentCategory.IT, false);
+            store.create(incident);
+            MutableSession sessions = new MutableSession(store, REPORTER_ID);
+            PromotionRequestService service = service(store, sessions, requestId, new ArrayList<>());
+            assertTrue(service.submit(Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES), Optional.empty())
+                    .isSuccess());
+            sessions.accountId = ADMIN_ID;
+            assertTrue(service.decide(requestId, true, Set.of(IncidentCategory.IT)).isSuccess());
+
+            Account administrator = store.findById(ADMIN_ID).orElseThrow();
+            AtomicLong attachmentAuditIds = new AtomicLong(33);
+            AuditEventFactory attachmentAudits = new AuditEventFactory(Clock.fixed(NOW, ZoneOffset.UTC),
+                    () -> new AuditEventId(new UUID(0, attachmentAuditIds.incrementAndGet())));
+            var attachmentAudit = attachmentAudits.create(administrator, AuditActorVisibility.STANDARD,
+                    AuditAction.ATTACHMENT_ADDED,
+                    new AuditTarget(AuditTargetType.INCIDENT, incidentId.value().toString()), AuditOutcome.SUCCESS,
+                    List.of(), Optional.of(new AuditEvidenceReference(AuditEvidenceType.ATTACHMENT,
+                            attachment.id().value().toString())));
+            var migrationAudit = attachmentAudits.create(administrator, AuditActorVisibility.STANDARD,
+                    AuditAction.DATA_MIGRATED,
+                    new AuditTarget(AuditTargetType.APPLICATION_DATA, "schema-1-to-2"), AuditOutcome.SUCCESS,
+                    List.of(), Optional.empty());
+            store.attachmentStore().add(attachment, new byte[] { 1 }, incident, administrator,
+                    AttachmentLimits.DEFAULT, attachmentAudit, migrationAudit);
+        }
+
+        try (LocalApplicationStore reopened = new LocalApplicationStore(directory)) {
+            var request = reopened.findPromotionRequest(requestId).orElseThrow();
+            assertEquals(Set.of(IncidentCategory.IT), request.approvedCategories().orElseThrow());
+            assertEquals(Set.of(IncidentCategory.IT),
+                    reopened.findById(REPORTER_ID).orElseThrow().responderAccess().categories());
+            assertEquals(attachment, reopened.attachmentStore().find(attachment.id()).orElseThrow());
+        }
+    }
+
+    @Test
+    void administratorCanApproveOnlyARequestedCategorySubset() {
+        PromotionRequestId requestId = new PromotionRequestId(new UUID(0, 20));
+        try (LocalApplicationStore store = initializedStore()) {
+            MutableSession sessions = new MutableSession(store, REPORTER_ID);
+            PromotionRequestService service = service(store, sessions, requestId, new ArrayList<>());
+            Set<IncidentCategory> requested = Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES);
+            assertTrue(service.submit(requested, Optional.empty()).isSuccess());
+            sessions.accountId = ADMIN_ID;
+
+            var approved = service.decideAs(store.findById(ADMIN_ID).orElseThrow(), requestId, true,
+                    Set.of(IncidentCategory.IT));
+
+            assertTrue(approved.isSuccess());
+            assertEquals(Set.of(IncidentCategory.IT), approved.value().orElseThrow()
+                    .approvedCategories().orElseThrow());
+            assertEquals(Set.of(IncidentCategory.IT), store.findById(REPORTER_ID).orElseThrow()
+                    .responderAccess().categories());
+        }
+    }
+
+    @Test
+    void administratorCannotApproveEmptyOrUnrequestedCategories() {
+        int scenario = 0;
+        for (Set<IncidentCategory> selected : List.of(Set.<IncidentCategory>of(),
+                Set.of(IncidentCategory.HUMAN_RELATIONS))) {
+            try (LocalApplicationStore store = initializedStore(directory.resolve("scenario-" + scenario))) {
+                PromotionRequestId requestId = new PromotionRequestId(UUID.randomUUID());
+                MutableSession sessions = new MutableSession(store, REPORTER_ID);
+                PromotionRequestService service = service(store, sessions, requestId, new ArrayList<>());
+                assertTrue(service.submit(Set.of(IncidentCategory.IT), Optional.empty()).isSuccess());
+                sessions.accountId = ADMIN_ID;
+
+                var result = service.decideAs(store.findById(ADMIN_ID).orElseThrow(), requestId, true, selected);
+
+                assertFalse(result.isSuccess());
+                assertEquals(PromotionRequestStatus.PENDING,
+                        store.findPromotionRequest(requestId).orElseThrow().status());
+                assertEquals(Role.REPORTER, store.findById(REPORTER_ID).orElseThrow().role());
+            }
+            scenario++;
         }
     }
 
@@ -111,7 +213,7 @@ class PromotionRequestServiceTest {
             assertTrue(service.submit(Set.of(IncidentCategory.IT), Optional.empty()).isSuccess());
             sessions.accountId = RESPONDER_ID;
 
-            var result = service.decide(requestId, true);
+            var result = service.decide(requestId, true, Set.of(IncidentCategory.IT));
 
             assertFalse(result.isSuccess());
             assertEquals(PromotionRequestStatus.PENDING,
@@ -140,7 +242,11 @@ class PromotionRequestServiceTest {
     }
 
     private LocalApplicationStore initializedStore() {
-        LocalApplicationStore store = new LocalApplicationStore(directory);
+        return initializedStore(directory);
+    }
+
+    private LocalApplicationStore initializedStore(Path dataDirectory) {
+        LocalApplicationStore store = new LocalApplicationStore(dataDirectory);
         store.create(account(REPORTER_ID, "reporter", Role.REPORTER, ResponderAccess.NONE));
         store.create(account(ADMIN_ID, "admin", Role.ADMINISTRATOR, ResponderAccess.NONE));
         store.create(account(RESPONDER_ID, "responder", Role.RESPONDER,

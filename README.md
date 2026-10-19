@@ -8,6 +8,9 @@ reporting. It targets Java 25 and is built with the checked-in Gradle Wrapper.
 See [the developer guide](docs/DeveloperGuide.md) for setup, build, test, and
 architecture details.
 
+See the [Administrator bootstrap guide](docs/AdministratorBootstrap.md) for
+first-run, secret-removal, and recovery instructions.
+
 ## Spring Boot migration preview
 
 The incremental MP3 migration now includes a Spring Boot web process with a

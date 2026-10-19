@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import com.company.incidentdesk.domain.account.AccountId;
 import com.company.incidentdesk.domain.account.PromotionRequestId;
+import com.company.incidentdesk.domain.account.PromotionRequestStatus;
 import com.company.incidentdesk.domain.account.ResponderPromotionRequest;
 import com.company.incidentdesk.persistence.AuditedMutation;
 
@@ -13,6 +14,26 @@ public interface PromotionWorkflowStore {
     Optional<ResponderPromotionRequest> findPromotionRequest(PromotionRequestId requestId);
 
     List<ResponderPromotionRequest> findPromotionRequests();
+
+    default List<ResponderPromotionRequest> findPromotionRequestsByRequester(AccountId requesterId) {
+        return findPromotionRequests().stream()
+                .filter(request -> request.requesterId().equals(requesterId))
+                .toList();
+    }
+
+    default List<ResponderPromotionRequest> findPendingPromotionRequests(long offset, int limit) {
+        return findPromotionRequests().stream()
+                .filter(request -> request.status() == PromotionRequestStatus.PENDING)
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    default long countPendingPromotionRequests() {
+        return findPromotionRequests().stream()
+                .filter(request -> request.status() == PromotionRequestStatus.PENDING)
+                .count();
+    }
 
     boolean hasPendingPromotionRequest(AccountId requesterId);
 

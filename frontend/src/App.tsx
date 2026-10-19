@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
+import { PromotionRequests } from './admin/PromotionRequests'
 import {
-  isSecuritySessionExpired,
   loadSession,
   logout,
   registerAccount,
@@ -12,8 +12,10 @@ import {
 import { useServiceHealth } from './health/useServiceHealth'
 import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
+import { PromotionPanel } from './reporter/PromotionPanel'
+import { ResponderPortal } from './responder/ResponderPortal'
 
-type Portal = 'REPORTER' | 'ADMINISTRATOR'
+type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
 export function App() {
   const serviceHealth = useServiceHealth()
@@ -33,13 +35,14 @@ export function App() {
 
   const session = sessionState.session
   async function signOut() {
-    await logout(session)
+    await logout(sessionState.refresh)
     sessionState.clear()
     setPortal(null)
   }
   if (session.authenticated && session.role === 'ADMINISTRATOR') {
     return (
       <AdminShell
+        accountsContent={<PromotionRequests onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
@@ -51,12 +54,23 @@ export function App() {
   if (session.authenticated && session.role === 'REPORTER') {
     return (
       <ReporterShell
+        promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
       >
-        <ReporterDashboard session={session} />
+        <ReporterDashboard onRefreshSession={sessionState.refresh} />
       </ReporterShell>
+    )
+  }
+  if (session.authenticated && session.role === 'RESPONDER') {
+    return (
+      <ResponderPortal
+        categories={session.responderCategories ?? []}
+        loginName={session.loginName ?? 'Responder'}
+        onLogout={signOut}
+        serviceHealth={serviceHealth}
+      />
     )
   }
   if (!portal) {
@@ -65,7 +79,6 @@ export function App() {
   return (
     <PortalLogin
       portal={portal}
-      session={session}
       onBack={() => setPortal(null)}
       onRefreshSession={sessionState.refresh}
     />
@@ -120,17 +133,9 @@ function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
           <button className="primary-button" type="button" onClick={() => onSelect('REPORTER')}>
             Reporter
           </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled
-            aria-describedby="responder-status"
-          >
+          <button className="secondary-button" type="button" onClick={() => onSelect('RESPONDER')}>
             Responder
           </button>
-          <span id="responder-status" className="help-text">
-            Responder web workflow is in development.
-          </span>
           <button className="secondary-button" type="button" onClick={() => onSelect('ADMINISTRATOR')}>
             Administrator
           </button>
@@ -140,9 +145,8 @@ function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
   )
 }
 
-function PortalLogin({ portal, session, onBack, onRefreshSession }: {
+function PortalLogin({ portal, onBack, onRefreshSession }: {
   portal: Portal
-  session: SessionState
   onBack: () => void
   onRefreshSession: () => Promise<SessionState>
 }) {
@@ -151,27 +155,30 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const label = portal === 'REPORTER' ? 'Reporter' : 'Administrator'
+  const portalLabels: Record<Portal, string> = {
+    REPORTER: 'Reporter',
+    RESPONDER: 'Responder',
+    ADMINISTRATOR: 'Administrator',
+  }
+  const label = portalLabels[portal]
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
     setError('')
     try {
-      await roleLogin(loginName, password, portal, session.csrfToken)
-      setPassword('')
+      await roleLogin(loginName, password, portal, onRefreshSession)
       await onRefreshSession()
     } catch {
-      setPassword('')
       setError('Sign-in failed. Check your credentials and portal, then try again.')
     } finally {
+      setPassword('')
       setSubmitting(false)
     }
   }
   if (registering) {
     return (
       <ReporterRegistration
-        session={session}
         onRefreshSession={onRefreshSession}
         onReturn={() => setRegistering(false)}
       />
@@ -224,8 +231,7 @@ function PortalLogin({ portal, session, onBack, onRefreshSession }: {
   )
 }
 
-function ReporterRegistration({ session, onRefreshSession, onReturn }: {
-  session: SessionState
+function ReporterRegistration({ onRefreshSession, onReturn }: {
   onRefreshSession: () => Promise<SessionState>
   onReturn: () => void
 }) {
@@ -245,13 +251,7 @@ function ReporterRegistration({ session, onRefreshSession, onReturn }: {
     }
     setSubmitting(true)
     try {
-      try {
-        await registerAccount(loginName, password, confirmation, session)
-      } catch (error) {
-        if (!isSecuritySessionExpired(error)) throw error
-        const refreshedSession = await onRefreshSession()
-        await registerAccount(loginName, password, confirmation, refreshedSession)
-      }
+      await registerAccount(loginName, password, confirmation, onRefreshSession)
       setPassword('')
       setConfirmation('')
       setSuccessful(true)

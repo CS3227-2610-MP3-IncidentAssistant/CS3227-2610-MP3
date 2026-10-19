@@ -1,18 +1,21 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 
 const reporterSession = {
   authenticated: true,
   loginName: 'case-reporter',
   role: 'REPORTER',
-  csrfHeader: 'X-CSRF-TOKEN',
-  csrfToken: 'reporter-csrf',
 }
+
+beforeEach(() => {
+  document.cookie = 'XSRF-TOKEN=reporter-csrf; Path=/'
+})
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  document.cookie = 'XSRF-TOKEN=; Path=/; Max-Age=0'
 })
 
 describe('Reporter walking slice', () => {
@@ -29,11 +32,16 @@ describe('Reporter walking slice', () => {
 
     render(<App />)
 
-    const menuButton = await screen.findByRole('button', { name: 'Menu' })
+    const navigation = await screen.findByLabelText('Reporter navigation')
+    expect(within(navigation).getByText('case-reporter')).toBeInTheDocument()
+    expect(within(navigation).getByText('Reporter')).toBeInTheDocument()
+    expect(within(navigation).getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+
+    const menuButton = screen.getByRole('button', { name: 'Menu' })
     expect(menuButton).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(menuButton)
     expect(menuButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByLabelText('Reporter navigation')).toHaveClass('sidebar--open')
+    expect(navigation).toHaveClass('sidebar--open')
   })
 
   it('renders only the authenticated Reporter incidents and explicit anonymity state', async () => {
@@ -86,11 +94,46 @@ describe('Reporter walking slice', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Incident submitted')
     await waitFor(() => expect(listCalls).toBe(2))
     const submission = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/reporter/incidents')
-    expect(submission?.[1]?.headers).toMatchObject({ 'X-CSRF-TOKEN': 'reporter-csrf' })
+    expect(new Headers(submission?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('reporter-csrf')
     expect(JSON.parse(String(submission?.[1]?.body))).toMatchObject({
       title: 'Printer outage', description: 'Printer is offline.', category: 'FACILITIES', anonymous: true,
       submissionKey: '30000000-0000-0000-0000-000000000001',
     })
+  })
+
+  it('does not retry an authenticated mutation after session refresh becomes anonymous', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => '30000000-0000-0000-0000-000000000002' })
+    let sessionRequests = 0
+    let submissionRequests = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return response(sessionRequests === 1 ? reporterSession : { authenticated: false })
+      }
+      if (url.startsWith('/api/v1/reporter/incidents?')) {
+        return response({ incidents: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url === '/api/v1/reporter/incidents' && init?.method === 'POST') {
+        submissionRequests += 1
+        return response({
+          code: 'SECURITY_SESSION_EXPIRED',
+          message: 'Your security session expired. Try again.',
+        }, 403)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+    fireEvent.change(await screen.findByLabelText('Title'), { target: { value: 'Expired session report' } })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'IT' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Should not be replayed.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit incident' }))
+
+    expect(await screen.findByRole('heading', { name: 'Choose your portal' })).toBeInTheDocument()
+    expect(submissionRequests).toBe(1)
+    expect(sessionRequests).toBe(2)
   })
 })
 
