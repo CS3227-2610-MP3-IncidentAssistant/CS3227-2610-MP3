@@ -20,6 +20,12 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Narrow non-streaming provider adapter; callers must first authorize and admit requests. */
 public final class SoclaasClient implements AutoCloseable {
+    private static final System.Logger LOG = System.getLogger(SoclaasClient.class.getName());
+    private enum RejectionReason {
+        CATALOG_SHAPE, JSON_BODY, CONTENT_TYPE, CHOICES, OUTPUT_TOKEN_LIMIT,
+        FINISH_REASON, ROLE, EMPTY_CONTENT, TOOL_CALLS,
+        EMPTY_FUNCTION_CALL, FUNCTION_CALL, EMPTY_REFUSAL, REFUSAL
+    }
     private final SoclaasSettings settings;
     private final URI origin;
     private final HttpClient http;
@@ -47,7 +53,7 @@ public final class SoclaasClient implements AutoCloseable {
         JsonNode root = parse(exchange("/models", null));
         JsonNode models = root.path("data");
         if (!models.isArray()) {
-            throw failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+            throw invalidResponse(RejectionReason.CATALOG_SHAPE);
         }
         for (JsonNode model : models) {
             if (model.path("id").isString() && settings.model().equals(model.path("id").asString())) {
@@ -99,17 +105,36 @@ public final class SoclaasClient implements AutoCloseable {
     private Completion decodeCompletion(JsonNode root) {
         JsonNode choices = root.path("choices");
         if (!choices.isArray() || choices.size() != 1) {
-            throw failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+            throw invalidResponse(RejectionReason.CHOICES);
         }
         JsonNode choice = choices.get(0);
         JsonNode message = choice.path("message");
         JsonNode content = message.path("content");
-        if (!"stop".equals(choice.path("finish_reason").asString(""))
-                || !"assistant".equals(message.path("role").asString(""))
-                || !content.isString() || content.asString().isBlank()
-                || message.hasNonNull("tool_calls") || message.hasNonNull("function_call")
-                || message.hasNonNull("refusal")) {
-            throw failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+        String finish = choice.path("finish_reason").asString("");
+        if (!"stop".equals(finish)) {
+            throw invalidResponse("length".equals(finish)
+                    ? RejectionReason.OUTPUT_TOKEN_LIMIT : RejectionReason.FINISH_REASON);
+        }
+        if (!"assistant".equals(message.path("role").asString(""))) {
+            throw invalidResponse(RejectionReason.ROLE);
+        }
+        if (!content.isString() || content.asString().isBlank()) {
+            throw invalidResponse(RejectionReason.EMPTY_CONTENT);
+        }
+        var calls = message.path("tool_calls");
+        // Some providers include [] when no tool was called; every nonempty or malformed value is rejected.
+        if (message.hasNonNull("tool_calls") && !(calls.isArray() && calls.isEmpty())) {
+            throw invalidResponse(RejectionReason.TOOL_CALLS);
+        }
+        if (message.hasNonNull("function_call")) {
+            var call = message.path("function_call");
+            throw invalidResponse(call.isObject() && call.isEmpty()
+                    ? RejectionReason.EMPTY_FUNCTION_CALL : RejectionReason.FUNCTION_CALL);
+        }
+        if (message.hasNonNull("refusal")) {
+            var refusal = message.path("refusal");
+            throw invalidResponse(refusal.isString() && refusal.asString().isEmpty()
+                    ? RejectionReason.EMPTY_REFUSAL : RejectionReason.REFUSAL);
         }
         String text = content.asString();
         Usage usage = usage(root.path("usage"));
@@ -203,7 +228,7 @@ public final class SoclaasClient implements AutoCloseable {
             }
             if (!response.headers().firstValue("Content-Type").orElse("")
                     .split(";", 2)[0].strip().equalsIgnoreCase("application/json")) {
-                throw failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+                throw invalidResponse(RejectionReason.CONTENT_TYPE);
             }
             return response.body();
         }
@@ -219,7 +244,17 @@ public final class SoclaasClient implements AutoCloseable {
         } catch (RuntimeException exception) {
             // Jackson errors can contain provider text. Do not propagate them.
         }
-        throw failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+        throw invalidResponse(RejectionReason.JSON_BODY);
+    }
+
+    private static SoclaasException invalidResponse(RejectionReason reason) {
+        logRejection(reason);
+        return failure(SoclaasException.Category.AI_INVALID_RESPONSE);
+    }
+
+    private static void logRejection(RejectionReason reason) {
+        // Only fixed categories are logged; upstream fields and exceptions may contain private text.
+        LOG.log(System.Logger.Level.WARNING, "SoCLaaS response rejected: {0}", reason);
     }
 
     private static Long retryAfter(HttpResponse<?> response) {
