@@ -66,17 +66,31 @@ public final class PromotionRequestService {
     /** Submits a request for the current reporter with one or more desired categories. */
     public ApplicationResult<ResponderPromotionRequest> submit(
             Set<IncidentCategory> requestedCategories, Optional<String> comments) {
-        Objects.requireNonNull(requestedCategories, "requestedCategories");
-        Objects.requireNonNull(comments, "comments");
         Optional<Account> actor = sessions.currentAccount();
         if (actor.isEmpty() || !authorization.authorizePromotionRequest(actor.orElseThrow().id()).isAllowed()) {
+            return unavailable();
+        }
+        return submitAs(actor.orElseThrow(), requestedCategories, comments);
+    }
+
+    /** Submits a request for the enabled Reporter resolved from the authenticated web principal. */
+    public ApplicationResult<ResponderPromotionRequest> submitAs(
+            Account actor, Set<IncidentCategory> requestedCategories, Optional<String> comments) {
+        Objects.requireNonNull(requestedCategories, "requestedCategories");
+        Objects.requireNonNull(comments, "comments");
+        Optional<Account> currentReporter = currentAccount(actor, Role.REPORTER);
+        if (currentReporter.isEmpty()) {
             return unavailable();
         }
         if (requestedCategories.isEmpty()) {
             return ApplicationResult.failure(ApplicationError.validation(ValidationResult.invalid(
                     new ValidationError(new ValidationField("requestedCategories"), ValidationErrorCode.REQUIRED))));
         }
-        Account reporter = actor.orElseThrow();
+        if (comments.filter(value -> value.length() > 2_000).isPresent()) {
+            return ApplicationResult.failure(ApplicationError.validation(ValidationResult.invalid(
+                    new ValidationError(new ValidationField("comments"), ValidationErrorCode.OUT_OF_RANGE))));
+        }
+        Account reporter = currentReporter.orElseThrow();
         if (store.hasPendingPromotionRequest(reporter.id())) {
             return ApplicationResult.failure(ApplicationError.of(ApplicationErrorCode.INVALID_STATE));
         }
@@ -101,10 +115,27 @@ public final class PromotionRequestService {
     }
 
     /** Approves or rejects a pending request as the current administrator. */
-    public ApplicationResult<ResponderPromotionRequest> decide(PromotionRequestId requestId, boolean approve) {
-        Objects.requireNonNull(requestId, "requestId");
+    public ApplicationResult<ResponderPromotionRequest> decide(
+            PromotionRequestId requestId,
+            boolean approve,
+            Set<IncidentCategory> approvedCategories) {
         Optional<Account> actor = sessions.currentAccount();
         if (actor.isEmpty() || !authorization.authorizePromotionDecision().isAllowed()) {
+            return unavailable();
+        }
+        return decideAs(actor.orElseThrow(), requestId, approve, approvedCategories);
+    }
+
+    /** Decides a request using the selected categories supplied by the authorized Administrator. */
+    public ApplicationResult<ResponderPromotionRequest> decideAs(
+            Account actor,
+            PromotionRequestId requestId,
+            boolean approve,
+            Set<IncidentCategory> approvedCategories) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(approvedCategories, "approvedCategories");
+        Optional<Account> currentAdministrator = currentAccount(actor, Role.ADMINISTRATOR);
+        if (currentAdministrator.isEmpty()) {
             return unavailable();
         }
         Optional<ResponderPromotionRequest> located = store.findPromotionRequest(requestId);
@@ -121,19 +152,28 @@ public final class PromotionRequestService {
             return ApplicationResult.failure(ApplicationError.of(ApplicationErrorCode.INVALID_STATE));
         }
 
-        Account administrator = actor.orElseThrow();
-        ResponderPromotionRequest decided = current.decide(approve, administrator.id(), clock.instant());
+        if (approve && (approvedCategories.isEmpty()
+                || !current.requestedCategories().containsAll(approvedCategories))) {
+            return invalidApprovedCategories();
+        }
+        if (!approve && !approvedCategories.isEmpty()) {
+            return invalidApprovedCategories();
+        }
+
+        Account administrator = currentAdministrator.orElseThrow();
+        ResponderPromotionRequest decided = current.decide(
+                approve, approvedCategories, administrator.id(), clock.instant());
         Optional<Account> updatedAccount = approve
                 ? Optional.of(new Account(requester.orElseThrow().id(), requester.orElseThrow().loginName(),
                         Role.RESPONDER, requester.orElseThrow().status(),
-                        ResponderAccess.to(current.requestedCategories())))
+                        ResponderAccess.to(approvedCategories)))
                 : Optional.empty();
         AuditAction action = approve ? AuditAction.RESPONDER_PROMOTION_APPROVED
                 : AuditAction.RESPONDER_PROMOTION_REJECTED;
         List<AuditChange> changes = approve
                 ? List.of(AuditChange.changed(AuditChangeField.PROMOTION_STATUS, current.status().name(), decided.status().name()),
                         AuditChange.changed(AuditChangeField.ROLE, Role.REPORTER.name(), Role.RESPONDER.name()),
-                        AuditChange.added(AuditChangeField.RESPONDER_CATEGORIES, categories(current.requestedCategories())))
+                        AuditChange.added(AuditChangeField.RESPONDER_CATEGORIES, categories(approvedCategories)))
                 : List.of(AuditChange.changed(AuditChangeField.PROMOTION_STATUS,
                         current.status().name(), decided.status().name()));
         var audit = auditEvents.create(administrator, AuditActorVisibility.STANDARD, action,
@@ -151,14 +191,53 @@ public final class PromotionRequestService {
 
     /** Returns retained request history visible to the current account. */
     public List<ResponderPromotionRequest> visibleHistory() {
-        Optional<Account> actor = sessions.currentAccount();
-        if (actor.isEmpty()) {
+        return sessions.currentAccount().map(this::visibleHistoryAs).orElseGet(List::of);
+    }
+
+    /** Returns retained request history visible to the persisted authenticated account. */
+    public List<ResponderPromotionRequest> visibleHistoryAs(Account actor) {
+        Optional<Account> currentActor = currentAccount(actor, null);
+        if (currentActor.isEmpty()) return List.of();
+        Account current = currentActor.orElseThrow();
+        return current.role() == Role.ADMINISTRATOR
+                ? store.findPromotionRequests()
+                : store.findPromotionRequestsByRequester(current.id());
+    }
+
+    /** Returns one bounded page of pending requests only to an enabled Administrator. */
+    public List<ResponderPromotionRequest> pendingRequestsAs(Account actor, long offset, int limit) {
+        if (offset < 0 || limit < 1 || currentAccount(actor, Role.ADMINISTRATOR).isEmpty()) {
             return List.of();
         }
-        return store.findPromotionRequests().stream()
-                .filter(request -> actor.orElseThrow().role() == Role.ADMINISTRATOR
-                        || request.requesterId().equals(actor.orElseThrow().id()))
-                .toList();
+        return store.findPendingPromotionRequests(offset, limit);
+    }
+
+    /** Returns a promotion record only to an enabled Administrator. */
+    public Optional<ResponderPromotionRequest> findRequestAs(Account actor, PromotionRequestId requestId) {
+        Objects.requireNonNull(requestId, "requestId");
+        if (currentAccount(actor, Role.ADMINISTRATOR).isEmpty()) {
+            return Optional.empty();
+        }
+        return store.findPromotionRequest(requestId);
+    }
+
+    /** Returns the pending request count only to an enabled Administrator. */
+    public long countPendingRequestsAs(Account actor) {
+        return currentAccount(actor, Role.ADMINISTRATOR).isPresent()
+                ? store.countPendingPromotionRequests() : 0;
+    }
+
+    private Optional<Account> currentAccount(Account actor, Role requiredRole) {
+        if (actor == null || !actor.isEnabled()) return Optional.empty();
+        return accounts.findById(actor.id())
+                .filter(Account::isEnabled)
+                .filter(current -> current.loginName().equals(actor.loginName()))
+                .filter(current -> requiredRole == null || current.role() == requiredRole);
+    }
+
+    private static <T> ApplicationResult<T> invalidApprovedCategories() {
+        return ApplicationResult.failure(ApplicationError.validation(ValidationResult.invalid(
+                new ValidationError(new ValidationField("approvedCategories"), ValidationErrorCode.OUT_OF_RANGE))));
     }
 
     private static String categories(Set<IncidentCategory> categories) {
@@ -170,7 +249,12 @@ public final class PromotionRequestService {
     }
 
     private static <T> ApplicationResult<T> persistenceFailure(RepositoryException exception) {
-        return ApplicationResult.failure(ApplicationError.of(exception.code() == StorageFailureCode.CORRUPT_DATA
-                ? ApplicationErrorCode.CORRUPT_DATA : ApplicationErrorCode.PERSISTENCE_FAILURE));
+        ApplicationErrorCode code = switch (exception.code()) {
+        case ALREADY_EXISTS -> ApplicationErrorCode.INVALID_STATE;
+        case CORRUPT_DATA, UNSUPPORTED_SCHEMA -> ApplicationErrorCode.CORRUPT_DATA;
+        case NOT_FOUND -> ApplicationErrorCode.RESOURCE_UNAVAILABLE;
+        case STORAGE_UNAVAILABLE, WRITER_ALREADY_ACTIVE -> ApplicationErrorCode.PERSISTENCE_FAILURE;
+        };
+        return ApplicationResult.failure(ApplicationError.of(code));
     }
 }

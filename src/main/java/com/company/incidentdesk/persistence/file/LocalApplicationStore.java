@@ -247,6 +247,16 @@ public final class LocalApplicationStore
     }
 
     @Override
+    public synchronized List<ResponderPromotionRequest> findPromotionRequestsByRequester(AccountId requesterId) {
+        AccountId requiredRequesterId = Objects.requireNonNull(requesterId, "requesterId");
+        return state.promotionRequests().values().stream()
+                .filter(request -> request.requesterId().equals(requiredRequesterId))
+                .sorted(Comparator.comparing(ResponderPromotionRequest::requestedAt)
+                        .thenComparing(request -> request.id().value()))
+                .toList();
+    }
+
+    @Override
     public synchronized boolean hasPendingPromotionRequest(AccountId requesterId) {
         return state.promotionRequests().values().stream().anyMatch(request ->
                 request.requesterId().equals(Objects.requireNonNull(requesterId, "requesterId"))
@@ -282,7 +292,7 @@ public final class LocalApplicationStore
         List<AuditEvent> audits = new ArrayList<>(state.auditEvents());
         audits.add(required.auditEvent());
         persist(new LocalApplicationState(accounts, state.credentials(), state.incidents(), state.comments(), audits,
-                requests, state.sloTargetVersions(), state.attachments(), state.schemaVersion()));
+                requests, state.sloTargetVersions(), state.attachments(), LocalApplicationStateCodec.SCHEMA_VERSION));
     }
 
     @Override
@@ -399,8 +409,14 @@ public final class LocalApplicationStore
     }
 
     private void persist(LocalApplicationState nextState) {
-        file.save(nextState);
-        state = nextState;
+        LocalApplicationState currentSchemaState = nextState.schemaVersion() == LocalApplicationStateCodec.SCHEMA_VERSION
+                ? nextState
+                : new LocalApplicationState(nextState.accounts(), nextState.credentials(), nextState.incidents(),
+                        nextState.comments(), nextState.auditEvents(), nextState.promotionRequests(),
+                        nextState.sloTargetVersions(), nextState.attachments(),
+                        LocalApplicationStateCodec.SCHEMA_VERSION);
+        file.save(currentSchemaState);
+        state = currentSchemaState;
     }
 
     private void rejectDuplicateAudit(AuditEvent event) {
@@ -515,7 +531,7 @@ public final class LocalApplicationStore
                 audits.add(audit);
                 commitFiles(attachment, content, new LocalApplicationState(state.accounts(), state.credentials(),
                         state.incidents(), state.comments(), audits, state.promotionRequests(),
-                        state.sloTargetVersions(), next, 1));
+                        state.sloTargetVersions(), next, LocalApplicationStateCodec.SCHEMA_VERSION));
             }
         }
 

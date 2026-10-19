@@ -319,7 +319,8 @@ class ResponderMvpIntegrationTest {
         login(name);
         var request = context.promotionRequests().submit(Set.of(category), Optional.empty()).value().orElseThrow();
         login("admin");
-        assertTrue(context.promotionRequests().decide(request.id(), true).isSuccess());
+        assertTrue(context.promotionRequests().decide(request.id(), true,
+                request.requestedCategories()).isSuccess());
         assertEquals(Role.RESPONDER, store.findByLoginName(name).orElseThrow().role());
     }
 

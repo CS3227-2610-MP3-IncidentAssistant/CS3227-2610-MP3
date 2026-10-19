@@ -228,18 +228,38 @@ public final class AdminAccountsPage extends BorderPane {
         details.setPrefRowCount(6);
         details.setAccessibleText("Promotion request details for " + account.loginName());
 
-        ButtonType approve = new ButtonType("Approve", ButtonType.OK.getButtonData());
+        ButtonType approve = new ButtonType("Approve selected categories", ButtonType.OK.getButtonData());
         ButtonType reject = new ButtonType("Reject", ButtonType.OK.getButtonData());
         Alert dialog = new Alert(Alert.AlertType.NONE, "", approve, reject, ButtonType.CANCEL);
         dialog.setTitle("Promotion request");
         dialog.setHeaderText("Responder promotion request from " + account.loginName());
-        dialog.getDialogPane().setContent(details);
+        VBox categoryOptions = new VBox(6);
+        Map<IncidentCategory, CheckBox> approvalCategories = new EnumMap<>(IncidentCategory.class);
+        request.requestedCategories().stream().sorted().forEach(category -> {
+            CheckBox categoryOption = new CheckBox(category.displayName());
+            categoryOption.setId("promotion-category-" + category.name());
+            approvalCategories.put(category, categoryOption);
+            categoryOptions.getChildren().add(categoryOption);
+        });
+        Button approveButton = (Button) dialog.getDialogPane().lookupButton(approve);
+        approveButton.setDisable(true);
+        approvalCategories.values().forEach(option -> option.selectedProperty().addListener(
+                (observable, wasSelected, isSelected) -> approveButton.setDisable(
+                        approvalCategories.values().stream().noneMatch(CheckBox::isSelected))));
+        dialog.getDialogPane().setContent(new VBox(10, details,
+                new Label("Select the categories to grant"), categoryOptions));
         Optional<ButtonType> choice = dialog.showAndWait();
         if (choice.isEmpty() || choice.orElseThrow() == ButtonType.CANCEL) {
             return;
         }
         boolean approved = choice.orElseThrow() == approve;
-        var result = promotionRequests.decide(request.id(), approved);
+        Set<IncidentCategory> selectedCategories = approved
+                ? approvalCategories.entrySet().stream()
+                        .filter(entry -> entry.getValue().isSelected())
+                        .map(Map.Entry::getKey)
+                        .collect(Collectors.toUnmodifiableSet())
+                : Set.of();
+        var result = promotionRequests.decide(request.id(), approved, selectedCategories);
         if (result.isSuccess()) {
             refresh();
         } else {

@@ -245,15 +245,16 @@ session-expired, and failure states reveal no privileged data.
 
 For each pending Reporter-to-Responder request, an Administrator can review the
 requester, requested categories, request time, and optional comments, then
-approve, reject, or cancel.
+approve or reject it. Approval requires selecting at least one category from
+the request's requested categories. The decision cannot grant categories the
+Reporter did not request. Cancellation is not part of this promotion workflow.
 
 Approval changes the existing account to `RESPONDER`, grants exactly the
-approved/requested category set defined by the request, preserves the account
-identifier and historical references, records the decision and access change
-atomically, and invalidates existing sessions so the user must reauthenticate
-through the Responder portal. Rejection changes neither role nor category
-access. Both decisions retain request history and create the required audit
-event. Cancel changes nothing.
+selected non-empty subset, preserves the account identifier and historical
+references, records the selected categories and decision atomically, and
+invalidates existing sessions so the user must reauthenticate through the
+Responder portal. Rejection changes neither role nor category access. Both
+decisions retain request history and create the required audit event.
 
 Only a still-pending request for an enabled Reporter can be decided. Duplicate
 or stale decisions fail without a second mutation or success audit.

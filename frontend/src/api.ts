@@ -2,9 +2,31 @@ export type SessionState = {
   authenticated: boolean
   loginName?: string
   role?: string
+  responderCategories?: IncidentCategory[]
 }
 
 export type SessionRefresher = () => Promise<SessionState>
+export type IncidentCategory = 'IT' | 'HUMAN_RELATIONS' | 'FACILITIES'
+export type PromotionStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export type PromotionRequestRecord = {
+  requestId: string
+  requesterLabel?: string
+  requestedCategories: IncidentCategory[]
+  approvedCategories: IncidentCategory[] | null
+  comments: string | null
+  requestedAt: string
+  status: PromotionStatus
+  decidedAt: string | null
+}
+
+export type PromotionRequestHistory = { requests: PromotionRequestRecord[] }
+export type PromotionRequestPage = PromotionRequestHistory & {
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
 
 export type SloTarget = {
   category: string
@@ -54,10 +76,10 @@ export async function loadSession(signal?: AbortSignal): Promise<SessionState> {
 export async function roleLogin(
   loginName: string,
   password: string,
-  portal: 'REPORTER' | 'ADMINISTRATOR',
+  portal: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR',
   refreshSession: SessionRefresher,
 ): Promise<void> {
-  const rolePath = portal === 'REPORTER' ? 'reporter' : 'administrator'
+  const rolePath = portal.toLowerCase()
   const body = new URLSearchParams({ username: loginName, password })
   await csrfRequest(`/api/v1/auth/${rolePath}/login`, {
     method: 'POST',
@@ -65,6 +87,63 @@ export async function roleLogin(
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   }, refreshSession, { fallbackMessage: 'Sign-in failed' })
+}
+
+export async function loadPromotionHistory(signal?: AbortSignal): Promise<PromotionRequestHistory> {
+  return requestJson<PromotionRequestHistory>('/api/v1/reporter/promotion-request', { signal })
+}
+
+export async function submitPromotionRequest(
+  requestedCategories: IncidentCategory[],
+  comments: string,
+  refreshSession: SessionRefresher,
+): Promise<PromotionRequestRecord> {
+  const response = await csrfRequest('/api/v1/reporter/promotion-request', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestedCategories, comments: comments || null }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The promotion request could not be submitted. Try again.',
+  })
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<PromotionRequestRecord>
+}
+
+export async function loadPromotionRequests(
+  page: number,
+  signal?: AbortSignal,
+): Promise<PromotionRequestPage> {
+  const parameters = new URLSearchParams({ page: String(page), size: '25' })
+  return requestJson<PromotionRequestPage>(`/api/v1/admin/promotion-requests?${parameters}`, { signal })
+}
+
+export async function decidePromotionRequest(
+  requestId: string,
+  decision: 'APPROVE' | 'REJECT',
+  approvedCategories: IncidentCategory[],
+  refreshSession: SessionRefresher,
+): Promise<PromotionRequestRecord> {
+  const response = await csrfRequest(
+    `/api/v1/admin/promotion-requests/${encodeURIComponent(requestId)}/decision`,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision,
+        ...(decision === 'APPROVE' ? { approvedCategories } : {}),
+      }),
+    },
+    refreshSession,
+    {
+      authenticationRequired: true,
+      fallbackMessage: 'The promotion decision could not be saved. Refresh and try again.',
+    },
+  )
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<PromotionRequestRecord>
 }
 
 export async function registerAccount(
@@ -129,7 +208,7 @@ export async function loadReporterIncidents(
 export type IncidentSubmission = {
   title: string
   description: string
-  category: 'IT' | 'HUMAN_RELATIONS' | 'FACILITIES'
+  category: IncidentCategory
   anonymous: boolean
   submissionKey: string
 }

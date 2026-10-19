@@ -267,7 +267,7 @@ def registrationDatabaseEnvironmentNames = [
 
 tasks.register('registrationDatabaseTest', Test) {
     group = 'verification'
-    description = 'Runs account-registration and first-admin bootstrap integration tests against an explicitly isolated PostgreSQL database.'
+    description = 'Runs identity, bootstrap, and promotion integration tests against an explicitly isolated PostgreSQL database.'
     dependsOn testClasses
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
@@ -275,6 +275,8 @@ tasks.register('registrationDatabaseTest', Test) {
     filter {
         includeTestsMatching 'com.company.incidentdesk.web.security.ReporterAccountRegistrationPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.security.AdministratorBootstrapPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionWorkflowPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionJourneyHttpPostgresTest'
     }
 
     doFirst {

@@ -47,6 +47,43 @@ describe('web authentication and administrator slice', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/admin'))).toBe(false)
   })
 
+  it('lets an approved account sign in through Responder and sees only granted categories', async () => {
+    let sessionRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') {
+        sessionRequests += 1
+        return sessionRequests === 1
+          ? response(anonymousSession)
+          : response({
+              authenticated: true,
+              loginName: 'approved-responder',
+              role: 'RESPONDER',
+              responderCategories: ['IT'],
+            })
+      }
+      if (url === '/api/v1/auth/responder/login' && init?.method === 'POST') return response({}, 204)
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Responder' }))
+    expect(await screen.findByRole('heading', { name: 'Responder sign in' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Login name'), { target: { value: 'approved-responder' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'valid-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved incident categories' })).toBeInTheDocument()
+    expect(screen.getByText('IT')).toBeInTheDocument()
+    expect(screen.queryByText('Facilities')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/responder/login',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('renders privacy-safe empty dashboard data for an authenticated administrator', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

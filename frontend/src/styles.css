@@ -123,6 +123,11 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .anonymous-control { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
 .anonymous-control input { width: 20px; height: 20px; }
 .anonymous-control label { font-weight: 700; }
+.category-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 8px 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; }
+.category-choice legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
+.category-choice label { display: flex; gap: 8px; align-items: center; min-height: 40px; font-size: 14px; }
+.category-choice input { width: 18px; height: 18px; margin: 0; }
+.form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .help-text { grid-column: 1 / -1; margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 920px) {

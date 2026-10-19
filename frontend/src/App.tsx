@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
+import { PromotionRequests } from './admin/PromotionRequests'
 import {
   loadSession,
   logout,
@@ -11,8 +12,10 @@ import {
 import { useServiceHealth } from './health/useServiceHealth'
 import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
+import { PromotionPanel } from './reporter/PromotionPanel'
+import { ResponderPortal } from './responder/ResponderPortal'
 
-type Portal = 'REPORTER' | 'ADMINISTRATOR'
+type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
 export function App() {
   const serviceHealth = useServiceHealth()
@@ -39,6 +42,7 @@ export function App() {
   if (session.authenticated && session.role === 'ADMINISTRATOR') {
     return (
       <AdminShell
+        accountsContent={<PromotionRequests onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
@@ -50,12 +54,23 @@ export function App() {
   if (session.authenticated && session.role === 'REPORTER') {
     return (
       <ReporterShell
+        promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
       >
         <ReporterDashboard onRefreshSession={sessionState.refresh} />
       </ReporterShell>
+    )
+  }
+  if (session.authenticated && session.role === 'RESPONDER') {
+    return (
+      <ResponderPortal
+        categories={session.responderCategories ?? []}
+        loginName={session.loginName ?? 'Responder'}
+        onLogout={signOut}
+        serviceHealth={serviceHealth}
+      />
     )
   }
   if (!portal) {
@@ -118,17 +133,9 @@ function RoleEntry({ onSelect }: { onSelect: (portal: Portal) => void }) {
           <button className="primary-button" type="button" onClick={() => onSelect('REPORTER')}>
             Reporter
           </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled
-            aria-describedby="responder-status"
-          >
+          <button className="secondary-button" type="button" onClick={() => onSelect('RESPONDER')}>
             Responder
           </button>
-          <span id="responder-status" className="help-text">
-            Responder web workflow is in development.
-          </span>
           <button className="secondary-button" type="button" onClick={() => onSelect('ADMINISTRATOR')}>
             Administrator
           </button>
@@ -148,7 +155,12 @@ function PortalLogin({ portal, onBack, onRefreshSession }: {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const label = portal === 'REPORTER' ? 'Reporter' : 'Administrator'
+  const portalLabels: Record<Portal, string> = {
+    REPORTER: 'Reporter',
+    RESPONDER: 'Responder',
+    ADMINISTRATOR: 'Administrator',
+  }
+  const label = portalLabels[portal]
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

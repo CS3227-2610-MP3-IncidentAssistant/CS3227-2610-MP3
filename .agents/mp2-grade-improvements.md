@@ -63,11 +63,12 @@ The complete interface-supported journey is:
 1. A signed-in Reporter requests promotion, selects requested incident
    categories, and may provide comments.
 2. The Reporter can see the pending or decided request status.
-3. A signed-in Administrator reviews the request and explicitly approves or
-   rejects it.
-4. Approval updates the same account to Responder, assigns only approved
-   categories, preserves its identifier/history, creates an audit event, and
-   invalidates or requires reauthentication of existing sessions.
+3. A signed-in Administrator reviews the request and explicitly approves a
+   non-empty subset of its requested categories or rejects it. The
+   Administrator cannot grant an unrequested category.
+4. Approval updates the same account to Responder, assigns exactly the
+   approved subset, preserves its identifier/history, creates an audit event,
+   and invalidates existing sessions so the user must reauthenticate.
 5. Rejection preserves the Reporter role and category state and records the
    decision without creating a success audit for promotion.
 6. The promoted user signs in through the Responder portal; the Reporter portal
