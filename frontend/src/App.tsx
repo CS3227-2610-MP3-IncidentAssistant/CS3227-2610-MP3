@@ -59,7 +59,7 @@ export function App() {
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
       >
-        <ReporterDashboard onRefreshSession={sessionState.refresh} />
+        <ReporterDashboard key={session.loginName} onRefreshSession={sessionState.refresh} />
       </ReporterShell>
     )
   }
