@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   loadReporterIncidents,
+  improveReporterDescription,
   submitReporterIncident,
   type IncidentSubmission,
   type ReporterIncidentPage,
@@ -179,8 +180,51 @@ function IncidentForm({ onRefreshSession, onSubmitted }: {
   const [submitting, setSubmitting] = useState(false)
   const form = useRef<HTMLFormElement>(null)
 
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState('')
+  const [aiError, setAiError] = useState('')
+  const aiRequest = useRef<AbortController | null>(null)
+  const aiGeneration = useRef(0)
+
+  function discardAi() {
+    aiGeneration.current++
+    aiRequest.current?.abort()
+    aiRequest.current = null
+    setAiLoading(false)
+    setAiSuggestion('')
+    setAiError('')
+  }
+
+  useEffect(() => () => {
+    aiGeneration.current++
+    aiRequest.current?.abort()
+  }, [])
+
+  async function improveDescription() {
+    if (!category || !title.trim() || !description.trim() || submitting || aiLoading) return
+    discardAi()
+    const generation = aiGeneration.current
+    const controller = new AbortController()
+    aiRequest.current = controller
+    setAiLoading(true)
+    try {
+      const suggestion = await improveReporterDescription({ title, category, description }, onRefreshSession, controller.signal)
+      if (generation === aiGeneration.current && !controller.signal.aborted) setAiSuggestion(suggestion)
+    } catch (error: unknown) {
+      if (generation === aiGeneration.current && !controller.signal.aborted) {
+        setAiError(error instanceof ApiError ? error.message : 'Description assistance is unavailable. You can still submit your own description.')
+      }
+    } finally {
+      if (generation === aiGeneration.current) {
+        aiRequest.current = null
+        setAiLoading(false)
+      }
+    }
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    discardAi()
     setFieldErrors({})
     setFeedback('')
     if (!category) {
@@ -232,7 +276,7 @@ function IncidentForm({ onRefreshSession, onSubmitted }: {
           required
           maxLength={200}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => { discardAi(); setTitle(event.target.value) }}
           aria-invalid={Boolean(fieldErrors.title)}
           aria-describedby={fieldErrors.title ? 'incident-title-error' : undefined}
         />
@@ -245,7 +289,7 @@ function IncidentForm({ onRefreshSession, onSubmitted }: {
           id="incident-category"
           required
           value={category}
-          onChange={(event) => setCategory(event.target.value as IncidentSubmission['category'] | '')}
+          onChange={(event) => { discardAi(); setCategory(event.target.value as IncidentSubmission['category'] | '') }}
           aria-invalid={Boolean(fieldErrors.category)}
           aria-describedby={fieldErrors.category ? 'incident-category-error' : undefined}
         >
@@ -265,7 +309,7 @@ function IncidentForm({ onRefreshSession, onSubmitted }: {
           maxLength={10000}
           rows={6}
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => { discardAi(); setDescription(event.target.value) }}
           aria-invalid={Boolean(fieldErrors.description)}
           aria-describedby={fieldErrors.description ? 'incident-description-error' : undefined}
         />
@@ -275,12 +319,36 @@ function IncidentForm({ onRefreshSession, onSubmitted }: {
           </span>
         )}
 
+        <div className="ai-description-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!title.trim() || !category || !description.trim() || submitting || aiLoading}
+            onClick={() => void improveDescription()}
+          >Improve description</button>
+          {aiLoading && <button className="secondary-button" type="button" onClick={discardAi}>Cancel</button>}
+        </div>
+        <p className="help-text">Optional AI assistance sends the title, category, and description for processing. Review the suggestion before applying it.</p>
+        {aiLoading && <p role="status">Preparing a suggestion. You can still submit your incident.</p>}
+        {aiError && <p className="form-error" role="alert">{aiError}</p>}
+        {aiSuggestion && (
+          <section className="ai-description-review" aria-labelledby="ai-description-heading">
+            <h3 id="ai-description-heading">AI-generated suggestion</h3>
+            <p className="help-text">Check the facts before applying. Applying changes only this form.</p>
+            <p className="ai-description-text">{aiSuggestion}</p>
+            <div className="ai-description-actions">
+              <button className="secondary-button" type="button" onClick={() => { setDescription(aiSuggestion); discardAi() }}>Apply suggestion</button>
+              <button className="secondary-button" type="button" onClick={discardAi}>Discard</button>
+            </div>
+          </section>
+        )}
+
         <div className="anonymous-control">
           <input
             id="incident-anonymous"
             type="checkbox"
             checked={anonymous}
-            onChange={(event) => setAnonymous(event.target.checked)}
+            onChange={(event) => { discardAi(); setAnonymous(event.target.checked) }}
             aria-describedby="anonymous-help"
           />
           <label htmlFor="incident-anonymous">Submit anonymously</label>

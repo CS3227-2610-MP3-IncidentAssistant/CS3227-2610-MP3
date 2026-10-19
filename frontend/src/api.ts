@@ -266,6 +266,7 @@ async function csrfRequest(
 
   if (isSecuritySessionResponse(response, errorBody)) {
     const refreshedSession = await refreshSession()
+    init.signal?.throwIfAborted()
     if (!refreshedSession.authenticated) {
       if (options.anonymousRefreshCompletesRequest) return null
       if (options.authenticationRequired) {
@@ -288,6 +289,7 @@ async function csrfRequest(
 }
 
 function sendCsrfRequest(url: string, init: RequestInit): Promise<Response> {
+  init.signal?.throwIfAborted()
   const headers = new Headers(init.headers)
   const token = readCookie('XSRF-TOKEN')
   if (token) headers.set('X-XSRF-TOKEN', token)
@@ -309,4 +311,43 @@ async function readErrorBody(response: Response): Promise<ErrorBody | null> {
 
 function isSecuritySessionResponse(response: Response, body: ErrorBody | null): boolean {
   return response.status === 403 && body?.code === 'SECURITY_SESSION_EXPIRED'
+}
+
+export type ReporterDescriptionDraft = Pick<IncidentSubmission, 'title' | 'category' | 'description'>
+
+const aiMessages: Record<string, string> = {
+  AI_RATE_LIMITED: 'Description assistance is busy. Try again later or submit your own description.',
+  AI_TIMEOUT: 'Description assistance timed out. You can still submit your own description.',
+  AI_UNAVAILABLE: 'Description assistance is unavailable. You can still submit your own description.',
+  AI_REJECTED: 'Description assistance could not process this draft. Review the fields or submit your own description.',
+  AI_INVALID_RESPONSE: 'Description assistance did not return a valid suggestion. Your draft is unchanged.',
+  AI_OUTPUT_TOO_LARGE: 'Description assistance did not return a valid suggestion. Your draft is unchanged.',
+  UNAUTHENTICATED: 'Your session has expired. Sign in again to use description assistance.',
+  SECURITY_SESSION_EXPIRED: 'Your session has expired. Sign in again to use description assistance.',
+}
+
+export async function improveReporterDescription(
+  draft: ReporterDescriptionDraft,
+  refreshSession: SessionRefresher,
+  signal: AbortSignal,
+): Promise<string> {
+  let response: Response | null
+  try {
+    response = await csrfRequest('/api/v1/reporter/ai/description', {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: draft.title, category: draft.category, description: draft.description }),
+    }, refreshSession, { authenticationRequired: true, fallbackMessage: aiMessages.AI_UNAVAILABLE })
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error
+    const code = error.code && Object.hasOwn(aiMessages, error.code) ? error.code : 'AI_UNAVAILABLE'
+    throw new ApiError(error.status, aiMessages[code], undefined, code)
+  }
+  if (!response) throw new ApiError(401, aiMessages.UNAUTHENTICATED, undefined, 'UNAUTHENTICATED')
+  const body = await response.json().catch(() => null) as { description?: unknown } | null
+  if (typeof body?.description !== 'string' || !body.description.trim()
+    || body.description.length > 10000 || new TextEncoder().encode(body.description).length > 16384) {
+    throw new ApiError(502, aiMessages.AI_INVALID_RESPONSE, undefined, 'AI_INVALID_RESPONSE')
+  }
+  return body.description
 }

@@ -155,3 +155,8 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.ai-description-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-description-review { grid-column: 1 / -1; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
+.ai-description-review h3 { margin-top: 0; }
+.ai-description-text { white-space: pre-wrap; overflow-wrap: anywhere; }

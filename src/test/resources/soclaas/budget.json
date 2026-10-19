@@ -1,0 +1,25 @@
+{
+  "api_key": {"is_active": true},
+  "policy": {
+    "requests_per_minute_limit": 30,
+    "daily_microdollar_allowance": 50000000,
+    "monthly_microdollar_allowance": 500000000,
+    "daily_microdollar_spend_cap": null,
+    "monthly_microdollar_spend_cap": null,
+    "normal_service_funding_mode": "allowance_and_credits",
+    "allow_excess_after_funding_exhaustion": true
+  },
+  "effective_limits": {
+    "daily_microdollar_allowance": 50000000,
+    "monthly_microdollar_allowance": 500000000,
+    "daily_microdollar_spend_cap": null,
+    "monthly_microdollar_spend_cap": null
+  },
+  "usage": {"current_day_spend": 36, "current_month_spend": 36},
+  "credits": {"total_granted": 0, "total_used": "0", "remaining": "0"},
+  "windows": {
+    "timezone": "UTC",
+    "day_start": "2026-10-19T00:00:00Z",
+    "month_start": "2026-10-01T00:00:00Z"
+  }
+}
