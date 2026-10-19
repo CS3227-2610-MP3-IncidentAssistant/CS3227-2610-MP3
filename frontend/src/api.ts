@@ -184,3 +184,38 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   if (!response.ok) throw new ApiError(response.status, 'The requested data is unavailable')
   return response.json() as Promise<T>
 }
+
+export type ReporterDescriptionDraft = Pick<IncidentSubmission, 'title' | 'category' | 'description'>
+
+const aiMessages: Record<string, string> = {
+  AI_RATE_LIMITED: 'Description assistance is busy. Try again later or submit your own description.',
+  AI_TIMEOUT: 'Description assistance timed out. You can still submit your own description.',
+  AI_UNAVAILABLE: 'Description assistance is unavailable. You can still submit your own description.',
+  AI_REJECTED: 'Description assistance could not process this draft. Review the fields or submit your own description.',
+  AI_INVALID_RESPONSE: 'Description assistance did not return a valid suggestion. Your draft is unchanged.',
+  AI_OUTPUT_TOO_LARGE: 'Description assistance did not return a valid suggestion. Your draft is unchanged.',
+  SECURITY_SESSION_EXPIRED: 'Your session has expired. Sign in again to use description assistance.',
+}
+
+export async function improveReporterDescription(
+  draft: ReporterDescriptionDraft,
+  session: SessionState,
+  signal: AbortSignal,
+): Promise<string> {
+  const response = await fetch('/api/v1/reporter/ai/description', {
+    method: 'POST', credentials: 'same-origin', signal,
+    headers: { 'Content-Type': 'application/json', [session.csrfHeader]: session.csrfToken },
+    body: JSON.stringify({ title: draft.title, category: draft.category, description: draft.description }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { code?: unknown } | null
+    const code = typeof body?.code === 'string' && Object.hasOwn(aiMessages, body.code) ? body.code : 'AI_UNAVAILABLE'
+    throw new ApiError(response.status, aiMessages[code], undefined, code)
+  }
+  const body = await response.json().catch(() => null) as { description?: unknown } | null
+  if (typeof body?.description !== 'string' || !body.description.trim()
+    || body.description.length > 10000 || new TextEncoder().encode(body.description).length > 16384) {
+    throw new ApiError(502, aiMessages.AI_INVALID_RESPONSE, undefined, 'AI_INVALID_RESPONSE')
+  }
+  return body.description
+}
