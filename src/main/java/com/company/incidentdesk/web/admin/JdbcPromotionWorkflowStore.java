@@ -29,6 +29,7 @@ import com.company.incidentdesk.persistence.AccountRepository;
 import com.company.incidentdesk.persistence.AuditedMutation;
 import com.company.incidentdesk.persistence.RepositoryException;
 import com.company.incidentdesk.persistence.StorageFailureCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -39,11 +40,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** PostgreSQL account and promotion adapter; promotion/audit/session changes share one transaction. */
 @Repository
 @ConditionalOnBean(DataSource.class)
-public final class JdbcPromotionWorkflowStore implements AccountRepository, PromotionWorkflowStore {
+public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionWorkflowStore {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
+    @Autowired
     public JdbcPromotionWorkflowStore(
             JdbcTemplate jdbc,
             TransactionTemplate transactions) {
