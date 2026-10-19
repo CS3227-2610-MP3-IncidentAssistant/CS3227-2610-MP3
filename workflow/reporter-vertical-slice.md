@@ -63,7 +63,7 @@ anonymous status cannot be removed after submission.
 | Reporter workspace | Submit incident, anonymity control, own-incident table, search/filter/sort, refresh, open detail | Preserve with server-side paging and trusted request identity |
 | Incident detail | View lifecycle, resolution history, comments, and images; edit, withdraw, or reopen when eligible | Preserve with transaction-safe HTTP operations and stale-version checks |
 | Draft support | Domain/application support exists but is not exposed as a complete web workflow | Include save, resume, edit, attach, and submit |
-| Promotion workflow | Select requested categories, add optional comments, and track the latest request | Preserve with PostgreSQL persistence and session-safe role change |
+| Promotion workflow | Select requested categories, add optional comments, and track request history and outcomes | Preserve with PostgreSQL persistence and session-safe role change |
 | AI assistance | Required by MP3 but not a completed desktop production integration | Add the approved advisory description-improvement workflow |
 | Authenticated shell | Own password change, logout, and notification affordance | Preserve password/logout; persistent notifications remain deferred |
 
@@ -269,16 +269,19 @@ incident categories, add optional comments within the approved limit, and
 submit a promotion request. The server derives the requester from the session,
 persists `PENDING`, and commits the request and audit event atomically.
 
-The Reporter can view the current request's requested categories, submitted
-time, status, and privacy-safe decision outcome. They cannot approve, reject,
-or alter a submitted request. A duplicate pending request, empty categories,
-tampered actor or role, denial, or persistence failure creates no second request
-or misleading audit.
+The Reporter can view their promotion-request history, including requested
+categories, submitted time, status, and privacy-safe decision outcome. An
+approved outcome identifies the categories granted. They cannot approve,
+reject, or alter a submitted request. A duplicate pending request, empty
+categories, tampered actor or role, denial, or persistence failure creates no
+second request or misleading audit. A new request may be submitted after the
+prior request is decided; prior decisions remain in history.
 
-Approval changes the same account to `RESPONDER`, grants only approved
-categories, preserves identity/history, invalidates existing sessions, and
-requires sign-in through the Responder portal. Rejection leaves role and access
-unchanged.
+An Administrator may approve a non-empty subset of the requested categories;
+an unrequested category cannot be granted through promotion. Approval changes
+the same account to `RESPONDER`, grants exactly that approved subset, preserves
+identity/history, invalidates existing sessions, and requires sign-in through
+the Responder portal. Rejection leaves role and access unchanged.
 
 ### REP-AI-01 — Advisory description improvement
 
@@ -449,9 +452,11 @@ deployed evidence is recorded.
   keys, anonymous generic names, safe response headers, and failed-write
   compensation; unsupported media and spoofed extensions fail safely.
 - [ ] `REP-AC-10` — A Reporter can create at most one pending promotion request
-  with at least one category and track its status; tampered, duplicate, denied,
-  stale, and persistence-failed requests create neither a second request nor a
-  misleading audit, and an approved role change invalidates the old session.
+  with at least one valid category, view request history and the approved
+  category outcome, and cannot decide or alter requests; tampered, duplicate,
+  denied, stale, and persistence-failed requests create neither a second
+  request nor a misleading audit, while an approved role change invalidates
+  old sessions and requires sign-in through the Responder portal.
 - [ ] `REP-AC-11` — Reporter AI requests are reauthorized, send only title,
   normalized category, and current description within the approved limits,
   exclude all identity and unrelated data, render safe bounded plain text, and

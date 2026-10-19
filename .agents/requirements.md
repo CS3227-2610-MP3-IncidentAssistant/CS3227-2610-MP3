@@ -83,11 +83,13 @@ A reporter can:
   insufficient.
 - Request promotion to responder by selecting requested incident categories and
   providing optional additional comments.
-- Track the current promotion-request status. Approval changes the existing
-  account to Responder, grants only the approved categories, preserves the
-  account identifier and historical references, records an audit event, and
-  requires reauthentication before Responder access. Rejection leaves the role
-  and category access unchanged and records the decision.
+- Track promotion-request history and outcomes. An Administrator may approve
+  a non-empty subset of the requested valid categories, but cannot grant a
+  category that was not requested. Approval changes the existing account to
+  Responder, grants exactly the approved subset, preserves the account
+  identifier and historical references, records an audit event, and requires
+  reauthentication before Responder access. Rejection leaves the role and
+  category access unchanged and records the decision.
 - Request an AI-assisted rewrite or structure of the reporter's current draft
   description. Generated text remains an untrusted suggestion until the
   reporter explicitly applies or copies it, and incident submission remains a
@@ -116,7 +118,9 @@ An administrator can:
 - View, search, filter, and sort incidents across the company.
 - Resolve an incident with resolution remarks.
 - Reassign an incident to an eligible responder.
-- Review responder-promotion requests and approve or reject them.
+- Review responder-promotion requests and approve a non-empty subset of their
+  requested categories or reject them. An approval cannot grant unrequested
+  categories.
 - Update a responder's permitted categories.
 - Delete an account subject to the retention rules below.
 - Initiate a secure password reset without learning the existing password. The application generates a

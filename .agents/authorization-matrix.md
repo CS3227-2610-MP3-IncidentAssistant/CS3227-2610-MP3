@@ -23,7 +23,7 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 | Follow up/reopen | Own `RESOLVED` incident, with a non-blank explanatory comment | No | No current requirement |
 | View reporter identity | Own identity | Only for non-anonymous incidents they may access | Non-anonymous identity; anonymous identity remains hidden by default |
 | Request responder promotion | Allowed for self | Not applicable while already responder | No |
-| Decide promotion request | No | No | Allowed |
+| Decide promotion request | No | No | Allowed for a pending request; approval grants a non-empty subset of the request's categories and cannot grant an unrequested category |
 | Change responder categories | No | No | Allowed |
 | Configure SLO | No | No | Allowed |
 | View own performance | No | Own statistics | All responder/statistical views |
@@ -58,5 +58,6 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 - A login portal, URL, hidden field, or submitted role value never grants a
   role. The authenticated account's current persisted role determines access.
 - Promotion approval updates the existing account rather than creating a second
-  username or credential record. Rejection leaves role and category access
-  unchanged.
+  username or credential record. The approved category set must be a non-empty
+  subset of the request's categories; unrequested categories cannot be granted
+  through promotion. Rejection leaves role and category access unchanged.

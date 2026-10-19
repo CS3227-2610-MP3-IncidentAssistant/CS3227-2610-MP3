@@ -5,6 +5,7 @@ export type RoleNavigationItem = {
   label: string
   current: boolean
   unavailableLabel?: string
+  onSelect?: () => void
 }
 
 type RoleShellProps = {
@@ -75,9 +76,12 @@ export function RoleShell({
                   className={item.current ? 'nav-link nav-link--current' : 'nav-link'}
                   type="button"
                   aria-current={item.current ? 'page' : undefined}
-                  aria-disabled={!item.current}
-                  disabled={!item.current}
-                  onClick={closeMenu}
+                  aria-disabled={!item.current && !item.onSelect}
+                  disabled={!item.current && !item.onSelect}
+                  onClick={() => {
+                    item.onSelect?.()
+                    closeMenu()
+                  }}
                 >
                   {item.label}
                   {item.unavailableLabel && (

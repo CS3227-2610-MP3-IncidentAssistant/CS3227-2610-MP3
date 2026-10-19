@@ -48,7 +48,7 @@ class AttachmentPersistenceTest {
     }
 
     @Test
-    void firstAttachmentKeepsVersionOneWithBackupAndAudit() throws Exception {
+    void firstAttachmentUpgradesToCurrentVersionWithBackupAndAudit() throws Exception {
         Path directory = temporary.resolve("store");
         try (AttachmentFixture fixture = new AttachmentFixture(directory)) {
             assertTrue(fixture.store.findById(fixture.incident.id()).isPresent());
@@ -65,7 +65,7 @@ class AttachmentPersistenceTest {
             assertTrue(fixture.service.add(fixture.incident.id(), source).isSuccess());
             assertArrayEquals(legacy, Files.readAllBytes(directory.resolve("incident-desk.dat.bak")));
             LocalApplicationState migrated = codec.decode(Files.readAllBytes(canonical));
-            assertEquals(1, migrated.schemaVersion());
+            assertEquals(LocalApplicationStateCodec.SCHEMA_VERSION, migrated.schemaVersion());
             assertEquals(current.accounts(), migrated.accounts());
             assertEquals(current.credentials(), migrated.credentials());
             assertEquals(current.incidents(), migrated.incidents());
@@ -75,6 +75,8 @@ class AttachmentPersistenceTest {
         }
         try (AttachmentFixture fixture = new AttachmentFixture(directory)) {
             assertEquals(1, fixture.service.list(fixture.incident.id()).value().orElseThrow().size());
+            LocalApplicationState reopened = codec.decode(Files.readAllBytes(canonical));
+            assertEquals(LocalApplicationStateCodec.SCHEMA_VERSION, reopened.schemaVersion());
         }
     }
 

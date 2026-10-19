@@ -1,6 +1,7 @@
 package com.company.incidentdesk.ui.admin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -113,7 +114,7 @@ class AdminAccountsPageTest {
     }
 
     @Test
-    void viewRequestApprovalGrantsResponderStatusAndClearsPendingRequest() throws Exception {
+    void viewRequestApprovalGrantsOnlySelectedCategoriesAndClearsPendingRequest() throws Exception {
         try (LocalApplicationStore store = initializedStore()) {
             TestSession sessions = new TestSession(admin());
             PromotionRequestId requestId = new PromotionRequestId(new UUID(0, 51));
@@ -142,7 +143,13 @@ class AdminAccountsPageTest {
             Window detailsDialog = waitForWindowWithLookup("#promotion-request-details");
             assertTrue(onFx(() -> ((javafx.scene.control.TextArea) detailsDialog.getScene()
                     .lookup("#promotion-request-details")).getText()).contains("reporter"));
-            Platform.runLater(() -> clickButtonByText(detailsDialog, "Approve"));
+            assertTrue(onFx(() -> buttonByText(detailsDialog, "Approve selected categories").isDisable()));
+            onFx(() -> {
+                ((CheckBox) detailsDialog.getScene().getRoot().lookup("#promotion-category-IT")).setSelected(true);
+                return null;
+            });
+            assertFalse(onFx(() -> buttonByText(detailsDialog, "Approve selected categories").isDisable()));
+            Platform.runLater(() -> clickButtonByText(detailsDialog, "Approve selected categories"));
 
             waitUntil(() -> onFx(() -> store.findById(REPORTER_ID).orElseThrow().role() == Role.RESPONDER));
             onFx(() -> {
@@ -152,6 +159,10 @@ class AdminAccountsPageTest {
             assertEquals(Role.RESPONDER, store.findById(REPORTER_ID).orElseThrow().role());
             assertEquals(PromotionRequestStatus.APPROVED,
                     store.findPromotionRequest(requestId).orElseThrow().status());
+            assertEquals(Set.of(IncidentCategory.IT), store.findById(REPORTER_ID).orElseThrow()
+                    .responderAccess().categories());
+            assertEquals(Set.of(IncidentCategory.IT), store.findPromotionRequest(requestId).orElseThrow()
+                    .approvedCategories().orElseThrow());
             assertTrue(onFx(() -> visibleViewRequestAccessibleTexts(page)).isEmpty());
         }
     }
@@ -211,15 +222,20 @@ class AdminAccountsPageTest {
     }
 
     private static void clickButtonByText(Window window, String text) {
-        ((javafx.scene.control.ButtonBase) window.getScene().getRoot().lookupAll(".button").stream()
-                .filter(node -> node instanceof javafx.scene.control.ButtonBase button && text.equals(button.getText()))
-                .findFirst().orElseThrow()).fire();
+        buttonByText(window, text).fire();
+    }
+
+    private static Button buttonByText(Window window, String text) {
+        return (Button) window.getScene().getRoot().lookupAll(".button").stream()
+                .filter(node -> node instanceof Button button && text.equals(button.getText()))
+                .findFirst().orElseThrow();
     }
 
     private void submitPendingRequestAsReporter(LocalApplicationStore store, TestSession sessions,
             PromotionRequestService promotionRequests) {
         sessions.account = store.findById(REPORTER_ID).orElseThrow();
-        assertTrue(promotionRequests.submit(Set.of(IncidentCategory.IT), Optional.of("please")).isSuccess());
+        assertTrue(promotionRequests.submit(Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES),
+                Optional.of("please")).isSuccess());
         sessions.account = store.findById(ADMIN_ID).orElseThrow();
     }
 
