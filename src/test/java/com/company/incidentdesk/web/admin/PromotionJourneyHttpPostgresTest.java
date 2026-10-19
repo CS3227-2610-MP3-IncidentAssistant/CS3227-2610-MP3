@@ -60,7 +60,7 @@ class PromotionJourneyHttpPostgresTest {
     @DynamicPropertySource
     static void configureIsolatedDatabase(DynamicPropertyRegistry properties) {
         DatabaseTarget database = databaseTarget();
-        properties.add("DATABASE_URL", database::applicationJdbcUrl);
+        properties.add("DATABASE_URL", database::applicationDatabaseUrl);
     }
 
     @AfterAll
@@ -210,8 +210,9 @@ class PromotionJourneyHttpPostgresTest {
         ensureDifferentFromApplicationDatabase(database.jdbcUrl());
         DataSource admin = new DriverManagerDataSource(database.jdbcUrl(), database.username(), database.password());
         new JdbcTemplate(admin).execute("CREATE SCHEMA " + SCHEMA);
-        String schemaUrl = withCurrentSchema(database.jdbcUrl(), SCHEMA);
-        DataSource testDataSource = new DriverManagerDataSource(schemaUrl, database.username(), database.password());
+        String schemaUrl = withCurrentSchema(testUrl, SCHEMA);
+        String schemaJdbcUrl = NeonDatabaseUrl.parse(schemaUrl).jdbcUrl();
+        DataSource testDataSource = new DriverManagerDataSource(schemaJdbcUrl, database.username(), database.password());
         Flyway.configure().dataSource(testDataSource).locations("classpath:db/migration")
                 .defaultSchema(SCHEMA).schemas(SCHEMA).load().migrate();
         target = new DatabaseTarget(admin, schemaUrl);
@@ -263,5 +264,5 @@ class PromotionJourneyHttpPostgresTest {
         }
     }
 
-    private record DatabaseTarget(DataSource administrativeDataSource, String applicationJdbcUrl) { }
+    private record DatabaseTarget(DataSource administrativeDataSource, String applicationDatabaseUrl) { }
 }
