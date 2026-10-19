@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,7 +36,6 @@ import com.company.incidentdesk.IncidentDeskWebApplication;
 import com.company.incidentdesk.domain.incident.IncidentCategory;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import tools.jackson.databind.json.JsonMapper;
 
 class AiGatewayWebAvailabilityPostgresTest extends AiGatewayPostgresFixture {
     private static AiGatewayFakeProvider provider;
@@ -81,11 +81,10 @@ class AiGatewayWebAvailabilityPostgresTest extends AiGatewayPostgresFixture {
                     var session = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/auth/session"))
                             .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
                     assertEquals(200, session.statusCode());
-                    var csrf = JsonMapper.builder().build().readTree(session.body());
                     String form = "username=" + loginActor + "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8);
                     var login = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/auth/reporter/login"))
                             .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/x-www-form-urlencoded")
-                            .header(csrf.path("csrfHeader").asString(), csrf.path("csrfToken").asString())
+                            .header("X-XSRF-TOKEN", csrfToken(cookies, origin))
                             .POST(HttpRequest.BodyPublishers.ofString(form)).build(), HttpResponse.BodyHandlers.ofString());
                     assertEquals(204, login.statusCode());
                     assertAvailable(browser, origin, "/api/v1/reporter/incidents");
@@ -127,6 +126,13 @@ class AiGatewayWebAvailabilityPostgresTest extends AiGatewayPostgresFixture {
 
     private static AiRequest.ReporterDraft draft() {
         return new AiRequest.ReporterDraft("Broken display", IncidentCategory.IT, "The display is flickering.");
+    }
+
+    private static String csrfToken(CookieManager cookies, URI origin) {
+        return cookies.getCookieStore().get(origin).stream()
+                .filter(cookie -> "XSRF-TOKEN".equals(cookie.getName()) && !cookie.hasExpired())
+                .map(cookie -> URLDecoder.decode(cookie.getValue(), StandardCharsets.UTF_8))
+                .findFirst().orElseThrow(() -> new AssertionError("Expected session CSRF cookie"));
     }
 
     private static void assertAvailable(HttpClient browser, URI origin, String path) throws Exception {
