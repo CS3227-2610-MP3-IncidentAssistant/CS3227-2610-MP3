@@ -10,11 +10,16 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -144,6 +149,108 @@ class SoclaasClientTest {
                     SUCCESS + " {}"}) {
                 response = body;
                 assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+            }
+        }
+    }
+
+    @Test
+    void rejectionDiagnosticsUseFixedReasonsWithoutProviderTextOrCredentials() {
+        var logger = Logger.getLogger(SoclaasClient.class.getName());
+        var previousLevel = logger.getLevel();
+        var diagnostics = new CopyOnWriteArrayList<String>();
+        var handler = new Handler() {
+            @Override public void publish(LogRecord record) {
+                var diagnostic = new StringBuilder(record.getMessage());
+                if (record.getParameters() != null) {
+                    for (Object parameter : record.getParameters()) {
+                        diagnostic.append(' ').append(parameter);
+                    }
+                }
+                diagnostics.add(diagnostic.toString());
+            }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        logger.addHandler(handler);
+        logger.setLevel(Level.ALL);
+        try (var client = ready()) {
+            response = """
+                    {"choices":[{"finish_reason":"length","message":{"role":"assistant",
+                    "content":"PRIVATE_PROVIDER_TEXT fake-api-key",
+                    "reasoning_content":"PRIVATE_REASONING_TEXT"}}]}
+                    """;
+            assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+            String limited = String.join("\n", diagnostics);
+            assertTrue(limited.contains("OUTPUT_TOKEN_LIMIT"));
+            assertFalse(limited.contains("PRIVATE_PROVIDER_TEXT"));
+            assertFalse(limited.contains("PRIVATE_REASONING_TEXT"));
+            assertFalse(limited.contains("fake-api-key"));
+            assertFalse(limited.contains("synthetic-secret"));
+
+            diagnostics.clear();
+            response = response.replace("\"length\"", "\"PRIVATE_FINISH_REASON\"");
+            assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+            String unknown = String.join("\n", diagnostics);
+            assertTrue(unknown.contains("FINISH_REASON"));
+            assertFalse(unknown.contains("OUTPUT_TOKEN_LIMIT"));
+            assertFalse(unknown.contains("PRIVATE_FINISH_REASON"));
+            assertFalse(unknown.contains("PRIVATE_PROVIDER_TEXT"));
+            assertFalse(unknown.contains("PRIVATE_REASONING_TEXT"));
+            assertFalse(unknown.contains("fake-api-key"));
+            assertFalse(unknown.contains("synthetic-secret"));
+
+            String[][] actions = {
+                    {"\"tool_calls\":[{\"name\":\"PRIVATE_ACTION\"}]", "TOOL_CALLS"},
+                    {"\"function_call\":{}", "EMPTY_FUNCTION_CALL"},
+                    {"\"function_call\":{\"name\":\"PRIVATE_ACTION\"}", "FUNCTION_CALL"},
+                    {"\"refusal\":\"\"", "EMPTY_REFUSAL"},
+                    {"\"refusal\":\"PRIVATE_REFUSAL\"", "REFUSAL"}
+            };
+            for (String[] action : actions) {
+                diagnostics.clear();
+                response = "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\","
+                        + "\"content\":\"OK\"," + action[0] + "}}]}";
+                assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+                String rejectedAction = String.join("\n", diagnostics);
+                assertTrue(rejectedAction.contains(" " + action[1]));
+                assertFalse(rejectedAction.contains("PRIVATE"));
+                assertFalse(rejectedAction.contains("synthetic-secret"));
+            }
+        } finally {
+            logger.removeHandler(handler);
+            logger.setLevel(previousLevel);
+        }
+    }
+
+    @Test
+    void acceptsOnlyAbsentNullOrEmptyArrayToolCallsWithoutWeakeningOutputValidation() {
+        try (var client = ready()) {
+            for (String field : new String[] {"", ",\"tool_calls\":null", ",\"tool_calls\":[]"}) {
+                response = SUCCESS.replace("\"content\":\"OK\"", "\"content\":\"OK\"" + field);
+                int before = generationCalls.get();
+                var completion = client.complete("system", "{}");
+                assertEquals("OK", completion.text());
+                assertEquals(12L, completion.usage().promptTokens());
+                assertEquals(2L, completion.usage().completionTokens());
+                assertEquals(14L, completion.usage().totalTokens());
+                assertEquals(before + 1, generationCalls.get());
+            }
+            for (String invalid : new String[] {"[{}]", "[null]", "{}", "\"\"", "false", "0"}) {
+                response = SUCCESS.replace("\"content\":\"OK\"", "\"content\":\"OK\",\"tool_calls\":" + invalid);
+                int before = generationCalls.get();
+                assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+                assertEquals(before + 1, generationCalls.get());
+            }
+            for (String invalid : new String[] {
+                    SUCCESS.replace("\"content\":\"OK\"", "\"content\":\"OK\",\"tool_calls\":[],\"function_call\":{}"),
+                    SUCCESS.replace("\"content\":\"OK\"", "\"content\":\"OK\",\"tool_calls\":[],\"refusal\":\"declined\""),
+                    SUCCESS.replace("\"content\":\"OK\"", "\"content\":\" \",\"tool_calls\":[]"),
+                    SUCCESS.replace("\"content\":\"OK\"", "\"content\":\"OK\",\"tool_calls\":[]")
+                            .replace("\"stop\"", "\"length\"") }) {
+                response = invalid;
+                int before = generationCalls.get();
+                assertCategory("AI_INVALID_RESPONSE", () -> client.complete("system", "{}"));
+                assertEquals(before + 1, generationCalls.get());
             }
         }
     }

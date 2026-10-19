@@ -118,16 +118,16 @@ class SecuredAiGatewayPostgresTest extends AiGatewayPostgresFixture {
     }
 
     @Test
-    void malformedToolAndMissingUsageKeepConservativeCharges() {
+    void malformedToolsAndEmptyToolListWithMissingUsageKeepConservativeCharges() {
         authenticate(account("REPORTER"), "REPORTER");
         provider.body = """
-                {"choices":[{"message":{"role":"assistant","content":"suggestion","tool_calls":[]},"finish_reason":"stop"}]}
+                {"choices":[{"message":{"role":"assistant","content":"suggestion","tool_calls":[{}]},"finish_reason":"stop"}]}
                 """;
         assertCategory(Category.AI_INVALID_RESPONSE, () -> gateway.assist(draft("description")));
         long reserved = jdbc.queryForObject("SELECT charged FROM ai_usage_requests", Long.class);
         assertTrue(reserved >= 1200);
         provider.body = """
-                {"choices":[{"message":{"role":"assistant","content":"suggestion"},"finish_reason":"stop"}]}
+                {"choices":[{"message":{"role":"assistant","content":"suggestion","tool_calls":[]},"finish_reason":"stop"}]}
                 """;
         assertEquals("suggestion", gateway.assist(draft("description")).text());
         assertEquals(2 * reserved, jdbc.queryForObject("SELECT sum(charged) FROM ai_usage_requests", Long.class));
