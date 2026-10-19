@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 
 import javax.sql.DataSource;
 
@@ -28,10 +30,11 @@ import tools.jackson.databind.json.JsonMapper;
 class ReporterAiLiveSmokeTest extends AiGatewayPostgresFixture {
     @Test
     void oneSyntheticDraftUsesRealGatewayWithoutSavingAnIncident() throws Exception {
+        var cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         try (var application = new SpringApplicationBuilder(Dependencies.class, IncidentDeskWebApplication.class)
                 .run("--server.port=0", "--AI_ENABLED=true", "--INCIDENT_DESK_SECURE_COOKIES=false",
                         "--spring.flyway.enabled=false", "--spring.main.banner-mode=off");
-                var browser = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+                var browser = HttpClient.newBuilder().cookieHandler(cookies)
                         .connectTimeout(Duration.ofSeconds(3)).build()) {
             var actor = account("REPORTER");
             jdbc.update("INSERT INTO account_credentials(account_id,password_hash) VALUES (?,?)", actor,
@@ -41,19 +44,19 @@ class ReporterAiLiveSmokeTest extends AiGatewayPostgresFixture {
             var json = JsonMapper.builder().build();
             var session = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/auth/session"))
                     .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
-            var csrf = json.readTree(session.body());
+            assertEquals(200, session.statusCode());
             var login = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/auth/reporter/login"))
                     .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/x-www-form-urlencoded")
-                    .header(csrf.path("csrfHeader").asString(), csrf.path("csrfToken").asString())
+                    .header("X-XSRF-TOKEN", csrfToken(cookies, origin))
                     .POST(HttpRequest.BodyPublishers.ofString("username=" + actor + "&password=synthetic-live-password-42"))
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(204, login.statusCode());
             session = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/auth/session"))
                     .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
-            csrf = json.readTree(session.body());
+            assertEquals(200, session.statusCode());
             var result = browser.send(HttpRequest.newBuilder(origin.resolve("/api/v1/reporter/ai/description"))
                     .timeout(Duration.ofSeconds(35)).header("Content-Type", "application/json")
-                    .header(csrf.path("csrfHeader").asString(), csrf.path("csrfToken").asString())
+                    .header("X-XSRF-TOKEN", csrfToken(cookies, origin))
                     .POST(HttpRequest.BodyPublishers.ofString("""
                             {"title":"Office fall","category":"IT",
                             "description":"i fell from the office window"}
@@ -66,6 +69,13 @@ class ReporterAiLiveSmokeTest extends AiGatewayPostgresFixture {
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM ai_usage_requests", Integer.class));
             assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE action LIKE 'AI_%'", Integer.class));
         }
+    }
+
+    private static String csrfToken(CookieManager cookies, URI origin) {
+        return cookies.getCookieStore().get(origin).stream()
+                .filter(cookie -> "XSRF-TOKEN".equals(cookie.getName()) && !cookie.hasExpired())
+                .map(cookie -> URLDecoder.decode(cookie.getValue(), StandardCharsets.UTF_8))
+                .findFirst().orElseThrow(() -> new AssertionError("Expected session CSRF cookie"));
     }
 
     @TestConfiguration(proxyBeanMethods = false)

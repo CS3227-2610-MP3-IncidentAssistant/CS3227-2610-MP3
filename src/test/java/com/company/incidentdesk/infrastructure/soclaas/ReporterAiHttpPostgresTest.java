@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -215,10 +216,10 @@ class ReporterAiHttpPostgresTest extends AiGatewayPostgresFixture {
         jdbc.update("INSERT INTO account_credentials(account_id,password_hash) VALUES (?,?)", actor,
                 application.getBean(PasswordEncoder.class).encode(password));
         var browser = new Browser(targetOrigin);
-        var csrf = browser.session();
+        browser.session();
         var response = browser.client.send(HttpRequest.newBuilder(targetOrigin.resolve("/api/v1/auth/" + role + "/login"))
                 .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/x-www-form-urlencoded")
-                .header(csrf.path("csrfHeader").asString(), csrf.path("csrfToken").asString())
+                .header("X-XSRF-TOKEN", browser.csrfToken())
                 .POST(HttpRequest.BodyPublishers.ofString("username=" + actor + "&password="
                         + URLEncoder.encode(password, StandardCharsets.UTF_8))).build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(204, response.statusCode(), response.body());
@@ -233,7 +234,8 @@ class ReporterAiHttpPostgresTest extends AiGatewayPostgresFixture {
 
     private static final class Browser implements AutoCloseable {
         private final URI targetOrigin;
-        final HttpClient client = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+        private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        final HttpClient client = HttpClient.newBuilder().cookieHandler(cookies)
                 .connectTimeout(Duration.ofSeconds(3)).build();
 
         Browser() { this(origin); }
@@ -250,10 +252,17 @@ class ReporterAiHttpPostgresTest extends AiGatewayPostgresFixture {
             var request = HttpRequest.newBuilder(targetOrigin.resolve(PATH)).timeout(Duration.ofSeconds(10))
                     .header("Content-Type", "application/json");
             if (csrf) {
-                var token = session();
-                request.header(token.path("csrfHeader").asString(), token.path("csrfToken").asString());
+                session();
+                request.header("X-XSRF-TOKEN", csrfToken());
             }
             return client.send(request.POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+        }
+
+        String csrfToken() {
+            return cookies.getCookieStore().get(targetOrigin).stream()
+                    .filter(cookie -> "XSRF-TOKEN".equals(cookie.getName()) && !cookie.hasExpired())
+                    .map(cookie -> URLDecoder.decode(cookie.getValue(), StandardCharsets.UTF_8))
+                    .findFirst().orElseThrow(() -> new AssertionError("Expected session CSRF cookie"));
         }
 
         @Override public void close() { client.close(); }
