@@ -1,11 +1,37 @@
+import { useEffect, useRef, useState } from 'react'
 import type { IncidentCategory } from '../api'
 import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
+import {
+  loadResponderQueue,
+  ResponderQueueError,
+  type ResponderQueuePage,
+  type ResponderQueueQuery,
+} from './responderApi'
 
+const PAGE_SIZE = 25
 const categoryNames: Record<IncidentCategory, string> = {
   IT: 'IT',
   HUMAN_RELATIONS: 'Human relations',
   FACILITIES: 'Facilities',
+}
+const statusOptions = ['SUBMITTED', 'ASSIGNED'] as const
+
+type DraftFilters = Pick<ResponderQueueQuery, 'search' | 'categories' | 'statuses' | 'assignment'>
+type QueueState =
+  | { kind: 'loading' }
+  | { kind: 'loaded'; page: ResponderQueuePage }
+  | { kind: 'session-expired' }
+  | { kind: 'denied' }
+  | { kind: 'invalid' }
+  | { kind: 'service-error' }
+  | { kind: 'signing-out' }
+
+const initialFilters: DraftFilters = {
+  search: '',
+  categories: [],
+  statuses: [],
+  assignment: 'ALL',
 }
 
 export function ResponderPortal({ categories, loginName, onLogout, serviceHealth }: {
@@ -14,7 +40,73 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   onLogout: () => Promise<void>
   serviceHealth: HealthState
 }) {
-  const navigation: RoleNavigationItem[] = [{ label: 'Access', current: true }]
+  const [draft, setDraft] = useState<DraftFilters>(initialFilters)
+  const [query, setQuery] = useState<ResponderQueueQuery>({ ...initialFilters, page: 0, size: PAGE_SIZE })
+  const [queue, setQueue] = useState<QueueState>({ kind: 'loading' })
+  const requestGeneration = useRef(0)
+  const activeRequest = useRef<AbortController | null>(null)
+  const navigation: RoleNavigationItem[] = [{ label: 'Incident queue', current: true }]
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const generation = ++requestGeneration.current
+    activeRequest.current = controller
+    loadResponderQueue(query, controller.signal)
+      .then((page) => {
+        if (!controller.signal.aborted && generation === requestGeneration.current) {
+          setQueue({ kind: 'loaded', page })
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || generation !== requestGeneration.current) return
+        if (error instanceof ResponderQueueError) {
+          setQueue({
+            kind: error.kind === 'session' ? 'session-expired'
+              : error.kind === 'denied' ? 'denied'
+                : error.kind === 'invalid' ? 'invalid' : 'service-error',
+          })
+        } else {
+          setQueue({ kind: 'service-error' })
+        }
+      })
+    return () => {
+      controller.abort()
+      if (activeRequest.current === controller) activeRequest.current = null
+    }
+  }, [query])
+
+  function submitFilters(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    changeQuery({ ...draft, search: draft.search.trim(), page: 0, size: PAGE_SIZE })
+  }
+
+  function changePage(page: number) {
+    if (queue.kind !== 'loaded' || page < 0 || page >= queue.page.totalPages) return
+    changeQuery({ ...query, page })
+  }
+
+  function refreshQueue() {
+    changeQuery({ ...query, page: 0 })
+  }
+
+  function changeQuery(next: ResponderQueueQuery) {
+    requestGeneration.current++
+    activeRequest.current?.abort()
+    setQueue({ kind: 'loading' })
+    setQuery(next)
+  }
+
+  async function signOut() {
+    requestGeneration.current++
+    activeRequest.current?.abort()
+    setQueue({ kind: 'signing-out' })
+    try {
+      await onLogout()
+    } catch {
+      setQueue({ kind: 'service-error' })
+    }
+  }
+
   return (
     <RoleShell
       actorInitial="R"
@@ -23,7 +115,7 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
       navigationId="responder-navigation"
       navigationItems={navigation}
       navigationLabel="Responder navigation"
-      onLogout={onLogout}
+      onLogout={signOut}
       roleLabel="Responder"
       serviceHealth={serviceHealth}
     >
@@ -31,21 +123,182 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
         <header className="page-header">
           <div>
             <p className="eyebrow">Responder workspace</p>
-            <h1>Approved incident categories</h1>
-            <p>Your account can access only incidents in these categories.</p>
+            <h1>Incident queue</h1>
+            <p>View incidents assigned to you and unassigned incidents in your accessible categories.</p>
           </div>
+          <button className="secondary-button" type="button" onClick={refreshQueue}>Refresh queue</button>
         </header>
-        <section className="incident-panel" aria-labelledby="responder-categories-heading">
-          <h2 id="responder-categories-heading">Your access</h2>
-          {categories.length === 0 ? (
-            <p role="status">No incident categories are currently assigned to this account.</p>
-          ) : (
-            <ul>
-              {categories.map((category) => <li key={category}>{categoryNames[category]}</li>)}
-            </ul>
-          )}
+
+        <section className="incident-panel" aria-labelledby="responder-queue-heading">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Authorized incidents</p>
+              <h2 id="responder-queue-heading">Queue</h2>
+            </div>
+            {queue.kind === 'loaded' && <span className="data-state">{queue.page.totalElements} incidents</span>}
+          </div>
+          <form className="responder-filters" onSubmit={submitFilters}>
+            <label htmlFor="responder-search">Search incidents</label>
+            <input
+              id="responder-search"
+              maxLength={200}
+              value={draft.search}
+              onChange={(event) => setDraft({ ...draft, search: event.target.value })}
+              placeholder="Title, description, or incident ID"
+            />
+            {queue.kind === 'loaded' && queue.page.categoriesConfigured && categories.length > 0 && (
+              <fieldset className="category-choice">
+                <legend>Category</legend>
+                {categories.map((category) => (
+                  <label key={category}>
+                    <input
+                      type="checkbox"
+                      checked={draft.categories.includes(category)}
+                      onChange={() => setDraft({ ...draft, categories: toggleValue(draft.categories, category) })}
+                    />
+                    {categoryNames[category]}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <fieldset className="category-choice">
+              <legend>Status</legend>
+              {statusOptions.map((status) => (
+                <label key={status}>
+                  <input
+                    type="checkbox"
+                    checked={draft.statuses.includes(status)}
+                    onChange={() => setDraft({ ...draft, statuses: toggleValue(draft.statuses, status) })}
+                  />
+                  {statusLabel(status)}
+                </label>
+              ))}
+            </fieldset>
+            <label htmlFor="responder-assignment">Assignment</label>
+            <select
+              id="responder-assignment"
+              value={draft.assignment}
+              onChange={(event) => setDraft({ ...draft, assignment: event.target.value as DraftFilters['assignment'] })}
+            >
+              <option value="ALL">All queue incidents</option>
+              <option value="ASSIGNED">Assigned to me</option>
+              <option value="UNASSIGNED">Available to claim</option>
+            </select>
+            <button className="primary-button" type="submit">Apply filters</button>
+          </form>
+
+          <QueueContent state={queue} onRetry={refreshQueue} onLogout={signOut} onPageChange={changePage} />
         </section>
       </main>
     </RoleShell>
   )
+}
+
+function QueueContent({ state, onRetry, onLogout, onPageChange }: {
+  state: QueueState
+  onRetry: () => void
+  onLogout: () => Promise<void>
+  onPageChange: (page: number) => void
+}) {
+  if (state.kind === 'loading') return <p className="panel-state" role="status">Loading incidents…</p>
+  if (state.kind === 'signing-out') return <p className="panel-state" role="status">Signing out…</p>
+  if (state.kind === 'session-expired') {
+    return (
+      <div className="panel-state" role="alert">
+        Your session has expired or changed. Sign in again to view the incident queue.{' '}
+        <button type="button" onClick={() => void onLogout()}>Return to portal selection</button>
+      </div>
+    )
+  }
+  if (state.kind === 'denied') {
+    return <p className="panel-state" role="alert">The incident queue is unavailable for this session.</p>
+  }
+  if (state.kind === 'invalid') {
+    return (
+      <div className="panel-state" role="alert">
+        One or more filters are invalid. Update them and try again.{' '}
+        <button type="button" onClick={onRetry}>Try again</button>
+      </div>
+    )
+  }
+  if (state.kind === 'service-error') {
+    return (
+      <div className="panel-state" role="alert">
+        Incidents are temporarily unavailable.{' '}
+        <button type="button" onClick={onRetry}>Try again</button>
+      </div>
+    )
+  }
+
+  const { page } = state
+  return (
+    <>
+      {!page.categoriesConfigured && (
+        <p className="panel-state" role="status">
+          No categories are currently assigned. Incidents already assigned to you can still appear here.
+        </p>
+      )}
+      {page.incidents.length === 0 ? (
+        <div className="empty-state">
+          <span className="empty-state__mark" aria-hidden="true">○</span>
+          <h3>{page.categoriesConfigured ? 'No incidents match these filters' : 'No assigned incidents to show'}</h3>
+          <p>{page.categoriesConfigured
+            ? 'Try changing your search or filters.'
+            : 'Incidents assigned to you will appear here, even when no categories are assigned.'}</p>
+        </div>
+      ) : (
+        <IncidentTable incidents={page.incidents} />
+      )}
+      {page.totalPages > 1 && (
+        <div className="pagination" aria-label="Incident queue pages">
+          <button type="button" disabled={page.page === 0} onClick={() => onPageChange(page.page - 1)}>
+            Previous
+          </button>
+          <span>Page {page.page + 1} of {page.totalPages}</span>
+          <button type="button" disabled={page.page + 1 >= page.totalPages}
+            onClick={() => onPageChange(page.page + 1)}>
+            Next
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
+function IncidentTable({ incidents }: { incidents: ResponderQueuePage['incidents'] }) {
+  return (
+    <div className="table-region" role="region" aria-label="Responder incidents" tabIndex={0}>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Incident</th>
+            <th scope="col">Category</th>
+            <th scope="col">Status</th>
+            <th scope="col">Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {incidents.map((incident) => (
+            <tr key={incident.id}>
+              <th scope="row">
+                <span className="incident-title">{incident.title}</span>
+                <small>{incident.id}</small>
+              </th>
+              <td>{categoryNames[incident.category]}</td>
+              <td><span className="status-badge">{statusLabel(incident.status)}</span></td>
+              <td>{new Date(incident.submittedAt).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function toggleValue<T extends string>(values: T[], value: T): T[] {
+  return values.includes(value) ? values.filter((current) => current !== value) : [...values, value]
+}
+
+function statusLabel(status: 'SUBMITTED' | 'ASSIGNED'): string {
+  return status === 'SUBMITTED' ? 'Submitted' : 'Assigned'
 }

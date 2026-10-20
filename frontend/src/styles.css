@@ -98,6 +98,13 @@ button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2p
 .auth-switch { width: 100%; margin-top: 16px; }
 .filter-bar { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: end; padding: 16px 22px; border-bottom: 1px solid var(--color-border); }
 .filter-bar label { grid-column: 1 / -1; }
+.responder-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: end; padding: 16px 22px; border-bottom: 1px solid var(--color-border); }
+.responder-filters > label:first-child, .responder-filters > input:first-of-type { grid-column: 1 / -1; }
+.responder-filters > label, .responder-filters > select { min-height: 42px; }
+.responder-filters > label[for="responder-assignment"], .responder-filters > select { grid-column: 1; }
+.responder-filters > input, .responder-filters > select { min-width: 0; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.responder-filters > button { grid-column: 2; justify-self: start; min-height: 42px; }
+.responder-filters .category-choice { margin: 0; }
 .panel-state { padding: 32px 22px; }
 .table-region { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
@@ -145,6 +152,10 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
   .secondary-button { align-self: flex-start; }
   .filter-bar { grid-template-columns: 1fr; }
   .filter-bar label { grid-column: auto; }
+  .responder-filters { grid-template-columns: 1fr; }
+  .responder-filters > label:first-child, .responder-filters > input:first-of-type,
+  .responder-filters > label[for="responder-assignment"], .responder-filters > select,
+  .responder-filters > button { grid-column: 1; }
   .incident-form textarea, .incident-form #incident-description + .field-error, .incident-form label[for="incident-description"] { grid-column: auto; }
 }
 
