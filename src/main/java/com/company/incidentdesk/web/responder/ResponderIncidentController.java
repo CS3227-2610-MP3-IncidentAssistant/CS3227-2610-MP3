@@ -11,6 +11,7 @@ import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentP
 import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderAccessDeniedException;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.InvalidResolutionException;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.InvalidQueueFilterException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.CacheControl;
@@ -52,6 +53,18 @@ final class ResponderIncidentController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("claimed", true));
     }
 
+    @PostMapping("/{incidentId}/resolve")
+    ResponseEntity<?> resolve(Principal principal, @PathVariable UUID incidentId,
+            @RequestBody(required = false) ResolveRequest request) {
+        var result = incidents.resolve(principal.getName(), incidentId,
+                request == null ? null : request.requestId(), request == null ? null : request.remarks());
+        if (!result.resolved()) {
+            return safeError(HttpStatus.CONFLICT, "RESOLUTION_CONFLICT", "This incident can no longer be resolved.");
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(Map.of("resolved", true, "cycleNumber", result.cycleNumber()));
+    }
+
     @GetMapping("/{incidentId}")
     ResponseEntity<?> detail(Principal principal, @PathVariable UUID incidentId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
@@ -76,7 +89,12 @@ final class ResponderIncidentController {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<?> malformedQuery() {
-        return safeError(HttpStatus.BAD_REQUEST, "INVALID_QUERY", "The queue query is invalid.");
+        return safeError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "The Responder request is invalid.");
+    }
+
+    @ExceptionHandler(InvalidResolutionException.class)
+    ResponseEntity<?> invalidResolution() {
+        return safeError(HttpStatus.BAD_REQUEST, "INVALID_RESOLUTION", "Resolution remarks are invalid.");
     }
 
     private static ResponseEntity<Map<String, String>> safeError(HttpStatus status, String code, String message) {
@@ -86,5 +104,8 @@ final class ResponderIncidentController {
 
     record QueueRequest(String search, List<String> categories, List<String> statuses,
             Assignment assignment, int page, int size) {
+    }
+
+    record ResolveRequest(UUID requestId, String remarks) {
     }
 }

@@ -23,6 +23,7 @@ final class ResponderIncidentService {
     private static final int DEFAULT_PAGE_SIZE = 25;
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_SEARCH_LENGTH = 200;
+    private static final int MAX_RESOLUTION_REMARKS_LENGTH = 2_000;
     private static final Set<String> ALLOWED_CATEGORIES = Arrays.stream(IncidentCategory.values())
             .map(Enum::name).collect(Collectors.toUnmodifiableSet());
     private static final Set<String> ALLOWED_STATUSES = Set.of(
@@ -50,6 +51,20 @@ final class ResponderIncidentService {
         String trustedLoginName = requireLoginName(loginName);
         Objects.requireNonNull(incidentId, "incidentId");
         return incidents.claim(trustedLoginName, incidentId);
+    }
+
+    ResolutionResult resolve(String loginName, UUID incidentId, String remarks) {
+        return resolve(loginName, incidentId, UUID.randomUUID(), remarks);
+    }
+
+    ResolutionResult resolve(String loginName, UUID incidentId, UUID requestId, String remarks) {
+        String trustedLoginName = requireLoginName(loginName);
+        Objects.requireNonNull(incidentId, "incidentId");
+        if (requestId == null || remarks == null || remarks.isBlank()
+                || remarks.codePointCount(0, remarks.length()) > MAX_RESOLUTION_REMARKS_LENGTH) {
+            throw new InvalidResolutionException();
+        }
+        return incidents.resolve(trustedLoginName, incidentId, requestId, remarks);
     }
 
     IncidentDetail detail(String loginName, UUID incidentId) {
@@ -105,6 +120,12 @@ final class ResponderIncidentService {
     record ClaimResult(boolean claimed) {
     }
 
+    record ResolutionResult(boolean resolved, int cycleNumber) {
+        static ResolutionResult conflict() {
+            return new ResolutionResult(false, 0);
+        }
+    }
+
     /** Core persisted fields only; excludes raw reporter ID and content not wired to web storage. */
     record IncidentDetail(
             UUID id,
@@ -114,7 +135,19 @@ final class ResponderIncidentService {
             String category,
             String status,
             Instant submittedAt,
-            Instant queueEnteredAt) {
+            Instant queueEnteredAt,
+            List<ResolutionHistoryEntry> resolutionHistory) {
+        IncidentDetail {
+            resolutionHistory = List.copyOf(resolutionHistory);
+        }
+
+        IncidentDetail(UUID id, String title, String description, String reporterLabel, String category,
+                String status, Instant submittedAt, Instant queueEnteredAt) {
+            this(id, title, description, reporterLabel, category, status, submittedAt, queueEnteredAt, List.of());
+        }
+    }
+
+    record ResolutionHistoryEntry(int cycleNumber, Instant resolvedAt, String remarks) {
     }
 
     /** Deliberately excludes reporter, assignee, anonymity, and storage identifiers. */
@@ -140,6 +173,10 @@ final class ResponderIncidentService {
     }
 
     static final class InvalidQueueFilterException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
+    static final class InvalidResolutionException extends RuntimeException {
         private static final long serialVersionUID = 1L;
     }
 }

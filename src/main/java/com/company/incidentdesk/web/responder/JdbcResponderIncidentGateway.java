@@ -7,6 +7,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -18,7 +19,9 @@ import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentR
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ClaimResult;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.ResolutionResult;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentDetail;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.ResolutionHistoryEntry;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -90,7 +93,32 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
     }
 
     @Override
+    public ResolutionResult resolve(String loginName, UUID incidentId, UUID requestId, String remarks) {
+        var occurredAt = clock.instant();
+        var resolutionId = identifiers.get();
+        var auditEventId = identifiers.get();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        try {
+            return transaction.execute(status -> resolve(
+                    loginName, incidentId, requestId, remarks, occurredAt, resolutionId, auditEventId));
+        } catch (DataAccessException exception) {
+            throw new ResponderDataAccessException(exception);
+        }
+    }
+
+    @Override
     public Optional<IncidentDetail> findDetail(String loginName, UUID incidentId) {
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        transaction.setReadOnly(true);
+        transaction.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        try {
+            return transaction.execute(status -> readDetail(loginName, incidentId));
+        } catch (DataAccessException exception) {
+            throw new ResponderDataAccessException(exception);
+        }
+    }
+
+    private Optional<IncidentDetail> readDetail(String loginName, UUID incidentId) {
         try {
             List<IncidentDetail> details = jdbc.query("""
                     SELECT i.id, i.title, i.description,
@@ -119,10 +147,24 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                             result.getString("description"),
                             result.getString("reporter_label"),
                             result.getString("category"),
-                            result.getString("status"),
-                            result.getObject("submitted_at", OffsetDateTime.class).toInstant(),
-                            result.getObject("queue_entered_at", OffsetDateTime.class).toInstant()));
-            return details.stream().findFirst();
+                    result.getString("status"),
+                    result.getObject("submitted_at", OffsetDateTime.class).toInstant(),
+                    result.getObject("queue_entered_at", OffsetDateTime.class).toInstant(), List.of()));
+            Optional<IncidentDetail> detail = details.stream().findFirst();
+            if (detail.isEmpty()) return Optional.empty();
+            List<ResolutionHistoryEntry> history = jdbc.query("""
+                    SELECT cycle_number, resolved_at, remarks
+                      FROM incident_resolutions
+                     WHERE incident_id = :incidentId
+                     ORDER BY cycle_number ASC
+                    """, Map.of("incidentId", incidentId), (result, row) -> new ResolutionHistoryEntry(
+                    result.getInt("cycle_number"),
+                    result.getObject("resolved_at", OffsetDateTime.class).toInstant(),
+                    result.getString("remarks")));
+            IncidentDetail current = detail.get();
+            return Optional.of(new IncidentDetail(current.id(), current.title(), current.description(),
+                    current.reporterLabel(), current.category(), current.status(), current.submittedAt(),
+                    current.queueEnteredAt(), history));
         } catch (DataAccessException exception) {
             throw new ResponderDataAccessException(exception);
         }
@@ -175,7 +217,109 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                 incident.incidentId().toString(), incident.responderId());
     }
 
+    private ResolutionResult resolve(
+            String loginName, UUID incidentId, UUID requestId, String remarks, Instant occurredAt,
+            UUID resolutionId, UUID auditEventId) {
+        jdbc.queryForObject("""
+                SELECT 1
+                  FROM (SELECT pg_advisory_xact_lock(hashtextextended(:requestKey, 0))) request_lock
+                """, Map.of("requestKey", requestId.toString()), Integer.class);
+        List<UUID> responderIds = jdbc.query("""
+                SELECT id
+                  FROM accounts
+                 WHERE login_name = :loginName
+                   AND role = 'RESPONDER'
+                   AND status = 'ENABLED'
+                 FOR SHARE
+        """, Map.of("loginName", loginName),
+                (result, row) -> result.getObject("id", UUID.class));
+        if (responderIds.isEmpty()) return ResolutionResult.conflict();
+        UUID responderId = responderIds.getFirst();
+        List<ExistingResolution> priorAttempts = jdbc.query("""
+                SELECT incident_id, resolved_by, cycle_number, remarks
+                  FROM incident_resolutions
+                 WHERE request_id = :requestId
+                """, Map.of("requestId", requestId), (result, row) -> new ExistingResolution(
+                result.getObject("incident_id", UUID.class), result.getObject("resolved_by", UUID.class),
+                result.getInt("cycle_number"), result.getString("remarks")));
+        if (!priorAttempts.isEmpty()) {
+            ExistingResolution prior = priorAttempts.getFirst();
+            if (incidentId.equals(prior.incidentId()) && responderId.equals(prior.responderId())
+                    && remarks.equals(prior.remarks())) {
+                return new ResolutionResult(true, prior.cycleNumber());
+            }
+            return ResolutionResult.conflict();
+        }
+        List<ResolvedIncident> resolved = jdbc.query("""
+                UPDATE incidents i
+                   SET status = 'RESOLVED',
+                       assignee_id = NULL,
+                       version = i.version + 1
+                 WHERE i.id = :incidentId
+                   AND i.status = 'ASSIGNED'
+                   AND i.assignee_id = :responderId
+                RETURNING i.id
+                """, Map.of("incidentId", incidentId, "responderId", responderId),
+                (result, row) -> new ResolvedIncident(result.getObject("id", UUID.class), responderId));
+        if (resolved.isEmpty()) return priorResolution(responderId, incidentId, requestId, remarks);
+
+        ResolvedIncident incident = resolved.getFirst();
+        Integer previousCycles = jdbc.queryForObject("""
+                SELECT COALESCE(MAX(cycle_number), 0)
+                  FROM incident_resolutions
+                 WHERE incident_id = :incidentId
+                """, Map.of("incidentId", incidentId), Integer.class);
+        int cycleNumber = Objects.requireNonNull(previousCycles, "previousCycles") + 1;
+        jdbc.update("""
+                INSERT INTO incident_resolutions (
+                    id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks
+                ) VALUES (:resolutionId, :requestId, :incidentId, :cycleNumber, :responderId, :occurredAt, :remarks)
+                """, Map.of(
+                "resolutionId", resolutionId,
+                "requestId", requestId,
+                "incidentId", incident.incidentId(),
+                "cycleNumber", cycleNumber,
+                "responderId", incident.responderId(),
+                "occurredAt", Timestamp.from(occurredAt),
+                "remarks", remarks));
+        insertResolutionAudit(incident, occurredAt, auditEventId, resolutionId, cycleNumber);
+        return new ResolutionResult(true, cycleNumber);
+    }
+
+    private ResolutionResult priorResolution(UUID responderId, UUID incidentId, UUID requestId, String remarks) {
+        List<Integer> cycles = jdbc.query("""
+                SELECT cycle_number
+                  FROM incident_resolutions
+                 WHERE request_id = :requestId
+                   AND incident_id = :incidentId
+                   AND resolved_by = :responderId
+                   AND remarks = :remarks
+                """, Map.of("requestId", requestId, "incidentId", incidentId,
+                "responderId", responderId, "remarks", remarks),
+                (result, row) -> result.getInt("cycle_number"));
+        return cycles.isEmpty() ? ResolutionResult.conflict() : new ResolutionResult(true, cycles.getFirst());
+    }
+
+    private record ExistingResolution(UUID incidentId, UUID responderId, int cycleNumber, String remarks) { }
+
+    private void insertResolutionAudit(
+            ResolvedIncident incident, Instant occurredAt, UUID auditEventId,
+            UUID resolutionId, int cycleNumber) {
+        jdbc.getJdbcTemplate().update("""
+                INSERT INTO audit_events (
+                    id, occurred_at, actor_account_id, actor_role, action,
+                    target_type, target_identifier, outcome, details
+                ) VALUES (?, ?, ?, 'RESPONDER', 'INCIDENT_RESOLVED', 'INCIDENT', ?, 'SUCCESS',
+                          jsonb_build_object(
+                              'status', jsonb_build_object('before', 'ASSIGNED', 'after', 'RESOLVED'),
+                              'resolutionId', ?, 'resolutionCycle', ?))
+                """, auditEventId, Timestamp.from(occurredAt), incident.responderId(),
+                incident.incidentId().toString(), resolutionId, cycleNumber);
+    }
+
     private record ClaimedIncident(UUID incidentId, UUID responderId) { }
+
+    private record ResolvedIncident(UUID incidentId, UUID responderId) { }
 
     private IncidentPage readQueue(String loginName, ListCriteria criteria) {
         List<UUID> actorIds = jdbc.query("""

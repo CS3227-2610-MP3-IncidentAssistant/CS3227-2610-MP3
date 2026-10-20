@@ -1,6 +1,7 @@
 package com.company.incidentdesk.web.responder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -81,6 +82,30 @@ class ResponderIncidentServiceTest {
     }
 
     @Test
+    void resolveValidatesCodePointLimitAndPreservesRemarksAndTrustedActor() {
+        RecordingGateway gateway = new RecordingGateway();
+        gateway.resolutionResult = new ResponderIncidentService.ResolutionResult(true, 1);
+        ResponderIncidentService service = new ResponderIncidentService(gateway);
+        UUID incidentId = UUID.fromString("50000000-0000-0000-0000-000000000002");
+        String remarks = "  repaired after 🚦  ";
+
+        var result = service.resolve("CurrentResponder", incidentId, remarks);
+
+        assertTrue(result.resolved());
+        assertEquals("CurrentResponder", gateway.resolveLoginName);
+        assertEquals(incidentId, gateway.resolveIncidentId);
+        assertNotNull(gateway.resolveRequestId);
+        assertEquals(remarks, gateway.resolveRemarks);
+        assertThrows(ResponderIncidentService.InvalidResolutionException.class,
+                () -> service.resolve("CurrentResponder", incidentId, null, remarks));
+        assertThrows(ResponderIncidentService.InvalidResolutionException.class,
+                () -> service.resolve("CurrentResponder", incidentId, "\u2003\t"));
+        assertThrows(ResponderIncidentService.InvalidResolutionException.class,
+                () -> service.resolve("CurrentResponder", incidentId, "🚦".repeat(2001)));
+        assertTrue(service.resolve("CurrentResponder", incidentId, "🚦".repeat(2000)).resolved());
+    }
+
+    @Test
     void detailUsesTrustedLoginNameAndDeniesAnUnavailableIncident() {
         RecordingGateway gateway = new RecordingGateway();
         UUID incidentId = UUID.fromString("50000000-0000-0000-0000-000000000002");
@@ -117,6 +142,12 @@ class ResponderIncidentServiceTest {
         private UUID claimIncidentId;
         private ResponderIncidentService.ClaimResult claimResult = new ResponderIncidentService.ClaimResult(false);
         private Optional<ResponderIncidentService.IncidentDetail> detail = Optional.empty();
+        private String resolveLoginName;
+        private UUID resolveIncidentId;
+        private UUID resolveRequestId;
+        private String resolveRemarks;
+        private ResponderIncidentService.ResolutionResult resolutionResult =
+                ResponderIncidentService.ResolutionResult.conflict();
 
         @Override
         public Optional<IncidentPage> findQueue(String loginName, ListCriteria criteria) {
@@ -130,6 +161,16 @@ class ResponderIncidentServiceTest {
             claimLoginName = loginName;
             claimIncidentId = incidentId;
             return claimResult;
+        }
+
+        @Override
+        public ResponderIncidentService.ResolutionResult resolve(
+                String loginName, UUID incidentId, UUID requestId, String remarks) {
+            resolveLoginName = loginName;
+            resolveIncidentId = incidentId;
+            resolveRequestId = requestId;
+            resolveRemarks = remarks;
+            return resolutionResult;
         }
 
         @Override

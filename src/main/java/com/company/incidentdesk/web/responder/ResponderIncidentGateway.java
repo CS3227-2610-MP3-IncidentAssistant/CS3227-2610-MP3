@@ -12,5 +12,8 @@ interface ResponderIncidentGateway {
 
     ResponderIncidentService.ClaimResult claim(String loginName, UUID incidentId);
 
+    ResponderIncidentService.ResolutionResult resolve(
+            String loginName, UUID incidentId, UUID requestId, String remarks);
+
     Optional<ResponderIncidentService.IncidentDetail> findDetail(String loginName, UUID incidentId);
 }

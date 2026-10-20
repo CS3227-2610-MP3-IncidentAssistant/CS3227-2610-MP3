@@ -47,12 +47,13 @@ class AiMigrationUpgradePostgresTest {
             assertEquals("PENDING", jdbc.queryForObject("SELECT status FROM responder_promotion_requests WHERE id=?", String.class, promotion));
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM ai_usage_control", Integer.class));
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM ai_usage_requests", Integer.class));
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM incident_resolutions", Integer.class));
             for (String table : new String[] {"responder_promotion_requested_categories",
                     "responder_promotion_approved_categories", "responder_category_access"}) {
                 assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class));
             }
-            assertEquals(6, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
-            assertEquals(6, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
+            assertEquals(7, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
+            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE NOT success", Integer.class));
         } finally {
             admin.execute("DROP SCHEMA " + schema + " CASCADE");

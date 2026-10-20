@@ -154,6 +154,27 @@ class ReporterWebSecurityTest {
     }
 
     @Test
+    void responderResolutionRequiresResponderRoleAndCsrf() throws Exception {
+        String resolvePath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001/resolve";
+        mvc.perform(post(resolvePath).with(csrf()).contentType("application/json")
+                        .content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(resolvePath).with(user("reporter").roles("REPORTER")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(resolvePath).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(resolvePath).with(user("responder").roles("RESPONDER"))
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+        mvc.perform(post(resolvePath).with(user("responder").roles("RESPONDER")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void stateChangeRequiresCsrfForReporter() throws Exception {
         mvc.perform(post("/api/v1/reporter/incidents")
                         .with(user("reporter").roles("REPORTER")))
@@ -347,5 +368,10 @@ class ReporterWebSecurityTest {
         @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/{id}/claim")
         void claimIncident() {
         }
+
+        @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/{id}/resolve")
+        void resolveIncident() {
+        }
+
     }
 }
