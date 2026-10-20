@@ -124,6 +124,21 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .responder-detail__description { padding: 22px; }
 .responder-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
 .responder-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.responder-resolution { display: grid; gap: 8px; padding: 0 22px 22px; }
+.responder-resolution label { font-size: 13px; font-weight: 700; }
+.responder-resolution textarea { width: 100%; min-height: 112px; resize: vertical; padding: 10px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.responder-resolution textarea[aria-invalid="true"] { border-color: var(--color-danger); }
+.responder-resolution p { margin: 0; }
+.responder-resolution #responder-resolution-count { color: var(--color-text-muted); font-size: 12px; }
+.responder-resolution #responder-resolution-error { min-height: 1.25em; color: var(--color-danger); }
+.responder-resolution button { justify-self: start; }
+.responder-resolution-history { padding: 0 22px 20px; }
+.responder-resolution-history h3 { margin: 0 0 12px; font-size: 15px; }
+.responder-resolution-history ol { display: grid; gap: 12px; margin: 0; padding-left: 22px; }
+.responder-resolution-history li { padding-left: 4px; }
+.responder-resolution-history h4 { margin: 0; font-size: 14px; }
+.responder-resolution-history__date { margin: 4px 0; color: var(--color-text-muted); font-size: 12px; }
+.responder-resolution-history__remarks { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .responder-detail__feedback { margin: 0 22px 18px; padding: 12px 14px; border-radius: 8px; background: var(--color-info-soft); }
 .responder-detail-view { display: grid; gap: 8px; }
 .responder-detail__feedback p { margin: 0 0 8px; }

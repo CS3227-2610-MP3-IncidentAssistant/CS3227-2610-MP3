@@ -19,6 +19,13 @@ export type ResponderIncidentDetail = {
   status: 'SUBMITTED' | 'ASSIGNED'
   submittedAt: string
   queueEnteredAt: string
+  resolutionHistory: ResponderResolutionHistory[]
+}
+
+export type ResponderResolutionHistory = {
+  cycleNumber: number
+  resolvedAt: string
+  remarks: string
 }
 
 export type ResponderQueuePage = {
@@ -118,5 +125,37 @@ export async function claimResponderIncident(incidentId: string): Promise<void> 
   }
   if (response.status === 409) throw new ResponderQueueError('conflict')
   if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
+  throw new ResponderQueueError('service')
+}
+
+export async function resolveResponderIncident(
+  incidentId: string, requestId: string, remarks: string,
+): Promise<number> {
+  const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' })
+  const csrfToken = readCsrfToken()
+  if (csrfToken) headers.set('X-XSRF-TOKEN', csrfToken)
+
+  const response = await fetch(`/api/v1/responder/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers,
+    body: JSON.stringify({ requestId, remarks }),
+  })
+  if (response.ok) {
+    const result = await response.json() as { cycleNumber?: unknown }
+    if (typeof result.cycleNumber === 'number' && Number.isInteger(result.cycleNumber) && result.cycleNumber > 0) {
+      return result.cycleNumber
+    }
+    throw new ResponderQueueError('service')
+  }
+
+  const errorBody = await response.json().catch(() => null) as { code?: unknown } | null
+  if (response.status === 401 || errorBody?.code === 'SECURITY_SESSION_EXPIRED') {
+    throw new ResponderQueueError('session')
+  }
+  if (response.status === 409) throw new ResponderQueueError('conflict')
+  if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
+  if (response.status === 400) throw new ResponderQueueError('invalid')
   throw new ResponderQueueError('service')
 }

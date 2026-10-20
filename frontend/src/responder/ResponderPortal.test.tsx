@@ -155,6 +155,11 @@ describe('Responder incident queue', () => {
       status: 'SUBMITTED',
       submittedAt: '2026-10-20T01:00:00Z',
       queueEnteredAt: '2026-10-20T01:00:00Z',
+      resolutionHistory: [{
+        cycleNumber: 1,
+        resolvedAt: '2026-10-20T02:00:00Z',
+        remarks: 'Previous resolution text is rendered as text.',
+      }],
     }
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'GET') return response(detail)
@@ -170,6 +175,8 @@ describe('Responder incident queue', () => {
     expect(document.querySelector('script')).not.toBeInTheDocument()
     expect(document.querySelector('img')).not.toBeInTheDocument()
     expect(screen.getByText('Anonymous reporter')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Previous resolutions' })).toBeInTheDocument()
+    expect(screen.getByText('Previous resolution text is rendered as text.')).toBeInTheDocument()
     expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/v1/responder/incidents/${detail.id}`)
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' })
 
@@ -398,6 +405,102 @@ describe('Responder incident queue', () => {
     expect(claimRequests).toBe(1)
   })
 
+  it('resolves an assigned incident once, preserves remarks, and clears detail after success', async () => {
+    let resolveRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/resolve')) {
+        resolveRequests++
+        return response({ resolved: true, cycleNumber: 1 })
+      }
+      if (init?.method === 'GET') return response(detailRecord('ASSIGNED'))
+      return response({ ...basePage, incidents: [row('Assigned for resolution', 'ASSIGNED')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Assigned for resolution' }))
+    const remarks = '  fixed after restart 🚦  '
+    fireEvent.change(await screen.findByLabelText('Resolution remarks'), { target: { value: remarks } })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve incident' }))
+
+    expect(await screen.findByRole('heading', { name: 'Incident resolved' })).toBeInTheDocument()
+    expect(screen.getByText('Your resolution was recorded. Resolution cycle 1 is in history.')).toBeInTheDocument()
+    expect(screen.queryByText('Private detail content')).not.toBeInTheDocument()
+    expect(resolveRequests).toBe(1)
+    const resolveCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/resolve'))
+    expect(resolveCall?.[1]).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store' })
+    expect(JSON.parse(String(resolveCall?.[1]?.body))).toMatchObject({ remarks, requestId: expect.any(String) })
+    expect(JSON.parse(String(resolveCall?.[1]?.body)).requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    )
+    expect(new Headers(resolveCall?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('responder-csrf')
+    expect(screen.getByRole('button', { name: 'Back to queue' })).toBeEnabled()
+  })
+
+  it('rejects blank remarks in the UI and allows an explicit status check after a conflict', async () => {
+    let resolveRequests = 0
+    let detailRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/resolve')) {
+        resolveRequests++
+        return response({ code: 'RESOLUTION_CONFLICT' }, 409)
+      }
+      if (init?.method === 'GET') {
+        detailRequests++
+        return detailRequests === 1 ? response(detailRecord('ASSIGNED'))
+          : response({ code: 'UNAVAILABLE' }, 404)
+      }
+      return response({ ...basePage, incidents: [row('Resolve conflict', 'ASSIGNED')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Resolve conflict' }))
+    fireEvent.change(await screen.findByLabelText('Resolution remarks'), { target: { value: ' \u2003 ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve incident' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter resolution remarks')
+    expect(resolveRequests).toBe(0)
+
+    fireEvent.change(screen.getByLabelText('Resolution remarks'), { target: { value: 'fixed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve incident' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('can no longer be resolved')
+    expect(resolveRequests).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }))
+    expect(await screen.findByRole('heading', { name: 'Incident unavailable' })).toBeInTheDocument()
+    expect(resolveRequests).toBe(1)
+  })
+
+  it('retries an uncertain resolution with the same idempotency key', async () => {
+    let resolveRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/resolve')) {
+        resolveRequests++
+        return response({ message: 'private database failure' }, 503)
+      }
+      if (init?.method === 'GET') return response(detailRecord('ASSIGNED'))
+      return response({ ...basePage, incidents: [row('Uncertain resolution', 'ASSIGNED')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Uncertain resolution' }))
+    fireEvent.change(await screen.findByLabelText('Resolution remarks'), { target: { value: 'fixed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve incident' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('outcome is unknown')
+    expect(screen.queryByText('private database failure')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resolve incident' })).toBeDisabled()
+    expect(resolveRequests).toBe(1)
+    const firstKey = JSON.parse(String(fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/resolve'))?.[1]?.body)).requestId
+
+    fireEvent.click(screen.getByRole('button', { name: 'Safely retry and check status' }))
+    await waitFor(() => expect(resolveRequests).toBe(2))
+    const keys = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/resolve'))
+      .map(([, init]) => JSON.parse(String(init?.body)).requestId)
+    expect(keys).toEqual([firstKey, firstKey])
+  })
+
   it.each([403, 404])('shows the same safe unavailable detail state for HTTP %i', async (status) => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
       ? response({ code: 'UNAVAILABLE', message: 'private server details' }, status)
@@ -474,6 +577,7 @@ function detailRecord(status: 'SUBMITTED' | 'ASSIGNED') {
     status,
     submittedAt: row('Responder detail').submittedAt,
     queueEnteredAt: row('Responder detail').queueEnteredAt,
+    resolutionHistory: [],
   }
 }
 

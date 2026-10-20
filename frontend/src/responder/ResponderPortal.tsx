@@ -6,6 +6,7 @@ import {
   loadResponderQueue,
   loadResponderIncidentDetail,
   claimResponderIncident,
+  resolveResponderIncident,
   ResponderQueueError,
   type ResponderIncidentDetail,
   type ResponderQueuePage,
@@ -41,6 +42,11 @@ type ClaimState =
   | { kind: 'claimed'; incidentId: string; loginName: string }
   | { kind: 'conflict'; incidentId: string; loginName: string }
   | { kind: 'service-error'; incidentId: string; loginName: string }
+type ResolveState =
+  | { kind: 'pending'; incidentId: string; loginName: string }
+  | { kind: 'resolved'; incidentId: string; loginName: string; cycleNumber: number }
+  | { kind: 'conflict'; incidentId: string; loginName: string }
+  | { kind: 'service-error'; incidentId: string; loginName: string; requestId: string; remarks: string }
 
 const initialFilters: DraftFilters = {
   search: '',
@@ -62,13 +68,16 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   const [detailRequestKey, setDetailRequestKey] = useState(0)
   const [detail, setDetail] = useState<DetailState | null>(null)
   const [claim, setClaim] = useState<ClaimState | null>(null)
+  const [resolution, setResolution] = useState<ResolveState | null>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const requestGeneration = useRef(0)
   const activeRequest = useRef<AbortController | null>(null)
   const detailGeneration = useRef(0)
   const activeDetailRequest = useRef<AbortController | null>(null)
   const claimGeneration = useRef(0)
+  const resolutionGeneration = useRef(0)
   const activeClaim = useRef<{ incidentId: string; loginName: string } | null>(null)
+  const activeResolution = useRef<{ incidentId: string; loginName: string } | null>(null)
   const currentLoginName = useRef(loginName)
   const navigation: RoleNavigationItem[] = [{ label: 'Incident queue', current: true }]
 
@@ -78,6 +87,8 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   }, [loginName])
   const currentClaim = selectedIncidentId && claim?.incidentId === selectedIncidentId
     && claim.loginName === loginName ? claim : null
+  const currentResolution = selectedIncidentId && resolution?.incidentId === selectedIncidentId
+    && resolution.loginName === loginName ? resolution : null
 
   useEffect(() => {
     const controller = new AbortController()
@@ -156,7 +167,9 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
 
   function openDetail(incidentId: string) {
     claimGeneration.current++
+    resolutionGeneration.current++
     setClaim({ kind: 'idle', incidentId, loginName })
+    setResolution(null)
     detailGeneration.current++
     activeDetailRequest.current?.abort()
     setDetail({ kind: 'loading', incidentId, loginName })
@@ -211,6 +224,53 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
     }
   }
 
+  async function resolveIncident(incidentId: string, remarks: string, requestId: string = crypto.randomUUID()) {
+    const actor = loginName
+    if (activeResolution.current?.incidentId === incidentId && activeResolution.current.loginName === actor) return
+    const generation = ++resolutionGeneration.current
+    activeResolution.current = { incidentId, loginName: actor }
+    setResolution({ kind: 'pending', incidentId, loginName: actor })
+    try {
+      const cycleNumber = await resolveResponderIncident(incidentId, requestId, remarks)
+      if (generation !== resolutionGeneration.current || currentLoginName.current !== actor) return
+      setResolution({ kind: 'resolved', incidentId, loginName: actor, cycleNumber })
+      setDetail(null)
+      pageHeading.current?.focus()
+      changeQuery({ ...query, page: 0 })
+    } catch (error: unknown) {
+      if (generation !== resolutionGeneration.current || currentLoginName.current !== actor) return
+      if (error instanceof ResponderQueueError && error.kind === 'session') {
+        setResolution(null)
+        setClaim(null)
+        setDetail(null)
+        setSelectedIncidentId(null)
+        setQueue({ kind: 'session-expired' })
+        return
+      }
+      setResolution(error instanceof ResponderQueueError && error.kind === 'conflict'
+        ? { kind: 'conflict', incidentId, loginName: actor }
+        : { kind: 'service-error', incidentId, loginName: actor, requestId, remarks })
+      pageHeading.current?.focus()
+      retryDetail()
+      changeQuery({ ...query })
+    } finally {
+      if (activeResolution.current?.incidentId === incidentId && activeResolution.current.loginName === actor) {
+        activeResolution.current = null
+      }
+    }
+  }
+
+  function refreshResolutionStatus() {
+    if (!selectedIncidentId) return
+    if (currentResolution?.kind === 'service-error') {
+      void resolveIncident(selectedIncidentId, currentResolution.remarks, currentResolution.requestId)
+      return
+    }
+    setResolution(null)
+    retryDetail()
+    changeQuery({ ...query })
+  }
+
   function refreshClaimStatus() {
     if (!selectedIncidentId) return
     setClaim({ kind: 'idle', incidentId: selectedIncidentId, loginName })
@@ -220,6 +280,7 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
 
   function backToQueue() {
     claimGeneration.current++
+    resolutionGeneration.current++
     detailGeneration.current++
     activeDetailRequest.current?.abort()
     setDetail(null)
@@ -243,6 +304,7 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
     setSelectedIncidentId(null)
     setDetail(null)
     setClaim(null)
+    setResolution(null)
     setQueue({ kind: 'signing-out' })
     try {
       await onLogout()
@@ -273,7 +335,8 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
               : 'View incidents assigned to you and unassigned incidents in your accessible categories.'}</p>
           </div>
           {selectedIncidentId
-            ? <button className="secondary-button" type="button" disabled={currentClaim?.kind === 'pending'}
+            ? <button className="secondary-button" type="button" disabled={currentClaim?.kind === 'pending'
+              || currentResolution?.kind === 'pending'}
               onClick={backToQueue}>Back to queue</button>
             : <button className="secondary-button" type="button" onClick={refreshQueue}>Refresh queue</button>}
         </header>
@@ -281,14 +344,29 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
         {selectedIncidentId ? (
           <div className="responder-detail-view">
             <ResponderClaimFeedback state={currentClaim} onRefreshStatus={refreshClaimStatus} />
-            <ResponderDetailContent
-              state={detail?.incidentId === selectedIncidentId && detail.loginName === loginName
-                ? detail : { kind: 'loading', incidentId: selectedIncidentId, loginName }}
-              onRetry={retryDetail}
-              claimState={currentClaim ?? { kind: 'idle', incidentId: selectedIncidentId, loginName }}
-              onClaim={() => void claimIncident(selectedIncidentId)}
-              onLogout={signOut}
-            />
+            {currentResolution?.kind === 'resolved' ? (
+              <section className="incident-panel" aria-labelledby="responder-resolved-heading">
+                <div className="panel-state" role="status">
+                  <h2 id="responder-resolved-heading">Incident resolved</h2>
+                  <p>Your resolution was recorded. Resolution cycle {currentResolution.cycleNumber} is in history.</p>
+                  <button className="primary-button" type="button" onClick={backToQueue}>Return to queue</button>
+                </div>
+              </section>
+            ) : (
+              <>
+                <ResponderResolveFeedback state={currentResolution} onRefreshStatus={refreshResolutionStatus} />
+                <ResponderDetailContent
+                  state={detail?.incidentId === selectedIncidentId && detail.loginName === loginName
+                    ? detail : { kind: 'loading', incidentId: selectedIncidentId, loginName }}
+                  onRetry={retryDetail}
+                  claimState={currentClaim ?? { kind: 'idle', incidentId: selectedIncidentId, loginName }}
+                  resolveState={currentResolution}
+                  onClaim={() => void claimIncident(selectedIncidentId)}
+                  onResolve={(remarks) => void resolveIncident(selectedIncidentId, remarks)}
+                  onLogout={signOut}
+                />
+              </>
+            )}
           </div>
         ) : <section className="incident-panel" aria-labelledby="responder-queue-heading">
           <div className="section-heading">
@@ -482,11 +560,29 @@ function ResponderClaimFeedback({ state, onRefreshStatus }: {
   </div>
 }
 
-function ResponderDetailContent({ state, claimState, onRetry, onClaim, onLogout }: {
+function ResponderResolveFeedback({ state, onRefreshStatus }: {
+  state: ResolveState | null
+  onRefreshStatus: () => void
+}) {
+  if (!state || state.kind === 'resolved') return null
+  if (state.kind === 'pending') return <p className="responder-detail__feedback" role="status">Resolving incident…</p>
+  if (state.kind === 'conflict') return <div className="responder-detail__feedback" role="alert">
+    <p>This incident can no longer be resolved from its current state. Refresh to check your access.</p>
+    <button type="button" onClick={onRefreshStatus}>Refresh status</button>
+  </div>
+  return <div className="responder-detail__feedback" role="alert">
+    <p>The outcome is unknown. Retry the same request safely to confirm whether this resolution was recorded.</p>
+    <button type="button" onClick={onRefreshStatus}>Safely retry and check status</button>
+  </div>
+}
+
+function ResponderDetailContent({ state, claimState, resolveState, onRetry, onClaim, onResolve, onLogout }: {
   state: DetailState
   claimState: ClaimState
+  resolveState: ResolveState | null
   onRetry: () => void
   onClaim: () => void
+  onResolve: (remarks: string) => void
   onLogout: () => Promise<void>
 }) {
   if (state.kind === 'loading') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
@@ -514,6 +610,8 @@ function ResponderDetailContent({ state, claimState, onRetry, onClaim, onLogout 
   </section>
 
   const { detail } = state
+  if (detail.status === 'ASSIGNED') return <AssignedIncidentDetail
+    detail={detail} resolveState={resolveState} onResolve={onResolve} />
   return (
     <section className="incident-panel responder-detail" aria-labelledby="responder-detail-heading">
       <div className="section-heading">
@@ -526,7 +624,7 @@ function ResponderDetailContent({ state, claimState, onRetry, onClaim, onLogout 
         <div><dt>Reporter</dt><dd>{detail.reporterLabel}</dd></div>
         <div><dt>Submitted</dt><dd>{new Date(detail.submittedAt).toLocaleString()}</dd></div>
       </dl>
-      {detail.status === 'SUBMITTED' && claimState.kind !== 'claimed' && (
+      {claimState.kind !== 'claimed' && (
         <button className="primary-button" type="button" disabled={claimState.kind === 'pending' || claimState.kind === 'conflict'
           || claimState.kind === 'service-error'} onClick={onClaim}>
           {claimState.kind === 'pending' ? 'Claiming…' : 'Claim incident'}
@@ -536,8 +634,82 @@ function ResponderDetailContent({ state, claimState, onRetry, onClaim, onLogout 
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>
       </section>
+      <ResolutionHistory history={detail.resolutionHistory ?? []} />
     </section>
   )
+}
+
+function AssignedIncidentDetail({ detail, resolveState, onResolve }: {
+  detail: ResponderIncidentDetail
+  resolveState: ResolveState | null
+  onResolve: (remarks: string) => void
+}) {
+  const [remarks, setRemarks] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const pending = resolveState?.kind === 'pending'
+  const mutationNeedsReconciliation = resolveState?.kind === 'conflict' || resolveState?.kind === 'service-error'
+
+  function submitResolution(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (remarks.trim().length === 0) {
+      setValidationError('Enter resolution remarks before resolving this incident.')
+      return
+    }
+    if ([...remarks].length > 2000) {
+      setValidationError('Resolution remarks must be 2,000 characters or fewer.')
+      return
+    }
+    setValidationError(null)
+    onResolve(remarks)
+  }
+
+  return (
+    <section className="incident-panel responder-detail" aria-labelledby="responder-detail-heading">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">{categoryNames[detail.category]} · {statusLabel(detail.status)}</p>
+          <h2 id="responder-detail-heading">{detail.title}</h2>
+        </div>
+      </div>
+      <dl className="responder-detail__metadata">
+        <div><dt>Reporter</dt><dd>{detail.reporterLabel}</dd></div>
+        <div><dt>Submitted</dt><dd>{new Date(detail.submittedAt).toLocaleString()}</dd></div>
+      </dl>
+      <section className="responder-detail__description" aria-labelledby="responder-description-heading">
+        <h3 id="responder-description-heading">Description</h3>
+        <p>{detail.description}</p>
+      </section>
+      <ResolutionHistory history={detail.resolutionHistory ?? []} />
+      <form className="responder-resolution" onSubmit={submitResolution}>
+        <label htmlFor="responder-resolution-remarks">Resolution remarks</label>
+        <textarea id="responder-resolution-remarks" value={remarks} disabled={pending || mutationNeedsReconciliation}
+          aria-invalid={validationError ? 'true' : undefined}
+          aria-describedby="responder-resolution-count responder-resolution-error"
+          onChange={(event) => { setRemarks(event.target.value); setValidationError(null) }} />
+        <p id="responder-resolution-count">{[...remarks].length} / 2,000 characters</p>
+        <p id="responder-resolution-error" role={validationError ? 'alert' : undefined}>{validationError}</p>
+        <button className="primary-button" type="submit" disabled={pending || mutationNeedsReconciliation}>
+          {pending ? 'Resolving…' : 'Resolve incident'}
+        </button>
+      </form>
+    </section>
+  )
+}
+
+function ResolutionHistory({ history }: {
+  history: ResponderIncidentDetail['resolutionHistory']
+}) {
+  if (history.length === 0) return null
+  return <section className="responder-resolution-history" aria-labelledby="responder-resolution-history-heading">
+    <h3 id="responder-resolution-history-heading">Previous resolutions</h3>
+    <ol>
+      {history.map((entry) => <li key={entry.cycleNumber}>
+        <h4>Resolution cycle {entry.cycleNumber}</h4>
+        <p className="responder-resolution-history__date">{new Date(entry.resolvedAt).toLocaleString()}</p>
+        <p className="responder-resolution-history__remarks">{entry.remarks}</p>
+      </li>)}
+    </ol>
+  </section>
 }
 
 function toggleValue<T extends string>(values: T[], value: T): T[] {
