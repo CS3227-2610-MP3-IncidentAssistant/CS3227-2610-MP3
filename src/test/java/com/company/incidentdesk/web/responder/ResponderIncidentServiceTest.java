@@ -80,6 +80,23 @@ class ResponderIncidentServiceTest {
         assertEquals(UUID.fromString("50000000-0000-0000-0000-000000000002"), gateway.claimIncidentId);
     }
 
+    @Test
+    void detailUsesTrustedLoginNameAndDeniesAnUnavailableIncident() {
+        RecordingGateway gateway = new RecordingGateway();
+        UUID incidentId = UUID.fromString("50000000-0000-0000-0000-000000000002");
+        gateway.detail = Optional.of(new ResponderIncidentService.IncidentDetail(incidentId, "VPN unavailable",
+                "Private details", "Anonymous reporter", "IT", "SUBMITTED", Instant.EPOCH, Instant.EPOCH));
+
+        var detail = new ResponderIncidentService(gateway).detail("CurrentResponder", incidentId);
+
+        assertEquals(incidentId, detail.id());
+        assertEquals("CurrentResponder", gateway.claimLoginName);
+        assertEquals(incidentId, gateway.claimIncidentId);
+        gateway.detail = Optional.empty();
+        assertThrows(ResponderAccessDeniedException.class,
+                () -> new ResponderIncidentService(gateway).detail("CurrentResponder", incidentId));
+    }
+
     private static ListCriteria criteria(String search, List<String> categories, List<String> statuses,
             ResponderIncidentService.Assignment assignment, int page, int size) {
         return new ListCriteria(search, categories, statuses, assignment, page, size);
@@ -99,6 +116,7 @@ class ResponderIncidentServiceTest {
         private String claimLoginName;
         private UUID claimIncidentId;
         private ResponderIncidentService.ClaimResult claimResult = new ResponderIncidentService.ClaimResult(false);
+        private Optional<ResponderIncidentService.IncidentDetail> detail = Optional.empty();
 
         @Override
         public Optional<IncidentPage> findQueue(String loginName, ListCriteria criteria) {
@@ -112,6 +130,13 @@ class ResponderIncidentServiceTest {
             claimLoginName = loginName;
             claimIncidentId = incidentId;
             return claimResult;
+        }
+
+        @Override
+        public Optional<ResponderIncidentService.IncidentDetail> findDetail(String loginName, UUID incidentId) {
+            claimLoginName = loginName;
+            claimIncidentId = incidentId;
+            return detail;
         }
     }
 }

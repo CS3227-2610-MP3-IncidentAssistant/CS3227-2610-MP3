@@ -18,6 +18,7 @@ import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentR
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ClaimResult;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentDetail;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -83,6 +84,45 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         try {
             return transaction.execute(status -> claim(loginName, incidentId, occurredAt, auditEventId));
+        } catch (DataAccessException exception) {
+            throw new ResponderDataAccessException(exception);
+        }
+    }
+
+    @Override
+    public Optional<IncidentDetail> findDetail(String loginName, UUID incidentId) {
+        try {
+            List<IncidentDetail> details = jdbc.query("""
+                    SELECT i.id, i.title, i.description,
+                           CASE WHEN i.anonymous THEN 'Anonymous reporter' ELSE reporter.login_name END AS reporter_label,
+                           i.category, i.status,
+                           i.submitted_at, i.queue_entered_at
+                      FROM incidents i
+                      JOIN accounts reporter ON reporter.id = i.reporter_id
+                      JOIN accounts responder
+                        ON responder.login_name = :loginName
+                       AND responder.role = 'RESPONDER'
+                       AND responder.status = 'ENABLED'
+                     WHERE i.id = :incidentId
+                       AND (
+                           (i.status = 'SUBMITTED' AND i.assignee_id IS NULL AND EXISTS (
+                               SELECT 1 FROM responder_category_access access
+                                WHERE access.account_id = responder.id
+                                  AND access.category = i.category
+                           ))
+                           OR (i.status = 'ASSIGNED' AND i.assignee_id = responder.id)
+                       )
+                    """, Map.of("loginName", loginName, "incidentId", incidentId), (result, row) ->
+                    new IncidentDetail(
+                            result.getObject("id", UUID.class),
+                            result.getString("title"),
+                            result.getString("description"),
+                            result.getString("reporter_label"),
+                            result.getString("category"),
+                            result.getString("status"),
+                            result.getObject("submitted_at", OffsetDateTime.class).toInstant(),
+                            result.getObject("queue_entered_at", OffsetDateTime.class).toInstant()));
+            return details.stream().findFirst();
         } catch (DataAccessException exception) {
             throw new ResponderDataAccessException(exception);
         }

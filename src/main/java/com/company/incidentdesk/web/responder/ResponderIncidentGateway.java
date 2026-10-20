@@ -11,4 +11,6 @@ interface ResponderIncidentGateway {
     Optional<IncidentPage> findQueue(String loginName, ListCriteria criteria);
 
     ResponderIncidentService.ClaimResult claim(String loginName, UUID incidentId);
+
+    Optional<ResponderIncidentService.IncidentDetail> findDetail(String loginName, UUID incidentId);
 }

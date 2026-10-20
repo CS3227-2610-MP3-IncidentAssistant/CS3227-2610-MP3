@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,6 +50,12 @@ final class ResponderIncidentController {
             return safeError(HttpStatus.CONFLICT, "CLAIM_CONFLICT", "This incident is no longer available to claim.");
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("claimed", true));
+    }
+
+    @GetMapping("/{incidentId}")
+    ResponseEntity<?> detail(Principal principal, @PathVariable UUID incidentId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(incidents.detail(principal.getName(), incidentId));
     }
 
     @ExceptionHandler(ResponderAccessDeniedException.class)

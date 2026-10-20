@@ -129,6 +129,15 @@ class ReporterWebSecurityTest {
     }
 
     @Test
+    void responderDetailRequiresResponderRole() throws Exception {
+        String detailPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001";
+        mvc.perform(get(detailPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get(detailPath).with(user("reporter").roles("REPORTER"))).andExpect(status().isNotFound());
+        mvc.perform(get(detailPath).with(user("admin").roles("ADMINISTRATOR"))).andExpect(status().isNotFound());
+        mvc.perform(get(detailPath).with(user("responder").roles("RESPONDER"))).andExpect(status().isOk());
+    }
+
+    @Test
     void responderClaimRequiresResponderRoleAndCsrf() throws Exception {
         String claimPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001/claim";
         mvc.perform(post(claimPath).with(csrf()))
@@ -327,6 +336,10 @@ class ReporterWebSecurityTest {
 
     @RestController
     static class ProtectedResponderEndpoint {
+        @GetMapping("/api/v1/responder/incidents/{id}")
+        void getIncidentDetail() {
+        }
+
         @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/query")
         void queryIncidents() {
         }

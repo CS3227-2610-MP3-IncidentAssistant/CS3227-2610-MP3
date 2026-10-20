@@ -165,6 +165,51 @@ class ResponderIncidentPostgresTest {
     }
 
     @Test
+    void detailRechecksCurrentAccessAndReturnsOnlyThePrivacyMinimizedCoreProjection() throws Exception {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("55000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        UUID outsideCategory = incident("55000000-0000-0000-0000-000000000002", "FACILITIES", "SUBMITTED", null, NOW);
+        UUID assignedToOther = incident("55000000-0000-0000-0000-000000000003", "IT", "ASSIGNED", OTHER_RESPONDER, NOW);
+        UUID assignedToActor = incident("55000000-0000-0000-0000-000000000004", "FACILITIES", "ASSIGNED", RESPONDER, NOW);
+        jdbc.update("UPDATE incidents SET anonymous = true, title = ?, description = ? WHERE id = ?",
+                "Anonymous outage", "<script>private marker</script>", eligible);
+
+        var detail = service.detail("responder", eligible);
+        assertEquals(eligible, detail.id());
+        assertEquals("Anonymous outage", detail.title());
+        assertEquals("<script>private marker</script>", detail.description());
+        assertEquals("IT", detail.category());
+        assertEquals("Anonymous reporter", detail.reporterLabel());
+        assertFalse(detail.reporterLabel().contains("reporter-private-marker"));
+        assertThrowsAccessDenied("responder", outsideCategory);
+        assertThrowsAccessDenied("responder", assignedToOther);
+        assertThrowsAccessDenied("responder", UUID.fromString("55000000-0000-0000-0000-000000000099"));
+
+        jdbc.update("DELETE FROM responder_category_access WHERE account_id = ? AND category = 'IT'", RESPONDER);
+        assertThrowsAccessDenied("responder", eligible);
+        var assignedDetail = service.detail("responder", assignedToActor);
+        assertEquals(assignedToActor, assignedDetail.id());
+        assertEquals("reporter-private-marker", assignedDetail.reporterLabel());
+
+        List<String> fields = java.util.Arrays.stream(ResponderIncidentService.IncidentDetail.class.getRecordComponents())
+                .map(component -> component.getName()).toList();
+        assertTrue(fields.contains("reporterLabel"));
+        assertFalse(fields.contains("reporterId"));
+        assertFalse(fields.contains("anonymous"));
+        assertFalse(fields.contains("assigneeId"));
+    }
+
+    @Test
+    void detailDeniesCurrentDisabledOrDemotedResponder() {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("56000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", RESPONDER);
+        assertThrowsAccessDenied("responder", eligible);
+        jdbc.update("UPDATE accounts SET status = 'ENABLED', role = 'REPORTER' WHERE id = ?", RESPONDER);
+        assertThrowsAccessDenied("responder", eligible);
+    }
+
+    @Test
     void claimChecksCurrentCategoryAndLifecycleAndAtomicallyWritesAudit() {
         grant(RESPONDER, "IT");
         UUID eligible = incident("60000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
@@ -274,6 +319,12 @@ class ResponderIncidentPostgresTest {
         org.junit.jupiter.api.Assertions.assertThrows(
                 ResponderIncidentService.ResponderAccessDeniedException.class,
                 () -> service.queue(loginName, 0, 25));
+    }
+
+    private static void assertThrowsAccessDenied(String loginName, UUID incidentId) {
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ResponderIncidentService.ResponderAccessDeniedException.class,
+                () -> service.detail(loginName, incidentId));
     }
 
     private UUID incident(String id, String category, String status, UUID assignee, Instant queueEnteredAt) {

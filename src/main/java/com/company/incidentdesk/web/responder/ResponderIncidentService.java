@@ -1,5 +1,6 @@
 package com.company.incidentdesk.web.responder;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -51,6 +52,12 @@ final class ResponderIncidentService {
         return incidents.claim(trustedLoginName, incidentId);
     }
 
+    IncidentDetail detail(String loginName, UUID incidentId) {
+        String trustedLoginName = requireLoginName(loginName);
+        Objects.requireNonNull(incidentId, "incidentId");
+        return incidents.findDetail(trustedLoginName, incidentId).orElseThrow(ResponderAccessDeniedException::new);
+    }
+
     private static String requireLoginName(String loginName) {
         if (loginName == null || loginName.isBlank()) {
             throw new ResponderAccessDeniedException();
@@ -96,6 +103,18 @@ final class ResponderIncidentService {
     }
 
     record ClaimResult(boolean claimed) {
+    }
+
+    /** Core persisted fields only; excludes raw reporter ID and content not wired to web storage. */
+    record IncidentDetail(
+            UUID id,
+            String title,
+            String description,
+            String reporterLabel,
+            String category,
+            String status,
+            Instant submittedAt,
+            Instant queueEnteredAt) {
     }
 
     /** Deliberately excludes reporter, assignee, anonymity, and storage identifiers. */
