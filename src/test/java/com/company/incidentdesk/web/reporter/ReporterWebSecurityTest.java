@@ -3,7 +3,9 @@ package com.company.incidentdesk.web.reporter;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -88,6 +90,98 @@ class ReporterWebSecurityTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/reporter/incidents")
                         .with(user("reporter").roles("REPORTER")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void responderApiRequiresResponderRoleWithoutRevealingItToOtherRoles() throws Exception {
+        mvc.perform(post("/api/v1/responder/incidents/query").with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("reporter").roles("REPORTER"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("admin").roles("ADMINISTRATOR"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isNotFound());
+        MvcResult responderQuery = mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("responder").roles("RESPONDER"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertEquals("/api/v1/responder/incidents/query", responderQuery.getRequest().getRequestURI());
+        assertNull(responderQuery.getRequest().getQueryString());
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("responder").roles("RESPONDER"))
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+    }
+
+    @Test
+    void responderDetailRequiresResponderRole() throws Exception {
+        String detailPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001";
+        mvc.perform(get(detailPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get(detailPath).with(user("reporter").roles("REPORTER"))).andExpect(status().isNotFound());
+        mvc.perform(get(detailPath).with(user("admin").roles("ADMINISTRATOR"))).andExpect(status().isNotFound());
+        mvc.perform(get(detailPath).with(user("responder").roles("RESPONDER"))).andExpect(status().isOk());
+    }
+
+    @Test
+    void responderAttachmentRouteRequiresResponderRole() throws Exception {
+        String attachmentPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001"
+                + "/attachments/60000000-0000-0000-0000-000000000002";
+        mvc.perform(get(attachmentPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get(attachmentPath).with(user("reporter").roles("REPORTER")))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(attachmentPath).with(user("admin").roles("ADMINISTRATOR")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void responderClaimRequiresResponderRoleAndCsrf() throws Exception {
+        String claimPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001/claim";
+        mvc.perform(post(claimPath).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(claimPath).with(user("reporter").roles("REPORTER")).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(claimPath).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(claimPath).with(user("responder").roles("RESPONDER")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+        mvc.perform(post(claimPath).with(user("responder").roles("RESPONDER")).with(csrf()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void responderResolutionRequiresResponderRoleAndCsrf() throws Exception {
+        String resolvePath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001/resolve";
+        mvc.perform(post(resolvePath).with(csrf()).contentType("application/json")
+                        .content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(resolvePath).with(user("reporter").roles("REPORTER")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(resolvePath).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(resolvePath).with(user("responder").roles("RESPONDER"))
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+        mvc.perform(post(resolvePath).with(user("responder").roles("RESPONDER")).with(csrf())
+                        .contentType("application/json").content("{\"requestId\":\"60000000-0000-0000-0000-000000000099\",\"remarks\":\"fixed\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -205,6 +299,31 @@ class ReporterWebSecurityTest {
                 .andExpect(cookie().maxAge("XSRF-TOKEN", 0));
     }
 
+    @Test
+    void responderLoginChangesThePreAuthenticationSessionId() throws Exception {
+        MockHttpSession preAuthenticationSession = new MockHttpSession();
+        MvcResult anonymousSession = mvc.perform(get("/api/v1/auth/session").session(preAuthenticationSession))
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("XSRF-TOKEN"))
+                .andReturn();
+        Cookie csrfToken = anonymousSession.getResponse().getCookie("XSRF-TOKEN");
+        assertNotNull(csrfToken);
+        String anonymousSessionId = preAuthenticationSession.getId();
+
+        MvcResult login = mvc.perform(post("/api/v1/auth/responder/login")
+                        .session(preAuthenticationSession)
+                        .cookie(csrfToken)
+                        .header("X-XSRF-TOKEN", csrfToken.getValue())
+                        .param("username", "responder")
+                        .param("password", "test-secret"))
+                .andExpect(status().isNoContent())
+                .andReturn();
+
+        MockHttpSession authenticatedSession = (MockHttpSession) login.getRequest().getSession(false);
+        assertNotNull(authenticatedSession);
+        org.junit.jupiter.api.Assertions.assertNotEquals(anonymousSessionId, authenticatedSession.getId());
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableWebMvc
     @EnableWebSecurity
@@ -222,6 +341,11 @@ class ReporterWebSecurityTest {
         @Bean
         ProtectedReporterEndpoint endpoint() {
             return new ProtectedReporterEndpoint();
+        }
+
+        @Bean
+        ProtectedResponderEndpoint responderEndpoint() {
+            return new ProtectedResponderEndpoint();
         }
 
         @Bean
@@ -265,5 +389,25 @@ class ReporterWebSecurityTest {
         @org.springframework.web.bind.annotation.PostMapping("/api/v1/reporter/incidents")
         void submitIncident() {
         }
+    }
+
+    @RestController
+    static class ProtectedResponderEndpoint {
+        @GetMapping("/api/v1/responder/incidents/{id}")
+        void getIncidentDetail() {
+        }
+
+        @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/query")
+        void queryIncidents() {
+        }
+
+        @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/{id}/claim")
+        void claimIncident() {
+        }
+
+        @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/{id}/resolve")
+        void resolveIncident() {
+        }
+
     }
 }

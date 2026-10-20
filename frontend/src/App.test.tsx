@@ -64,6 +64,11 @@ describe('web authentication and administrator slice', () => {
             })
       }
       if (url === '/api/v1/auth/responder/login' && init?.method === 'POST') return response({}, 204)
+      if (url === '/api/v1/responder/incidents/query' && init?.method === 'POST') {
+        return response({
+          incidents: [], page: 0, size: 25, totalElements: 0, totalPages: 1, categoriesConfigured: true,
+        })
+      }
       throw new Error(`Unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -75,8 +80,8 @@ describe('web authentication and administrator slice', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'valid-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('heading', { name: 'Approved incident categories' })).toBeInTheDocument()
-    expect(screen.getByText('IT')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Incident queue' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('IT')).toBeInTheDocument()
     expect(screen.queryByText('Facilities')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/auth/responder/login',

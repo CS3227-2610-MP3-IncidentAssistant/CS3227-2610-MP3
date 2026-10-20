@@ -43,7 +43,13 @@ Every implemented feature must identify:
 1. **Specification approved:** product owner confirms scope and acceptance
    criteria before implementation.
 2. **Security/architecture approved:** reviewer confirms authorization, privacy,
-   data, concurrency, AI, and deployment boundaries.
+   data, concurrency, AI, and deployment boundaries. For a feature wholly
+   owned within one role, the product owner may explicitly waive a separate
+   cross-role human review when cross-review is not part of the team's agreed
+   ownership model. Record the reason and scope in the feature specification,
+   a dated review record, and its tracking issue. A waiver never waives the
+   underlying security, privacy, authorization, testing, or verification
+   requirements.
 3. **Implementation verified:** automated allowed/denied/failure tests pass and
    the developer records the exact commands and commit.
 4. **Independent review approved:** reviewer checks code, tests, unsafe

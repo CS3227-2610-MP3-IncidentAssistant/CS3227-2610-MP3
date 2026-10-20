@@ -20,8 +20,9 @@ a separate static frontend.
 - PostgreSQL schema, migrations, and transaction boundary: TODO
 - Concurrent incident-claim strategy: TODO
 - Attachment storage choice: Neon Object Storage private branch-scoped bucket;
-  metadata remains in PostgreSQL. Write compensation and full attachment-flow
-  consistency remain TODO. See `neon-services.md`.
+  metadata remains in PostgreSQL. Responder reads stream through the backend
+  after per-request authorization; no signed URLs or browser credentials.
+  Reporter uploads and write compensation remain TODO. See `neon-services.md`.
 - Application event replacement for JavaFX-thread events: TODO
 - AI gateway and provider trust boundary: the Spring backend is the only
   SoCLaaS client. It reauthorizes the actor, constructs a feature-specific
@@ -47,6 +48,15 @@ a separate static frontend.
 - `decisions/ADR-003-promotion-decision-and-session-invalidation.md`: proposed
   transaction, category-subset, and shared-session contract for issue #6;
   approval remains pending.
+- `decisions/ADR-004-responder-mutations.md`: approved issue #7 responder
+  projection, transactional claim/resolution, audit atomicity, and history
+  behavior. Separate cross-role human security/architecture review waived by
+  the product owner for issue #7; automated and implementation verification
+  requirements remain mandatory.
+- `decisions/ADR-005-responder-attachment-and-comment-reads.md`: approved
+  issue #7 backend-only attachment streaming and privacy-safe comment read
+  projection. Reporter upload, comment writes, and cleanup compensation remain
+  outside the decision.
 
 Create one record in `decisions/` for each material choice. At minimum cover:
 

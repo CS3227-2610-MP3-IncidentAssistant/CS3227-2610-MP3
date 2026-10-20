@@ -63,6 +63,12 @@ separate versioned-schema implementation slice.
 - The production bucket is private. Every future attachment download must
   recheck current incident authorization in the application before reading the
   object.
+- Issue #7 selects backend streaming for Responder downloads: the backend
+  loads metadata by incident and attachment ID, rechecks current Responder
+  authorization before `GetObject`, and streams allowlisted images with generic
+  filenames, attachment disposition, `nosniff`, and no-store headers. Signed
+  URLs and browser storage credentials are not used. See
+  [`decisions/ADR-005-responder-attachment-and-comment-reads.md`](decisions/ADR-005-responder-attachment-and-comment-reads.md).
 - The service-smoke command may run only against the explicitly linked branch.
   It performs `SELECT 1`, then writes, reads, verifies, and deletes one random
   object under `smoke-tests/`; it does not inspect or modify incident data.

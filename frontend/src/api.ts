@@ -1,3 +1,5 @@
+import { readCsrfToken } from './shared/csrf'
+
 export type SessionState = {
   authenticated: boolean
   loginName?: string
@@ -291,18 +293,9 @@ async function csrfRequest(
 function sendCsrfRequest(url: string, init: RequestInit): Promise<Response> {
   init.signal?.throwIfAborted()
   const headers = new Headers(init.headers)
-  const token = readCookie('XSRF-TOKEN')
+  const token = readCsrfToken()
   if (token) headers.set('X-XSRF-TOKEN', token)
   return fetch(url, { ...init, credentials: 'same-origin', headers })
-}
-
-function readCookie(name: string): string | undefined {
-  const prefix = `${encodeURIComponent(name)}=`
-  const cookie = document.cookie
-    .split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(prefix))
-  return cookie ? decodeURIComponent(cookie.substring(prefix.length)) : undefined
 }
 
 async function readErrorBody(response: Response): Promise<ErrorBody | null> {
