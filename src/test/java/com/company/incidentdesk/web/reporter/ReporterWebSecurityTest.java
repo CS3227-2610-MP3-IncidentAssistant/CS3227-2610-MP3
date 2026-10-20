@@ -3,7 +3,9 @@ package com.company.incidentdesk.web.reporter;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -93,17 +95,37 @@ class ReporterWebSecurityTest {
 
     @Test
     void responderApiRequiresResponderRoleWithoutRevealingItToOtherRoles() throws Exception {
-        mvc.perform(get("/api/v1/responder/incidents"))
+        mvc.perform(post("/api/v1/responder/incidents/query").with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/v1/responder/incidents")
-                        .with(user("reporter").roles("REPORTER")))
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("reporter").roles("REPORTER"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/responder/incidents")
-                        .with(user("admin").roles("ADMINISTRATOR")))
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("admin").roles("ADMINISTRATOR"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/responder/incidents")
-                        .with(user("responder").roles("RESPONDER")))
-                .andExpect(status().isOk());
+        MvcResult responderQuery = mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("responder").roles("RESPONDER"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertEquals("/api/v1/responder/incidents/query", responderQuery.getRequest().getRequestURI());
+        assertNull(responderQuery.getRequest().getQueryString());
+        mvc.perform(post("/api/v1/responder/incidents/query")
+                        .with(user("responder").roles("RESPONDER"))
+                        .contentType("application/json")
+                        .content("{\"search\":\"private incident text\",\"categories\":[],\"statuses\":[],\"assignment\":\"ALL\",\"page\":0,\"size\":25}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
     }
 
     @Test
@@ -289,8 +311,8 @@ class ReporterWebSecurityTest {
 
     @RestController
     static class ProtectedResponderEndpoint {
-        @GetMapping("/api/v1/responder/incidents")
-        void getIncidents() {
+        @org.springframework.web.bind.annotation.PostMapping("/api/v1/responder/incidents/query")
+        void queryIncidents() {
         }
     }
 }

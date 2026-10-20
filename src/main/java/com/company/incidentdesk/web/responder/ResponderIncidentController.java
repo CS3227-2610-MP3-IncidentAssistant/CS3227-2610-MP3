@@ -15,13 +15,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP boundary for the authenticated Responder queue read. */
+/** HTTP boundary for the authenticated, read-only Responder queue query. */
 @RestController
 @RequestMapping("/api/v1/responder/incidents")
 @ConditionalOnBean(DataSource.class)
@@ -32,17 +33,11 @@ final class ResponderIncidentController {
         this.incidents = incidents;
     }
 
-    @GetMapping
-    ResponseEntity<IncidentPage> queue(
-            Principal principal,
-            @RequestParam(defaultValue = "") String search,
-            @RequestParam(required = false) List<String> category,
-            @RequestParam(required = false) List<String> status,
-            @RequestParam(defaultValue = "ALL") Assignment assignment,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
+    @PostMapping("/query")
+    ResponseEntity<IncidentPage> queue(Principal principal, @RequestBody QueueRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(incidents.queue(principal.getName(), search, category, status, assignment, page, size));
+                .body(incidents.queue(principal.getName(), request.search(), request.categories(), request.statuses(),
+                        request.assignment(), request.page(), request.size()));
     }
 
     @ExceptionHandler(ResponderAccessDeniedException.class)
@@ -61,8 +56,17 @@ final class ResponderIncidentController {
         return safeError(HttpStatus.BAD_REQUEST, "INVALID_FILTER", "One or more queue filters are invalid.");
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<?> malformedQuery() {
+        return safeError(HttpStatus.BAD_REQUEST, "INVALID_QUERY", "The queue query is invalid.");
+    }
+
     private static ResponseEntity<Map<String, String>> safeError(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).cacheControl(CacheControl.noStore())
                 .body(Map.of("code", code, "message", message));
+    }
+
+    record QueueRequest(String search, List<String> categories, List<String> statuses,
+            Assignment assignment, int page, int size) {
     }
 }

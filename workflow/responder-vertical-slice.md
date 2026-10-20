@@ -113,7 +113,8 @@ groups; empty selections mean all authorized values. Status choices are
 limited to `SUBMITTED` and `ASSIGNED`, and assignment choices are `ALL`,
 `ASSIGNED`, and `UNASSIGNED`. Search is limited to 200 characters after
 trimming. Filtering and counts are applied only after the authorization
-predicate, before server-side paging.
+predicate, before server-side paging. Submit queue criteria in a CSRF-protected
+JSON request body; never put search text in a URL or browser location history.
 
 The queue distinguishes loading, no eligible incidents, no categories
 configured, expired/changed session, denied access, and service failure. A

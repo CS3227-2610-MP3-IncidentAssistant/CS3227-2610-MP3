@@ -31,7 +31,8 @@ class ResponderIncidentControllerTest {
                         new IncidentPage(List.of(SAFE_ROW), 0, 25, 1, 1, true))));
         Principal principal = () -> "responder";
 
-        ResponseEntity<IncidentPage> response = controller.queue(principal, "", null, null, Assignment.ALL, 0, 25);
+        ResponseEntity<IncidentPage> response = controller.queue(principal,
+                new ResponderIncidentController.QueueRequest("", null, null, Assignment.ALL, 0, 25));
         List<String> fieldNames = java.util.Arrays.stream(IncidentRow.class.getRecordComponents())
                 .map(component -> component.getName()).toList();
 
