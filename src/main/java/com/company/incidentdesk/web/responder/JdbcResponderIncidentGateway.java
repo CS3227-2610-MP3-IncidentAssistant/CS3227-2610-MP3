@@ -161,10 +161,50 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                     result.getInt("cycle_number"),
                     result.getObject("resolved_at", OffsetDateTime.class).toInstant(),
                     result.getString("remarks")));
+            List<ResponderAttachmentService.AttachmentSummary> attachments = jdbc.query("""
+                    SELECT id, media_type, size_bytes, created_at
+                      FROM incident_attachments
+                     WHERE incident_id = :incidentId
+                     ORDER BY created_at, id
+                    """, Map.of("incidentId", incidentId), (result, row) ->
+                    new ResponderAttachmentService.AttachmentSummary(result.getObject("id", UUID.class),
+                            result.getString("media_type"), result.getLong("size_bytes"),
+                            result.getObject("created_at", OffsetDateTime.class).toInstant()));
+            List<ResponderIncidentService.IncidentCommentView> comments = jdbc.query("""
+                    SELECT CASE WHEN i.anonymous AND author.id = i.reporter_id
+                                THEN 'Anonymous reporter' ELSE author.login_name END AS author_label,
+                           comment.author_role, comment.text, comment.created_at
+                      FROM incident_comments comment
+                      JOIN incidents i ON i.id = comment.incident_id
+                      JOIN accounts author ON author.id = comment.author_id
+                     WHERE comment.incident_id = :incidentId
+                     ORDER BY comment.created_at, comment.id
+                    """, Map.of("incidentId", incidentId), (result, row) ->
+                    new ResponderIncidentService.IncidentCommentView(result.getString("author_label"),
+                            result.getString("author_role"), result.getString("text"),
+                            result.getObject("created_at", OffsetDateTime.class).toInstant()));
+            List<ResponderIncidentService.LifecycleHistoryEntry> lifecycleHistory = jdbc.query("""
+                    SELECT action, occurred_at,
+                           CASE WHEN jsonb_typeof(details->'status') = 'object'
+                                THEN details #>> '{status,before}' END AS from_status,
+                           CASE WHEN jsonb_typeof(details->'status') = 'object'
+                                THEN details #>> '{status,after}'
+                                ELSE details->>'status' END AS to_status
+                      FROM audit_events
+                     WHERE target_type = 'INCIDENT'
+                       AND target_identifier = :incidentId
+                       AND outcome = 'SUCCESS'
+                       AND action IN ('INCIDENT_SUBMITTED', 'INCIDENT_CLAIMED', 'INCIDENT_RESOLVED',
+                                      'INCIDENT_REOPENED', 'INCIDENT_HANDED_OFF', 'INCIDENT_WITHDRAWN')
+                     ORDER BY occurred_at, sequence
+                    """, Map.of("incidentId", incidentId.toString()), (result, row) ->
+                    new ResponderIncidentService.LifecycleHistoryEntry(result.getString("action"),
+                            result.getObject("occurred_at", OffsetDateTime.class).toInstant(),
+                            result.getString("from_status"), result.getString("to_status")));
             IncidentDetail current = detail.get();
             return Optional.of(new IncidentDetail(current.id(), current.title(), current.description(),
                     current.reporterLabel(), current.category(), current.status(), current.submittedAt(),
-                    current.queueEnteredAt(), history));
+                    current.queueEnteredAt(), history, attachments, comments, lifecycleHistory));
         } catch (DataAccessException exception) {
             throw new ResponderDataAccessException(exception);
         }

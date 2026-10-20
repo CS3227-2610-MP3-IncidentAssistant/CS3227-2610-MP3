@@ -1,6 +1,7 @@
 package com.company.incidentdesk.web.responder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -77,6 +78,8 @@ class ResponderIncidentPostgresTest {
         jdbc.update("DELETE FROM SPRING_SESSION_ATTRIBUTES");
         jdbc.update("DELETE FROM SPRING_SESSION");
         jdbc.update("DELETE FROM audit_events");
+        jdbc.update("DELETE FROM incident_comments");
+        jdbc.update("DELETE FROM incident_attachments");
         jdbc.update("DELETE FROM incident_resolutions");
         jdbc.update("DELETE FROM incidents");
         jdbc.update("DELETE FROM responder_category_access");
@@ -208,6 +211,102 @@ class ResponderIncidentPostgresTest {
         assertThrowsAccessDenied("responder", eligible);
         jdbc.update("UPDATE accounts SET status = 'ENABLED', role = 'REPORTER' WHERE id = ?", RESPONDER);
         assertThrowsAccessDenied("responder", eligible);
+    }
+
+    @Test
+    void detailIncludesPrivacySafeCommentsAndGeneratedAttachmentMetadata() {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("57000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        jdbc.update("UPDATE incidents SET anonymous = true WHERE id = ?", eligible);
+        UUID attachmentId = UUID.fromString("57000000-0000-0000-0000-000000000002");
+        jdbc.update("INSERT INTO incident_attachments (id, incident_id, media_type, size_bytes, created_at) "
+                + "VALUES (?, ?, 'image/png', 4, ?)", attachmentId, eligible, Timestamp.from(NOW));
+        jdbc.update("INSERT INTO incident_comments (id, incident_id, author_id, author_role, comment_type, text, created_at) "
+                + "VALUES (?, ?, ?, 'REPORTER', 'REOPEN_EXPLANATION', 'Anonymous follow-up', ?)",
+                UUID.randomUUID(), eligible, REPORTER, Timestamp.from(NOW));
+        jdbc.update("INSERT INTO incident_comments (id, incident_id, author_id, author_role, comment_type, text, created_at) "
+                + "VALUES (?, ?, ?, 'RESPONDER', 'ORDINARY', 'Responder note', ?)",
+                UUID.randomUUID(), eligible, RESPONDER, Timestamp.from(NOW.plusSeconds(1)));
+        jdbc.update("INSERT INTO audit_events (id, occurred_at, actor_account_id, actor_role, action, target_type, "
+                + "target_identifier, outcome, details) VALUES (?, ?, ?, 'REPORTER', 'INCIDENT_SUBMITTED', 'INCIDENT', ?, "
+                + "'SUCCESS', '{\"status\":{\"after\":\"SUBMITTED\"}}'::jsonb)", UUID.randomUUID(),
+                Timestamp.from(NOW), REPORTER, eligible.toString());
+
+        var detail = service.detail("responder", eligible);
+
+        assertEquals(List.of("Anonymous reporter", "responder"),
+                detail.comments().stream().map(ResponderIncidentService.IncidentCommentView::authorLabel).toList());
+        assertEquals(List.of("Anonymous follow-up", "Responder note"),
+                detail.comments().stream().map(ResponderIncidentService.IncidentCommentView::text).toList());
+        assertEquals(attachmentId, detail.attachments().getFirst().id());
+        assertEquals("image/png", detail.attachments().getFirst().mediaType());
+        assertEquals("Attachment", detail.attachments().getFirst().displayName());
+        assertEquals("INCIDENT_SUBMITTED", detail.lifecycleHistory().getFirst().action());
+        assertEquals("SUBMITTED", detail.lifecycleHistory().getFirst().toStatus());
+        String serialized = detail.toString();
+        assertFalse(serialized.contains(REPORTER.toString()));
+        assertFalse(serialized.contains("reporter-private-marker"));
+    }
+
+    @Test
+    void databaseRejectsCommentsContainingOnlyAsciiOrUnicodeWhitespace() {
+        UUID eligible = incident("57100000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        for (String whitespace : List.of(" \t\n\r", "\u2003\u3000")) {
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    org.springframework.dao.DataIntegrityViolationException.class,
+                    () -> jdbc.update("INSERT INTO incident_comments (id, incident_id, author_id, author_role, "
+                            + "comment_type, text, created_at) VALUES (?, ?, ?, 'REPORTER', 'ORDINARY', ?, ?)",
+                            UUID.randomUUID(), eligible, REPORTER, whitespace, Timestamp.from(NOW)));
+        }
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM incident_comments WHERE incident_id = ?",
+                Integer.class, eligible));
+    }
+
+    @Test
+    void attachmentReadReauthorizesIncidentBeforeOpeningPrivateObject() throws Exception {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("57500000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        UUID assignedToOther = incident("57500000-0000-0000-0000-000000000003", "IT", "ASSIGNED", OTHER_RESPONDER, NOW);
+        UUID attachmentId = UUID.fromString("57500000-0000-0000-0000-000000000002");
+        UUID otherAttachmentId = UUID.fromString("57500000-0000-0000-0000-000000000004");
+        jdbc.update("INSERT INTO incident_attachments (id, incident_id, media_type, size_bytes, created_at) "
+                + "VALUES (?, ?, 'image/jpeg', 3, ?)", attachmentId, eligible, Timestamp.from(NOW));
+        jdbc.update("INSERT INTO incident_attachments (id, incident_id, media_type, size_bytes, created_at) "
+                + "VALUES (?, ?, 'image/jpeg', 3, ?)", otherAttachmentId, assignedToOther, Timestamp.from(NOW));
+        var storage = org.mockito.Mockito.mock(software.amazon.awssdk.services.s3.S3Client.class);
+        var response = software.amazon.awssdk.services.s3.model.GetObjectResponse.builder().contentLength(3L).build();
+        var content = software.amazon.awssdk.http.AbortableInputStream.create(
+                new java.io.ByteArrayInputStream(new byte[] { 1, 2, 3 }));
+        org.mockito.Mockito.when(storage.getObject(org.mockito.ArgumentMatchers.any(
+                software.amazon.awssdk.services.s3.model.GetObjectRequest.class)))
+                .thenReturn(new software.amazon.awssdk.core.ResponseInputStream<>(response, content));
+        var attachmentService = new ResponderAttachmentService(
+                new NamedParameterJdbcTemplate(testDataSource), storage, "private-bucket");
+
+        try (var opened = attachmentService.open("responder", eligible, attachmentId)) {
+            assertArrayEquals(new byte[] { 1, 2, 3 }, opened.content().readAllBytes());
+        }
+        var request = org.mockito.Mockito.mockingDetails(storage).getInvocations().iterator().next().getArgument(0);
+        assertEquals("private-bucket", ((software.amazon.awssdk.services.s3.model.GetObjectRequest) request).bucket());
+        assertEquals(attachmentId + ".jpg",
+                ((software.amazon.awssdk.services.s3.model.GetObjectRequest) request).key());
+
+        org.mockito.Mockito.clearInvocations(storage);
+        jdbc.update("DELETE FROM responder_category_access WHERE account_id = ? AND category = 'IT'", RESPONDER);
+        org.junit.jupiter.api.Assertions.assertThrows(ResponderIncidentService.ResponderAccessDeniedException.class,
+                () -> attachmentService.open("responder", eligible, attachmentId));
+        org.mockito.Mockito.verifyNoInteractions(storage);
+        org.junit.jupiter.api.Assertions.assertThrows(ResponderIncidentService.ResponderAccessDeniedException.class,
+                () -> attachmentService.open("responder", assignedToOther, otherAttachmentId));
+        org.mockito.Mockito.verifyNoInteractions(storage);
+
+        jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", RESPONDER);
+        org.junit.jupiter.api.Assertions.assertThrows(ResponderIncidentService.ResponderAccessDeniedException.class,
+                () -> attachmentService.open("responder", eligible, attachmentId));
+        jdbc.update("UPDATE accounts SET status = 'ENABLED', role = 'REPORTER' WHERE id = ?", RESPONDER);
+        org.junit.jupiter.api.Assertions.assertThrows(ResponderIncidentService.ResponderAccessDeniedException.class,
+                () -> attachmentService.open("responder", eligible, attachmentId));
+        org.mockito.Mockito.verifyNoInteractions(storage);
     }
 
     @Test

@@ -126,7 +126,7 @@ final class ResponderIncidentService {
         }
     }
 
-    /** Core persisted fields only; excludes raw reporter ID and content not wired to web storage. */
+    /** Privacy-safe detail projection that omits raw reporter and assignee identifiers. */
     record IncidentDetail(
             UUID id,
             String title,
@@ -136,16 +136,33 @@ final class ResponderIncidentService {
             String status,
             Instant submittedAt,
             Instant queueEnteredAt,
-            List<ResolutionHistoryEntry> resolutionHistory) {
+            List<ResolutionHistoryEntry> resolutionHistory,
+            List<ResponderAttachmentService.AttachmentSummary> attachments,
+            List<IncidentCommentView> comments,
+            List<LifecycleHistoryEntry> lifecycleHistory) {
         IncidentDetail {
             resolutionHistory = List.copyOf(resolutionHistory);
+            attachments = List.copyOf(attachments);
+            comments = List.copyOf(comments);
+            lifecycleHistory = List.copyOf(lifecycleHistory);
         }
 
         IncidentDetail(UUID id, String title, String description, String reporterLabel, String category,
                 String status, Instant submittedAt, Instant queueEnteredAt) {
-            this(id, title, description, reporterLabel, category, status, submittedAt, queueEnteredAt, List.of());
+            this(id, title, description, reporterLabel, category, status, submittedAt, queueEnteredAt,
+                    List.of(), List.of(), List.of(), List.of());
+        }
+
+        IncidentDetail(UUID id, String title, String description, String reporterLabel, String category,
+                String status, Instant submittedAt, Instant queueEnteredAt, List<ResolutionHistoryEntry> resolutionHistory) {
+            this(id, title, description, reporterLabel, category, status, submittedAt, queueEnteredAt,
+                    resolutionHistory, List.of(), List.of(), List.of());
         }
     }
+
+    record IncidentCommentView(String authorLabel, String authorRole, String text, Instant createdAt) { }
+
+    record LifecycleHistoryEntry(String action, Instant occurredAt, String fromStatus, String toStatus) { }
 
     record ResolutionHistoryEntry(int cycleNumber, Instant resolvedAt, String remarks) {
     }

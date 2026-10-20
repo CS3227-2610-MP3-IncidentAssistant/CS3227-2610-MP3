@@ -160,6 +160,24 @@ describe('Responder incident queue', () => {
         resolvedAt: '2026-10-20T02:00:00Z',
         remarks: 'Previous resolution text is rendered as text.',
       }],
+      attachments: [{
+        id: '60000000-0000-0000-0000-000000000002',
+        mediaType: 'image/png',
+        sizeBytes: 12,
+        createdAt: '2026-10-20T01:00:00Z',
+      }],
+      comments: [{
+        authorLabel: 'Anonymous reporter',
+        authorRole: 'REPORTER',
+        text: '<script>comment stays text</script>',
+        createdAt: '2026-10-20T01:01:00Z',
+      }],
+      lifecycleHistory: [{
+        action: 'INCIDENT_SUBMITTED',
+        occurredAt: '2026-10-20T01:00:00Z',
+        fromStatus: null,
+        toStatus: 'SUBMITTED',
+      }],
     }
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'GET') return response(detail)
@@ -174,7 +192,12 @@ describe('Responder incident queue', () => {
     expect(screen.getByText(scriptText)).toBeInTheDocument()
     expect(document.querySelector('script')).not.toBeInTheDocument()
     expect(document.querySelector('img')).not.toBeInTheDocument()
-    expect(screen.getByText('Anonymous reporter')).toBeInTheDocument()
+    expect(screen.getAllByText('Anonymous reporter')).toHaveLength(2)
+    expect(screen.getByText('<script>comment stays text</script>')).toBeInTheDocument()
+    expect(screen.getAllByText('Submitted')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: 'Attachment 1 (PNG)' })).toHaveAttribute(
+      'href', `/api/v1/responder/incidents/${detail.id}/attachments/60000000-0000-0000-0000-000000000002`,
+    )
     expect(screen.getByRole('heading', { name: 'Previous resolutions' })).toBeInTheDocument()
     expect(screen.getByText('Previous resolution text is rendered as text.')).toBeInTheDocument()
     expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/v1/responder/incidents/${detail.id}`)
@@ -197,6 +220,9 @@ describe('Responder incident queue', () => {
       status: 'SUBMITTED',
       submittedAt: row('Retry this incident').submittedAt,
       queueEnteredAt: row('Retry this incident').queueEnteredAt,
+      resolutionHistory: [],
+      attachments: [],
+      comments: [],
     }
     let detailRequests = 0
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -489,6 +515,7 @@ describe('Responder incident queue', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('outcome is unknown')
     expect(screen.queryByText('private database failure')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Protected incident details' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Resolve incident' })).toBeDisabled()
     expect(resolveRequests).toBe(1)
     const firstKey = JSON.parse(String(fetchMock.mock.calls.find(([input]) =>
@@ -578,6 +605,9 @@ function detailRecord(status: 'SUBMITTED' | 'ASSIGNED') {
     submittedAt: row('Responder detail').submittedAt,
     queueEnteredAt: row('Responder detail').queueEnteredAt,
     resolutionHistory: [],
+    attachments: [],
+    comments: [],
+    lifecycleHistory: [],
   }
 }
 

@@ -126,10 +126,16 @@ CSRF protection and server-side authorization remain mandatory.
   (`aws-ap-southeast-1`) and keep anonymous/public object access disabled.
 - Access storage from the Spring backend with an S3-compatible client using
   Neon's branch-scoped `AWS_*` variables, SigV4, and path-style addressing.
-- Validate every upload according to `.agents/requirements.md` and authorize
-  every read. The choice between authorized backend streaming and narrowly
-  scoped short-lived signed URLs must be specified and threat-modelled before
-  implementation.
+- Attachment reads use backend streaming only. The browser never receives
+  object-storage credentials or signed URLs. Resolve the attachment ID to its
+  generated object key through PostgreSQL, then recheck the current actor's
+  incident authorization on every read before requesting object bytes.
+- Return content only with a validated PNG/JPEG media type, a generic
+  privacy-safe download filename, `Content-Disposition: attachment`,
+  `X-Content-Type-Options: nosniff`, and private/no-store caching. Never expose
+  the original filename, object key, or provider error.
+- Validate every upload according to `.agents/requirements.md` and define
+  cleanup and transaction-compensation behavior before permitting uploads.
 - Define cleanup and transaction-compensation behavior before permitting
   uploads so failed database or object-store operations do not leave unsafe or
   misleading state.

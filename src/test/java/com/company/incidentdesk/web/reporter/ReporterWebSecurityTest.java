@@ -138,6 +138,17 @@ class ReporterWebSecurityTest {
     }
 
     @Test
+    void responderAttachmentRouteRequiresResponderRole() throws Exception {
+        String attachmentPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001"
+                + "/attachments/60000000-0000-0000-0000-000000000002";
+        mvc.perform(get(attachmentPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get(attachmentPath).with(user("reporter").roles("REPORTER")))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(attachmentPath).with(user("admin").roles("ADMINISTRATOR")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void responderClaimRequiresResponderRoleAndCsrf() throws Exception {
         String claimPath = "/api/v1/responder/incidents/60000000-0000-0000-0000-000000000001/claim";
         mvc.perform(post(claimPath).with(csrf()))
@@ -286,6 +297,31 @@ class ReporterWebSecurityTest {
                         .header("X-XSRF-TOKEN", authenticatedToken.getValue()))
                 .andExpect(status().isNoContent())
                 .andExpect(cookie().maxAge("XSRF-TOKEN", 0));
+    }
+
+    @Test
+    void responderLoginChangesThePreAuthenticationSessionId() throws Exception {
+        MockHttpSession preAuthenticationSession = new MockHttpSession();
+        MvcResult anonymousSession = mvc.perform(get("/api/v1/auth/session").session(preAuthenticationSession))
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("XSRF-TOKEN"))
+                .andReturn();
+        Cookie csrfToken = anonymousSession.getResponse().getCookie("XSRF-TOKEN");
+        assertNotNull(csrfToken);
+        String anonymousSessionId = preAuthenticationSession.getId();
+
+        MvcResult login = mvc.perform(post("/api/v1/auth/responder/login")
+                        .session(preAuthenticationSession)
+                        .cookie(csrfToken)
+                        .header("X-XSRF-TOKEN", csrfToken.getValue())
+                        .param("username", "responder")
+                        .param("password", "test-secret"))
+                .andExpect(status().isNoContent())
+                .andReturn();
+
+        MockHttpSession authenticatedSession = (MockHttpSession) login.getRequest().getSession(false);
+        assertNotNull(authenticatedSession);
+        org.junit.jupiter.api.Assertions.assertNotEquals(anonymousSessionId, authenticatedSession.getId());
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -634,6 +634,9 @@ function ResponderDetailContent({ state, claimState, resolveState, onRetry, onCl
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>
       </section>
+      <AttachmentList incident={detail} />
+      <IncidentComments comments={detail.comments ?? []} />
+      <LifecycleHistory history={detail.lifecycleHistory ?? []} />
       <ResolutionHistory history={detail.resolutionHistory ?? []} />
     </section>
   )
@@ -679,6 +682,9 @@ function AssignedIncidentDetail({ detail, resolveState, onResolve }: {
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>
       </section>
+      <AttachmentList incident={detail} />
+      <IncidentComments comments={detail.comments ?? []} />
+      <LifecycleHistory history={detail.lifecycleHistory ?? []} />
       <ResolutionHistory history={detail.resolutionHistory ?? []} />
       <form className="responder-resolution" onSubmit={submitResolution}>
         <label htmlFor="responder-resolution-remarks">Resolution remarks</label>
@@ -694,6 +700,67 @@ function AssignedIncidentDetail({ detail, resolveState, onResolve }: {
       </form>
     </section>
   )
+}
+
+function AttachmentList({ incident }: { incident: ResponderIncidentDetail }) {
+  if (!incident.attachments?.length) return null
+  return <section aria-labelledby="responder-attachments-heading">
+    <h3 id="responder-attachments-heading">Attachments</h3>
+    <ul>
+      {incident.attachments.map((attachment, index) => <li key={attachment.id}>
+        <a href={`/api/v1/responder/incidents/${encodeURIComponent(incident.id)}/attachments/${encodeURIComponent(attachment.id)}`}>
+          Attachment {index + 1} ({attachment.mediaType === 'image/png' ? 'PNG' : 'JPEG'})
+        </a>
+      </li>)}
+    </ul>
+  </section>
+}
+
+function IncidentComments({ comments }: { comments: ResponderIncidentDetail['comments'] }) {
+  if (!comments?.length) return null
+  return <section aria-labelledby="responder-comments-heading">
+    <h3 id="responder-comments-heading">Comments</h3>
+    <ol>
+      {comments.map((comment, index) => <li key={`${comment.createdAt}-${index}`}>
+        <p><strong>{comment.authorLabel}</strong> · {roleName(comment.authorRole)}</p>
+        <p>{comment.text}</p>
+        <time dateTime={comment.createdAt}>{new Date(comment.createdAt).toLocaleString()}</time>
+      </li>)}
+    </ol>
+  </section>
+}
+
+function roleName(role: ResponderIncidentDetail['comments'][number]['authorRole']): string {
+  switch (role) {
+    case 'REPORTER': return 'Reporter'
+    case 'RESPONDER': return 'Responder'
+    case 'ADMINISTRATOR': return 'Administrator'
+  }
+}
+
+function LifecycleHistory({ history }: { history: ResponderIncidentDetail['lifecycleHistory'] }) {
+  if (!history?.length) return null
+  return <section aria-labelledby="responder-lifecycle-heading">
+    <h3 id="responder-lifecycle-heading">Incident history</h3>
+    <ol>
+      {history.map((entry, index) => <li key={`${entry.occurredAt}-${entry.action}-${index}`}>
+        <p>{lifecycleLabel(entry.action)}{entry.fromStatus && entry.toStatus
+          ? `: ${entry.fromStatus} → ${entry.toStatus}` : ''}</p>
+        <time dateTime={entry.occurredAt}>{new Date(entry.occurredAt).toLocaleString()}</time>
+      </li>)}
+    </ol>
+  </section>
+}
+
+function lifecycleLabel(action: ResponderIncidentDetail['lifecycleHistory'][number]['action']): string {
+  switch (action) {
+    case 'INCIDENT_SUBMITTED': return 'Submitted'
+    case 'INCIDENT_CLAIMED': return 'Claimed'
+    case 'INCIDENT_RESOLVED': return 'Resolved'
+    case 'INCIDENT_REOPENED': return 'Reopened'
+    case 'INCIDENT_HANDED_OFF': return 'Handed off'
+    case 'INCIDENT_WITHDRAWN': return 'Withdrawn'
+  }
 }
 
 function ResolutionHistory({ history }: {

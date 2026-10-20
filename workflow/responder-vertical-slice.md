@@ -137,6 +137,15 @@ visible according to the anonymity policy, without exposing reporter identity.
 Detail content and user-supplied text are rendered as text, never executable
 HTML.
 
+The product owner approved backend streaming from the private Neon bucket for
+this slice on 2026-10-20. The browser receives neither storage credentials nor
+signed URLs. The backend resolves attachment IDs through PostgreSQL and checks
+the current Responder's incident access before each object read. Download names
+are generic; responses use allowlisted PNG/JPEG media types, attachment
+disposition, `nosniff`, and `no-store`. This is a read contract only: Reporter
+uploads, object-write compensation, and production population of attachment
+metadata remain outside this issue and are not enabled by this migration.
+
 ### RSP-CLAIM-01 — Claim an eligible incident
 
 The actor may claim only an unassigned `SUBMITTED` incident in a category
@@ -210,7 +219,7 @@ recording credentials, session identifiers, or anonymous reporter identity.
 | `.agents/STYLE_GUIDE.md`, `.agents/testing.md` | RSP-UI-01 | Accessible React components; automated interaction/accessibility checks and responsive manual review |
 | Issue #6 and `.agents/testing.md` | RSP-E2E-01 | Human-run browser evidence after promotion journey is available |
 
-### Partial detail API progress (does not complete RSP-DETAIL-01)
+### Detail API progress (does not complete RSP-DETAIL-01)
 
 The incremental detail API and Responder-local browser view use only the
 incident's persisted web fields. A repeatable-read transaction checks the
@@ -218,14 +227,15 @@ current enabled Responder identity and allows either a currently permitted,
 unassigned `SUBMITTED` incident or an incident assigned to that Responder.
 Raw reporter IDs and the anonymous flag are not returned; the display label is
 `Anonymous reporter` for anonymous reports and the authorized login label for
-non-anonymous reports. Previous resolution cycles and their remarks are
-returned to an authorized current Responder as text. The web schema has no
-comment or attachment metadata tables, and attachment download/compensation
-design remains approval-gated; these surfaces are not implemented here.
-Missing and forbidden detail requests use the same safe unavailable response.
-This API contribution remains partial until comment and attachment persistence,
-per-resource authorization, safe attachment delivery, and their privacy
-evidence are complete.
+non-anonymous reports. Previous resolution cycles and their remarks, privacy-
+safe comments, and generic attachment metadata are returned to an authorized
+current Responder as text/data. V8 defines the shared comments and attachment
+metadata contracts. Attachment bytes are streamed through the backend from the
+private Neon bucket after fresh per-request authorization. Reporter comment
+and upload writers, upload compensation, and production population of these
+tables remain outside this issue. Missing and forbidden detail requests use
+the same safe unavailable response. The API contribution remains partial
+until those write flows are integrated and privacy evidence is complete.
 
 The API returns incident text as data; any browser view must render it as text,
 not executable HTML. The current core-fields UI uses React text rendering;
@@ -242,7 +252,8 @@ persisted request identifier and exact remarks; confirmed success clears the
 protected incident detail. `ResponderPortal.test.tsx` covers success,
 validation, conflict, uncertain replay, and cache clearing. RSP-UI-01 remains
 unchecked until complete keyboard/screen-reader and narrow-layout verification
-and the remaining comment/attachment interactions are covered.
+and keyboard access to the detail comments and attachment downloads is
+verified.
 
 ## 7. Approved implementation decisions
 
@@ -285,8 +296,11 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
 
 ## Acceptance criteria
 
-- [ ] RSP-AUTH-01: expected-role authentication, generic failures, session
-  rotation, CSRF, and direct-route denial are demonstrated.
+- [x] RSP-AUTH-01: expected-role authentication, generic failures, session
+  rotation, CSRF, and direct-route denial are demonstrated by
+  `ReporterWebSecurityTest.roleSpecificLoginPathsAcceptOnlyTheirPersistedRole`,
+  `ReporterWebSecurityTest.responderLoginChangesThePreAuthenticationSessionId`,
+  and the Responder queue/detail/attachment role-denial tests.
 - [ ] RSP-QUEUE-01: only the authorized queue and stable ordering are returned;
   empty, no-category, expired, denied, and failure states are distinct without
   leaking protected categories or incident existence.

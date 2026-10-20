@@ -20,6 +20,31 @@ export type ResponderIncidentDetail = {
   submittedAt: string
   queueEnteredAt: string
   resolutionHistory: ResponderResolutionHistory[]
+  attachments: ResponderAttachment[]
+  comments: ResponderIncidentComment[]
+  lifecycleHistory: ResponderLifecycleEntry[]
+}
+
+export type ResponderAttachment = {
+  id: string
+  mediaType: 'image/png' | 'image/jpeg'
+  sizeBytes: number
+  createdAt: string
+}
+
+export type ResponderIncidentComment = {
+  authorLabel: string
+  authorRole: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
+  text: string
+  createdAt: string
+}
+
+export type ResponderLifecycleEntry = {
+  action: 'INCIDENT_SUBMITTED' | 'INCIDENT_CLAIMED' | 'INCIDENT_RESOLVED'
+    | 'INCIDENT_REOPENED' | 'INCIDENT_HANDED_OFF' | 'INCIDENT_WITHDRAWN'
+  occurredAt: string
+  fromStatus: string | null
+  toStatus: string | null
 }
 
 export type ResponderResolutionHistory = {
