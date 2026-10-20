@@ -220,10 +220,30 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
     private ResolutionResult resolve(
             String loginName, UUID incidentId, UUID requestId, String remarks, Instant occurredAt,
             UUID resolutionId, UUID auditEventId) {
+        lockResolutionRequest(requestId);
+        Optional<UUID> responderId = findEnabledResponder(loginName);
+        if (responderId.isEmpty()) return ResolutionResult.conflict();
+
+        Optional<ExistingResolution> priorAttempt = findResolutionAttempt(requestId);
+        if (priorAttempt.isPresent()) {
+            return matchesRetry(priorAttempt.get(), incidentId, responderId.get(), remarks)
+                    ? new ResolutionResult(true, priorAttempt.get().cycleNumber())
+                    : ResolutionResult.conflict();
+        }
+
+        Optional<ResolvedIncident> resolved = resolveAssignedIncident(incidentId, responderId.get());
+        if (resolved.isEmpty()) return priorResolution(responderId.get(), incidentId, requestId, remarks);
+        return recordResolution(resolved.get(), requestId, remarks, occurredAt, resolutionId, auditEventId);
+    }
+
+    private void lockResolutionRequest(UUID requestId) {
         jdbc.queryForObject("""
                 SELECT 1
                   FROM (SELECT pg_advisory_xact_lock(hashtextextended(:requestKey, 0))) request_lock
                 """, Map.of("requestKey", requestId.toString()), Integer.class);
+    }
+
+    private Optional<UUID> findEnabledResponder(String loginName) {
         List<UUID> responderIds = jdbc.query("""
                 SELECT id
                   FROM accounts
@@ -233,23 +253,27 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                  FOR SHARE
         """, Map.of("loginName", loginName),
                 (result, row) -> result.getObject("id", UUID.class));
-        if (responderIds.isEmpty()) return ResolutionResult.conflict();
-        UUID responderId = responderIds.getFirst();
-        List<ExistingResolution> priorAttempts = jdbc.query("""
+        return responderIds.stream().findFirst();
+    }
+
+    private Optional<ExistingResolution> findResolutionAttempt(UUID requestId) {
+        List<ExistingResolution> attempts = jdbc.query("""
                 SELECT incident_id, resolved_by, cycle_number, remarks
                   FROM incident_resolutions
                  WHERE request_id = :requestId
                 """, Map.of("requestId", requestId), (result, row) -> new ExistingResolution(
                 result.getObject("incident_id", UUID.class), result.getObject("resolved_by", UUID.class),
                 result.getInt("cycle_number"), result.getString("remarks")));
-        if (!priorAttempts.isEmpty()) {
-            ExistingResolution prior = priorAttempts.getFirst();
-            if (incidentId.equals(prior.incidentId()) && responderId.equals(prior.responderId())
-                    && remarks.equals(prior.remarks())) {
-                return new ResolutionResult(true, prior.cycleNumber());
-            }
-            return ResolutionResult.conflict();
-        }
+        return attempts.stream().findFirst();
+    }
+
+    private static boolean matchesRetry(
+            ExistingResolution prior, UUID incidentId, UUID responderId, String remarks) {
+        return incidentId.equals(prior.incidentId()) && responderId.equals(prior.responderId())
+                && remarks.equals(prior.remarks());
+    }
+
+    private Optional<ResolvedIncident> resolveAssignedIncident(UUID incidentId, UUID responderId) {
         List<ResolvedIncident> resolved = jdbc.query("""
                 UPDATE incidents i
                    SET status = 'RESOLVED',
@@ -261,14 +285,17 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                 RETURNING i.id
                 """, Map.of("incidentId", incidentId, "responderId", responderId),
                 (result, row) -> new ResolvedIncident(result.getObject("id", UUID.class), responderId));
-        if (resolved.isEmpty()) return priorResolution(responderId, incidentId, requestId, remarks);
+        return resolved.stream().findFirst();
+    }
 
-        ResolvedIncident incident = resolved.getFirst();
+    private ResolutionResult recordResolution(
+            ResolvedIncident incident, UUID requestId, String remarks, Instant occurredAt,
+            UUID resolutionId, UUID auditEventId) {
         Integer previousCycles = jdbc.queryForObject("""
                 SELECT COALESCE(MAX(cycle_number), 0)
                   FROM incident_resolutions
                  WHERE incident_id = :incidentId
-                """, Map.of("incidentId", incidentId), Integer.class);
+                """, Map.of("incidentId", incident.incidentId()), Integer.class);
         int cycleNumber = Objects.requireNonNull(previousCycles, "previousCycles") + 1;
         jdbc.update("""
                 INSERT INTO incident_resolutions (
