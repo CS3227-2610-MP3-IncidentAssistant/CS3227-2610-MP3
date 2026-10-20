@@ -92,6 +92,21 @@ class ReporterWebSecurityTest {
     }
 
     @Test
+    void responderApiRequiresResponderRoleWithoutRevealingItToOtherRoles() throws Exception {
+        mvc.perform(get("/api/v1/responder/incidents"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/responder/incidents")
+                        .with(user("reporter").roles("REPORTER")))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/responder/incidents")
+                        .with(user("admin").roles("ADMINISTRATOR")))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/responder/incidents")
+                        .with(user("responder").roles("RESPONDER")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void stateChangeRequiresCsrfForReporter() throws Exception {
         mvc.perform(post("/api/v1/reporter/incidents")
                         .with(user("reporter").roles("REPORTER")))
@@ -225,6 +240,11 @@ class ReporterWebSecurityTest {
         }
 
         @Bean
+        ProtectedResponderEndpoint responderEndpoint() {
+            return new ProtectedResponderEndpoint();
+        }
+
+        @Bean
         SessionController sessionController() {
             return new SessionController();
         }
@@ -264,6 +284,13 @@ class ReporterWebSecurityTest {
 
         @org.springframework.web.bind.annotation.PostMapping("/api/v1/reporter/incidents")
         void submitIncident() {
+        }
+    }
+
+    @RestController
+    static class ProtectedResponderEndpoint {
+        @GetMapping("/api/v1/responder/incidents")
+        void getIncidents() {
         }
     }
 }

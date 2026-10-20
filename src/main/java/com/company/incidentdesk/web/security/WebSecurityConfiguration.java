@@ -48,6 +48,7 @@ public class WebSecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/v1/reporter/**").hasRole("REPORTER")
+                        .requestMatchers("/api/v1/responder/**").hasRole("RESPONDER")
                         .requestMatchers("/api/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
