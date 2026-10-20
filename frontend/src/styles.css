@@ -124,6 +124,10 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .responder-detail__description { padding: 22px; }
 .responder-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
 .responder-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.responder-detail__feedback { margin: 0 22px 18px; padding: 12px 14px; border-radius: 8px; background: var(--color-info-soft); }
+.responder-detail-view { display: grid; gap: 8px; }
+.responder-detail__feedback p { margin: 0 0 8px; }
+.responder-detail > .primary-button { margin: 0 22px 22px; }
 .status-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; color: var(--color-info); background: var(--color-info-soft); font-size: 12px; font-weight: 700; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px; }
 .pagination button { min-height: 40px; }

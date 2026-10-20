@@ -5,6 +5,7 @@ import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 import {
   loadResponderQueue,
   loadResponderIncidentDetail,
+  claimResponderIncident,
   ResponderQueueError,
   type ResponderIncidentDetail,
   type ResponderQueuePage,
@@ -34,6 +35,12 @@ type DetailState =
   | { kind: 'session-expired'; incidentId: string; loginName: string }
   | { kind: 'denied'; incidentId: string; loginName: string }
   | { kind: 'service-error'; incidentId: string; loginName: string }
+type ClaimState =
+  | { kind: 'idle'; incidentId: string; loginName: string }
+  | { kind: 'pending'; incidentId: string; loginName: string }
+  | { kind: 'claimed'; incidentId: string; loginName: string }
+  | { kind: 'conflict'; incidentId: string; loginName: string }
+  | { kind: 'service-error'; incidentId: string; loginName: string }
 
 const initialFilters: DraftFilters = {
   search: '',
@@ -54,12 +61,23 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null)
   const [detailRequestKey, setDetailRequestKey] = useState(0)
   const [detail, setDetail] = useState<DetailState | null>(null)
+  const [claim, setClaim] = useState<ClaimState | null>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const requestGeneration = useRef(0)
   const activeRequest = useRef<AbortController | null>(null)
   const detailGeneration = useRef(0)
   const activeDetailRequest = useRef<AbortController | null>(null)
+  const claimGeneration = useRef(0)
+  const activeClaim = useRef<{ incidentId: string; loginName: string } | null>(null)
+  const currentLoginName = useRef(loginName)
   const navigation: RoleNavigationItem[] = [{ label: 'Incident queue', current: true }]
+
+  useEffect(() => {
+    currentLoginName.current = loginName
+    claimGeneration.current++
+  }, [loginName])
+  const currentClaim = selectedIncidentId && claim?.incidentId === selectedIncidentId
+    && claim.loginName === loginName ? claim : null
 
   useEffect(() => {
     const controller = new AbortController()
@@ -137,6 +155,8 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   }
 
   function openDetail(incidentId: string) {
+    claimGeneration.current++
+    setClaim({ kind: 'idle', incidentId, loginName })
     detailGeneration.current++
     activeDetailRequest.current?.abort()
     setDetail({ kind: 'loading', incidentId, loginName })
@@ -151,7 +171,55 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
     setDetailRequestKey((key) => key + 1)
   }
 
+  async function claimIncident(incidentId: string) {
+    const actor = loginName
+    if (activeClaim.current?.incidentId === incidentId && activeClaim.current.loginName === actor) return
+    const generation = ++claimGeneration.current
+    activeClaim.current = { incidentId, loginName: actor }
+    setClaim({ kind: 'pending', incidentId, loginName: actor })
+    try {
+      await claimResponderIncident(incidentId)
+      if (generation !== claimGeneration.current || currentLoginName.current !== actor) return
+      setClaim({ kind: 'claimed', incidentId, loginName: actor })
+      pageHeading.current?.focus()
+      retryDetail()
+      changeQuery({ ...query })
+    } catch (error: unknown) {
+      if (generation !== claimGeneration.current || currentLoginName.current !== actor) return
+      if (error instanceof ResponderQueueError && error.kind === 'session') {
+        setClaim(null)
+        setDetail(null)
+        setSelectedIncidentId(null)
+        setQueue({ kind: 'session-expired' })
+        return
+      }
+      if (error instanceof ResponderQueueError && error.kind === 'conflict') {
+        setClaim({ kind: 'conflict', incidentId, loginName: actor })
+        pageHeading.current?.focus()
+        retryDetail()
+        changeQuery({ ...query })
+        return
+      }
+      setClaim({ kind: 'service-error', incidentId, loginName: actor })
+      pageHeading.current?.focus()
+      retryDetail()
+      changeQuery({ ...query })
+    } finally {
+      if (activeClaim.current?.incidentId === incidentId && activeClaim.current.loginName === actor) {
+        activeClaim.current = null
+      }
+    }
+  }
+
+  function refreshClaimStatus() {
+    if (!selectedIncidentId) return
+    setClaim({ kind: 'idle', incidentId: selectedIncidentId, loginName })
+    retryDetail()
+    changeQuery({ ...query })
+  }
+
   function backToQueue() {
+    claimGeneration.current++
     detailGeneration.current++
     activeDetailRequest.current?.abort()
     setDetail(null)
@@ -167,12 +235,14 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   }
 
   async function signOut() {
+    claimGeneration.current++
     requestGeneration.current++
     detailGeneration.current++
     activeRequest.current?.abort()
     activeDetailRequest.current?.abort()
     setSelectedIncidentId(null)
     setDetail(null)
+    setClaim(null)
     setQueue({ kind: 'signing-out' })
     try {
       await onLogout()
@@ -203,17 +273,23 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
               : 'View incidents assigned to you and unassigned incidents in your accessible categories.'}</p>
           </div>
           {selectedIncidentId
-            ? <button className="secondary-button" type="button" onClick={backToQueue}>Back to queue</button>
+            ? <button className="secondary-button" type="button" disabled={currentClaim?.kind === 'pending'}
+              onClick={backToQueue}>Back to queue</button>
             : <button className="secondary-button" type="button" onClick={refreshQueue}>Refresh queue</button>}
         </header>
 
         {selectedIncidentId ? (
-          <ResponderDetailContent
-            state={detail?.incidentId === selectedIncidentId && detail.loginName === loginName
-              ? detail : { kind: 'loading', incidentId: selectedIncidentId, loginName }}
-            onRetry={retryDetail}
-            onLogout={signOut}
-          />
+          <div className="responder-detail-view">
+            <ResponderClaimFeedback state={currentClaim} onRefreshStatus={refreshClaimStatus} />
+            <ResponderDetailContent
+              state={detail?.incidentId === selectedIncidentId && detail.loginName === loginName
+                ? detail : { kind: 'loading', incidentId: selectedIncidentId, loginName }}
+              onRetry={retryDetail}
+              claimState={currentClaim ?? { kind: 'idle', incidentId: selectedIncidentId, loginName }}
+              onClaim={() => void claimIncident(selectedIncidentId)}
+              onLogout={signOut}
+            />
+          </div>
         ) : <section className="incident-panel" aria-labelledby="responder-queue-heading">
           <div className="section-heading">
             <div>
@@ -389,9 +465,28 @@ function IncidentTable({ incidents, onOpenDetail }: {
   )
 }
 
-function ResponderDetailContent({ state, onRetry, onLogout }: {
+function ResponderClaimFeedback({ state, onRefreshStatus }: {
+  state: ClaimState | null
+  onRefreshStatus: () => void
+}) {
+  if (!state || state.kind === 'idle') return null
+  if (state.kind === 'pending') return <p className="responder-detail__feedback" role="status">Claiming incident…</p>
+  if (state.kind === 'claimed') return <p className="responder-detail__feedback" role="status">Incident claimed and assigned to you.</p>
+  if (state.kind === 'conflict') return <div className="responder-detail__feedback" role="alert">
+    <p>This incident is no longer available to claim. Check its current status before trying again.</p>
+    <button type="button" onClick={onRefreshStatus}>Refresh status</button>
+  </div>
+  return <div className="responder-detail__feedback" role="alert">
+    <p>The claim outcome could not be confirmed. Check the current status before trying again.</p>
+    <button type="button" onClick={onRefreshStatus}>Check status</button>
+  </div>
+}
+
+function ResponderDetailContent({ state, claimState, onRetry, onClaim, onLogout }: {
   state: DetailState
+  claimState: ClaimState
   onRetry: () => void
+  onClaim: () => void
   onLogout: () => Promise<void>
 }) {
   if (state.kind === 'loading') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
@@ -431,6 +526,12 @@ function ResponderDetailContent({ state, onRetry, onLogout }: {
         <div><dt>Reporter</dt><dd>{detail.reporterLabel}</dd></div>
         <div><dt>Submitted</dt><dd>{new Date(detail.submittedAt).toLocaleString()}</dd></div>
       </dl>
+      {detail.status === 'SUBMITTED' && claimState.kind !== 'claimed' && (
+        <button className="primary-button" type="button" disabled={claimState.kind === 'pending' || claimState.kind === 'conflict'
+          || claimState.kind === 'service-error'} onClick={onClaim}>
+          {claimState.kind === 'pending' ? 'Claiming…' : 'Claim incident'}
+        </button>
+      )}
       <section className="responder-detail__description" aria-labelledby="responder-description-heading">
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>

@@ -39,7 +39,7 @@ export type ResponderQueueQuery = {
   size: number
 }
 
-export type ResponderQueueErrorKind = 'session' | 'denied' | 'invalid' | 'service'
+export type ResponderQueueErrorKind = 'session' | 'denied' | 'invalid' | 'conflict' | 'service'
 
 export class ResponderQueueError extends Error {
   constructor(readonly kind: ResponderQueueErrorKind) {
@@ -95,6 +95,28 @@ export async function loadResponderIncidentDetail(
   if (response.status === 401 || errorBody?.code === 'SECURITY_SESSION_EXPIRED') {
     throw new ResponderQueueError('session')
   }
+  if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
+  throw new ResponderQueueError('service')
+}
+
+export async function claimResponderIncident(incidentId: string): Promise<void> {
+  const headers = new Headers({ Accept: 'application/json' })
+  const csrfToken = readCsrfToken()
+  if (csrfToken) headers.set('X-XSRF-TOKEN', csrfToken)
+
+  const response = await fetch(`/api/v1/responder/incidents/${encodeURIComponent(incidentId)}/claim`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers,
+  })
+  if (response.ok) return
+
+  const errorBody = await response.json().catch(() => null) as { code?: unknown } | null
+  if (response.status === 401 || errorBody?.code === 'SECURITY_SESSION_EXPIRED') {
+    throw new ResponderQueueError('session')
+  }
+  if (response.status === 409) throw new ResponderQueueError('conflict')
   if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
   throw new ResponderQueueError('service')
 }

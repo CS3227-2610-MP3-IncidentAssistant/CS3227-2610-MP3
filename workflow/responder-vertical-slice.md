@@ -226,6 +226,28 @@ not executable HTML. The current core-fields UI uses React text rendering;
 later comment/history/attachment surfaces still require their own rendering
 and privacy verification.
 
+### Partial claim UI progress (does not complete RSP-UI-01)
+
+The Responder detail view offers a Claim action only for a `SUBMITTED` incident.
+The browser sends the incident identifier with the current CSRF token and
+same-origin session, disables duplicate submission, and does not optimistically
+change assignment. Success, conflict, and uncertain service outcomes trigger
+fresh detail and queue reads; conflict copy does not identify the cause or an
+assignee. Mutation feedback remains visible during detail reconciliation and
+safe detail-read failures. Session expiry clears protected detail and returns
+to the queue's session-expired state. Frontend evidence is recorded in
+`ResponderPortal.test.tsx` (`claims a submitted incident once and confirms the
+server state`, `shows a generic claim conflict and reconciles detail without
+exposing the other assignee`, and `clears protected detail and queue after a
+claim session expiry`). The same test file also verifies that assigned detail
+has no Claim action, Back is disabled during a pending claim, and an uncertain
+service outcome is reconciled without an automatic second POST. RSP-UI-01
+remains unchecked until resolution feedback, complete keyboard/screen-reader
+and narrow-layout verification, and the remaining Responder journey are
+covered. `keeps claim success feedback visible when the follow-up detail read
+fails` verifies that a confirmed mutation remains acknowledged through a
+subsequent detail-read failure.
+
 ## 7. Approved implementation decisions
 
 The product owner approved the following decisions for this slice:

@@ -243,6 +243,161 @@ describe('Responder incident queue', () => {
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toMatchObject({ page: 1 })
   })
 
+  it('claims a submitted incident once and confirms the server state', async () => {
+    let finishClaim: ((result: Response) => void) | undefined
+    let finishRefresh: ((result: Response) => void) | undefined
+    let claimCommitted = false
+    let detailRequests = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/claim')) {
+        return new Promise<Response>((resolve) => {
+          finishClaim = (result) => {
+            claimCommitted = true
+            resolve(result)
+          }
+        })
+      }
+      if (init?.method === 'GET') {
+        detailRequests++
+        if (claimCommitted) return new Promise<Response>((resolve) => { finishRefresh = resolve })
+        return Promise.resolve(response(detailRecord('SUBMITTED')))
+      }
+      return Promise.resolve(response({ ...basePage, incidents: [row('Claim this incident')], totalElements: 1 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Claim this incident' }))
+    expect(await screen.findByRole('button', { name: 'Claim incident' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Claim incident' }))
+    const claimButton = screen.getByRole('button', { name: 'Claiming…' })
+    expect(claimButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Back to queue' })).toBeDisabled()
+    fireEvent.click(claimButton)
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/claim'))).toHaveLength(1)
+
+    const claimCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/claim'))
+    expect(claimCall?.[1]).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store' })
+    expect(claimCall?.[1]?.body).toBeUndefined()
+    expect(new Headers(claimCall?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('responder-csrf')
+    await act(async () => finishClaim?.(response({ claimed: true })))
+
+    expect(await screen.findByText(/Incident claimed and assigned to you/)).toBeInTheDocument()
+    expect(await screen.findByText('Loading incident details…')).toBeInTheDocument()
+    expect(screen.queryByText(/Submitted/, { selector: '.eyebrow' })).not.toBeInTheDocument()
+    await waitFor(() => expect(detailRequests).toBe(2))
+    await act(async () => finishRefresh?.(response(detailRecord('ASSIGNED'))))
+
+    expect(await screen.findByText(/Assigned/, { selector: '.eyebrow' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Claim incident' })).not.toBeInTheDocument()
+  })
+
+  it('shows a generic claim conflict and reconciles detail without exposing the other assignee', async () => {
+    let detailRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/claim')) return response({ code: 'CLAIM_CONFLICT' }, 409)
+      if (init?.method === 'GET') {
+        detailRequests++
+        return detailRequests === 1
+          ? response(detailRecord('SUBMITTED'))
+          : response({ code: 'UNAVAILABLE', message: 'Resource unavailable' }, 404)
+      }
+      return response({ ...basePage, incidents: [row('Restricted claim')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Restricted claim' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim incident' }))
+
+    expect(await screen.findByRole('heading', { name: 'Incident unavailable' })).toBeInTheDocument()
+    expect(screen.getByText('This incident is no longer available to claim. Check its current status before trying again.'))
+      .toBeInTheDocument()
+    expect(screen.getByText('This incident is unavailable to your current responder session.')).toBeInTheDocument()
+    expect(screen.queryByText(/claimed by|assignee/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps claim success feedback visible when the follow-up detail read fails', async () => {
+    let detailRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/claim')) return response({ claimed: true })
+      if (init?.method === 'GET') {
+        detailRequests++
+        return detailRequests === 1
+          ? response(detailRecord('SUBMITTED'))
+          : response({ message: 'private database failure' }, 503)
+      }
+      return response({ ...basePage, incidents: [row('Claim with transient refresh failure')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Claim with transient refresh failure' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim incident' }))
+
+    expect(await screen.findByText(/Incident claimed and assigned to you/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Details unavailable' })).toBeInTheDocument()
+    expect(screen.queryByText('private database failure')).not.toBeInTheDocument()
+  })
+
+  it('clears protected detail and queue after a claim session expiry', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/claim')) return response({ code: 'SECURITY_SESSION_EXPIRED' }, 401)
+      if (init?.method === 'GET') return response(detailRecord('SUBMITTED'))
+      return response({ ...basePage, incidents: [row('Session-bound claim')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Session-bound claim' }))
+    expect(await screen.findByRole('heading', { name: 'Protected incident details' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim incident' }))
+
+    expect(await screen.findByRole('heading', { name: 'Incident queue' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Your session has expired or changed')
+    expect(screen.queryByText('Private detail content')).not.toBeInTheDocument()
+  })
+
+  it('does not offer a claim action for an already-assigned incident', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
+      ? response(detailRecord('ASSIGNED'))
+      : response({ ...basePage, incidents: [row('Already assigned', 'ASSIGNED')], totalElements: 1 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Already assigned' }))
+    expect(await screen.findByRole('heading', { name: 'Protected incident details' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Claim incident' })).not.toBeInTheDocument()
+  })
+
+  it('reconciles an uncertain claim failure without automatically resubmitting the mutation', async () => {
+    let claimRequests = 0
+    let detailRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/claim')) {
+        claimRequests++
+        return response({ message: 'temporarily unavailable' }, 503)
+      }
+      if (init?.method === 'GET') {
+        detailRequests++
+        return response(detailRecord('SUBMITTED'))
+      }
+      return response({ ...basePage, incidents: [row('Uncertain claim')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Uncertain claim' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim incident' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The claim outcome could not be confirmed')
+    expect(claimRequests).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
+
+    expect(await screen.findByRole('button', { name: 'Claim incident' })).toBeEnabled()
+    expect(detailRequests).toBeGreaterThanOrEqual(3)
+    expect(claimRequests).toBe(1)
+  })
+
   it.each([403, 404])('shows the same safe unavailable detail state for HTTP %i', async (status) => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
       ? response({ code: 'UNAVAILABLE', message: 'private server details' }, status)
@@ -306,6 +461,19 @@ function row(title: string, status: 'SUBMITTED' | 'ASSIGNED' = 'SUBMITTED') {
     status,
     submittedAt: '2026-10-20T01:00:00Z',
     queueEnteredAt: '2026-10-20T01:00:00Z',
+  }
+}
+
+function detailRecord(status: 'SUBMITTED' | 'ASSIGNED') {
+  return {
+    id: row('Responder detail').id,
+    title: 'Protected incident details',
+    description: 'Private detail content',
+    reporterLabel: 'Anonymous reporter',
+    category: 'IT',
+    status,
+    submittedAt: row('Responder detail').submittedAt,
+    queueEnteredAt: row('Responder detail').queueEnteredAt,
   }
 }
 
