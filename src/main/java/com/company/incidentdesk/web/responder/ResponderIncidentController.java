@@ -1,13 +1,16 @@
 package com.company.incidentdesk.web.responder;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 
 import javax.sql.DataSource;
 
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentPage;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderAccessDeniedException;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.InvalidQueueFilterException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -32,10 +35,14 @@ final class ResponderIncidentController {
     @GetMapping
     ResponseEntity<IncidentPage> queue(
             Principal principal,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(required = false) List<String> category,
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(defaultValue = "ALL") Assignment assignment,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(incidents.queue(principal.getName(), page, size));
+                .body(incidents.queue(principal.getName(), search, category, status, assignment, page, size));
     }
 
     @ExceptionHandler(ResponderAccessDeniedException.class)
@@ -47,6 +54,11 @@ final class ResponderIncidentController {
     ResponseEntity<?> unavailable() {
         return safeError(HttpStatus.SERVICE_UNAVAILABLE, "INCIDENTS_UNAVAILABLE",
                 "Incidents are temporarily unavailable. Try again.");
+    }
+
+    @ExceptionHandler(InvalidQueueFilterException.class)
+    ResponseEntity<?> invalidFilter() {
+        return safeError(HttpStatus.BAD_REQUEST, "INVALID_FILTER", "One or more queue filters are invalid.");
     }
 
     private static ResponseEntity<Map<String, String>> safeError(HttpStatus status, String code, String message) {

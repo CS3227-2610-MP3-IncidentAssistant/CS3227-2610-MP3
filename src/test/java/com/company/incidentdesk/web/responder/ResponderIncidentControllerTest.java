@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentPage;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentRow;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderAccessDeniedException;
 
 class ResponderIncidentControllerTest {
@@ -30,7 +31,7 @@ class ResponderIncidentControllerTest {
                         new IncidentPage(List.of(SAFE_ROW), 0, 25, 1, 1, true))));
         Principal principal = () -> "responder";
 
-        ResponseEntity<IncidentPage> response = controller.queue(principal, 0, 25);
+        ResponseEntity<IncidentPage> response = controller.queue(principal, "", null, null, Assignment.ALL, 0, 25);
         List<String> fieldNames = java.util.Arrays.stream(IncidentRow.class.getRecordComponents())
                 .map(component -> component.getName()).toList();
 

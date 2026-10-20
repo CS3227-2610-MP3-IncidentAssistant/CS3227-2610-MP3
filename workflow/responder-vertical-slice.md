@@ -106,7 +106,14 @@ permitted categories unless already assigned to the actor, and lifecycle
 states not eligible for the queue. Ordering is stable and deterministic, with
 incident identifier as a tie-breaker. Server-side paging and existing
 centralized field limits apply; the UI must not fetch a broader dataset and
-filter it locally.
+filter it locally. Search trims surrounding whitespace and matches title,
+description, or incident identifier case-insensitively. Category and status
+selections use OR within each selection group and combine with AND across
+groups; empty selections mean all authorized values. Status choices are
+limited to `SUBMITTED` and `ASSIGNED`, and assignment choices are `ALL`,
+`ASSIGNED`, and `UNASSIGNED`. Search is limited to 200 characters after
+trimming. Filtering and counts are applied only after the authorization
+predicate, before server-side paging.
 
 The queue distinguishes loading, no eligible incidents, no categories
 configured, expired/changed session, denied access, and service failure. A

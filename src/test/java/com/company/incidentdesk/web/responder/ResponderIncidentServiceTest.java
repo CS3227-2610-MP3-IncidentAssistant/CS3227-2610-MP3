@@ -25,7 +25,8 @@ class ResponderIncidentServiceTest {
         IncidentPage result = service.queue("CurrentResponder", 3, 500);
 
         assertEquals("CurrentResponder", gateway.loginName);
-        assertEquals(new ListCriteria(3, 100), gateway.criteria);
+        assertEquals(criteria("", List.of(), List.of(), ResponderIncidentService.Assignment.ALL, 3, 100),
+                gateway.criteria);
         assertEquals(List.of(row()), result.incidents());
     }
 
@@ -41,9 +42,34 @@ class ResponderIncidentServiceTest {
 
     @Test
     void boundsPageSizeAndKeepsOffsetArithmeticWithinLongRange() {
-        assertEquals(new ListCriteria(0, 25), new ListCriteria(-9, 0));
-        assertEquals(214_748_364_700L, new ListCriteria(Integer.MAX_VALUE, 100).offset());
-        assertTrue(new ListCriteria(0, 101).size() == 100);
+        assertEquals(criteria("", List.of(), List.of(), ResponderIncidentService.Assignment.ALL, 0, 25),
+                criteria(null, null, null, null, -9, 0));
+        assertEquals(214_748_364_700L,
+                criteria("", List.of(), List.of(), ResponderIncidentService.Assignment.ALL,
+                        Integer.MAX_VALUE, 100).offset());
+        assertTrue(criteria("", List.of(), List.of(), ResponderIncidentService.Assignment.ALL, 0, 101).size() == 100);
+    }
+
+    @Test
+    void queueCriteriaTrimSearchAndNormalizeFiltersAndRejectUnsupportedValues() {
+        assertEquals(criteria("vpn", List.of("IT", "FACILITIES"), List.of("ASSIGNED"),
+                ResponderIncidentService.Assignment.ASSIGNED, 0, 25),
+                criteria("  vpn  ", List.of("FACILITIES", "IT", "IT"), List.of("ASSIGNED"),
+                        ResponderIncidentService.Assignment.ASSIGNED, 0, 25));
+        assertThrows(ResponderIncidentService.InvalidQueueFilterException.class,
+                () -> criteria("x".repeat(201), List.of(), List.of(),
+                        ResponderIncidentService.Assignment.ALL, 0, 25));
+        assertThrows(ResponderIncidentService.InvalidQueueFilterException.class,
+                () -> criteria("", List.of("UNKNOWN"), List.of(),
+                        ResponderIncidentService.Assignment.ALL, 0, 25));
+        assertThrows(ResponderIncidentService.InvalidQueueFilterException.class,
+                () -> criteria("", List.of(), List.of("RESOLVED"),
+                        ResponderIncidentService.Assignment.ALL, 0, 25));
+    }
+
+    private static ListCriteria criteria(String search, List<String> categories, List<String> statuses,
+            ResponderIncidentService.Assignment assignment, int page, int size) {
+        return new ListCriteria(search, categories, statuses, assignment, page, size);
     }
 
     private static IncidentRow row() {

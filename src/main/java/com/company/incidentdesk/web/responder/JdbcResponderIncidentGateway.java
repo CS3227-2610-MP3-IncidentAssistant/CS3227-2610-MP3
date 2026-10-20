@@ -12,6 +12,7 @@ import javax.sql.DataSource;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentPage;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentRow;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
@@ -78,16 +79,17 @@ final class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
 
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("actorId", actorId);
+        String filteredQueue = filteredQueue(criteria, parameters);
         long total = Optional.ofNullable(jdbc.queryForObject("""
                 SELECT COUNT(*) FROM incidents i WHERE
-                """ + AUTHORIZED_INCIDENTS, parameters, Long.class)).orElse(0L);
+                """ + filteredQueue, parameters, Long.class)).orElse(0L);
         parameters.put("limit", criteria.size());
         parameters.put("offset", criteria.offset());
         List<IncidentRow> rows = jdbc.query("""
                 SELECT i.id, i.title, i.category, i.status, i.submitted_at, i.queue_entered_at
-                  FROM incidents i
+                 FROM incidents i
                  WHERE
-                """ + AUTHORIZED_INCIDENTS + """
+                """ + filteredQueue + """
                  ORDER BY i.queue_entered_at ASC NULLS LAST, i.id ASC
                  LIMIT :limit OFFSET :offset
                 """, parameters, (result, row) -> new IncidentRow(
@@ -99,5 +101,34 @@ final class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                 result.getObject("queue_entered_at", OffsetDateTime.class).toInstant()));
         long totalPages = Math.max(1, (total + criteria.size() - 1) / criteria.size());
         return new IncidentPage(rows, criteria.page(), criteria.size(), total, totalPages, categoriesConfigured);
+    }
+
+    private static String filteredQueue(ListCriteria criteria, Map<String, Object> parameters) {
+        StringBuilder where = new StringBuilder("(").append(AUTHORIZED_INCIDENTS).append(")");
+        if (!criteria.search().isEmpty()) {
+            where.append(" AND (i.title ILIKE :search ESCAPE '!' OR i.description ILIKE :search ESCAPE '!'")
+                    .append(" OR CAST(i.id AS text) ILIKE :search ESCAPE '!')");
+            parameters.put("search", "%" + escapeLikePattern(criteria.search()) + "%");
+        }
+        addSetPredicate(where, parameters, "i.category", "categories", criteria.categories());
+        addSetPredicate(where, parameters, "i.status", "statuses", criteria.statuses());
+        switch (criteria.assignment()) {
+        case ALL -> { }
+        case ASSIGNED -> where.append(" AND i.assignee_id = :actorId");
+        case UNASSIGNED -> where.append(" AND i.assignee_id IS NULL");
+        }
+        return where.toString();
+    }
+
+    private static String escapeLikePattern(String search) {
+        return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    private static void addSetPredicate(
+            StringBuilder where, Map<String, Object> parameters, String column, String name, List<String> values) {
+        if (!values.isEmpty()) {
+            where.append(" AND ").append(column).append(" IN (:").append(name).append(')');
+            parameters.put(name, values);
+        }
     }
 }

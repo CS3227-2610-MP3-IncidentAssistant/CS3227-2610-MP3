@@ -120,6 +120,31 @@ class ResponderIncidentPostgresTest {
     }
 
     @Test
+    void searchAndFiltersApplyOnlyInsideTheAuthorizedQueueBeforeCountingAndPaging() {
+        grant(RESPONDER, "IT");
+        UUID vpn = incident("40000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        incident("40000000-0000-0000-0000-000000000002", "IT", "SUBMITTED", null, NOW.plusSeconds(1));
+        incident("40000000-0000-0000-0000-000000000003", "FACILITIES", "SUBMITTED", null, NOW.plusSeconds(2));
+        jdbc.update("UPDATE incidents SET title = 'VPN outage', description = 'Private 100% outage details' WHERE id = ?", vpn);
+
+        IncidentPage byDescription = service.queue("responder", "  PRIVATE OUTAGE ", List.of(), List.of(),
+                ResponderIncidentService.Assignment.ALL, 0, 25);
+        IncidentPage byIdentifier = service.queue("responder", vpn.toString().substring(0, 8), List.of("IT"),
+                List.of("SUBMITTED"), ResponderIncidentService.Assignment.UNASSIGNED, 0, 25);
+        IncidentPage byLiteralWildcard = service.queue("responder", "100%", List.of(), List.of(),
+                ResponderIncidentService.Assignment.ALL, 0, 25);
+        IncidentPage byConflictingFilters = service.queue("responder", "", List.of("IT"), List.of("ASSIGNED"),
+                ResponderIncidentService.Assignment.ALL, 0, 25);
+
+        assertEquals(1, byDescription.totalElements());
+        assertEquals(List.of(vpn), byDescription.incidents().stream().map(row -> row.id()).toList());
+        assertEquals(1, byIdentifier.totalElements());
+        assertEquals(List.of(vpn), byIdentifier.incidents().stream().map(row -> row.id()).toList());
+        assertEquals(List.of(vpn), byLiteralWildcard.incidents().stream().map(row -> row.id()).toList());
+        assertEquals(0, byConflictingFilters.totalElements());
+    }
+
+    @Test
     void disabledOrDemotedCurrentAccountCannotReadEvenWithAnExistingLoginPrincipal() {
         grant(RESPONDER, "IT");
         incident("30000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
