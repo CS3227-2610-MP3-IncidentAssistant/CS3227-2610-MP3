@@ -52,8 +52,8 @@ class AiMigrationUpgradePostgresTest {
                     "responder_promotion_approved_categories", "responder_category_access"}) {
                 assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class));
             }
-            assertEquals(7, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
-            assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
+            assertEquals(8, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
+            assertEquals(8, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE NOT success", Integer.class));
         } finally {
             admin.execute("DROP SCHEMA " + schema + " CASCADE");
