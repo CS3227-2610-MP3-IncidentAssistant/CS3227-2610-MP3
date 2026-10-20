@@ -47,6 +47,11 @@ a separate static frontend.
 - `decisions/ADR-003-promotion-decision-and-session-invalidation.md`: proposed
   transaction, category-subset, and shared-session contract for issue #6;
   approval remains pending.
+- `decisions/ADR-004-responder-mutations.md`: approved issue #7 responder
+  projection, transactional claim/resolution, audit atomicity, and history
+  behavior. Separate cross-role human security/architecture review waived by
+  the product owner for issue #7; automated and implementation verification
+  requirements remain mandatory.
 
 Create one record in `decisions/` for each material choice. At minimum cover:
 
