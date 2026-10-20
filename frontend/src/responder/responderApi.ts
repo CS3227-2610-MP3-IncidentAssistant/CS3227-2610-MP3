@@ -10,6 +10,17 @@ export type ResponderQueueRow = {
   queueEnteredAt: string
 }
 
+export type ResponderIncidentDetail = {
+  id: string
+  title: string
+  description: string
+  reporterLabel: string
+  category: IncidentCategory
+  status: 'SUBMITTED' | 'ASSIGNED'
+  submittedAt: string
+  queueEnteredAt: string
+}
+
 export type ResponderQueuePage = {
   incidents: ResponderQueueRow[]
   page: number
@@ -62,5 +73,28 @@ export async function loadResponderQueue(
   }
   if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
   if (response.status === 400) throw new ResponderQueueError('invalid')
+  throw new ResponderQueueError('service')
+}
+
+export async function loadResponderIncidentDetail(
+  incidentId: string,
+  signal: AbortSignal,
+): Promise<ResponderIncidentDetail> {
+  signal.throwIfAborted()
+  const response = await fetch(`/api/v1/responder/incidents/${encodeURIComponent(incidentId)}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  signal.throwIfAborted()
+  if (response.ok) return response.json() as Promise<ResponderIncidentDetail>
+
+  const errorBody = await response.json().catch(() => null) as { code?: unknown } | null
+  if (response.status === 401 || errorBody?.code === 'SECURITY_SESSION_EXPIRED') {
+    throw new ResponderQueueError('session')
+  }
+  if (response.status === 404 || response.status === 403) throw new ResponderQueueError('denied')
   throw new ResponderQueueError('service')
 }

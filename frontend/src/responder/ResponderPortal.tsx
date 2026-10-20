@@ -4,7 +4,9 @@ import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 import {
   loadResponderQueue,
+  loadResponderIncidentDetail,
   ResponderQueueError,
+  type ResponderIncidentDetail,
   type ResponderQueuePage,
   type ResponderQueueQuery,
 } from './responderApi'
@@ -26,6 +28,12 @@ type QueueState =
   | { kind: 'invalid' }
   | { kind: 'service-error' }
   | { kind: 'signing-out' }
+type DetailState =
+  | { kind: 'loading'; incidentId: string; loginName: string }
+  | { kind: 'loaded'; incidentId: string; loginName: string; detail: ResponderIncidentDetail }
+  | { kind: 'session-expired'; incidentId: string; loginName: string }
+  | { kind: 'denied'; incidentId: string; loginName: string }
+  | { kind: 'service-error'; incidentId: string; loginName: string }
 
 const initialFilters: DraftFilters = {
   search: '',
@@ -43,8 +51,14 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
   const [draft, setDraft] = useState<DraftFilters>(initialFilters)
   const [query, setQuery] = useState<ResponderQueueQuery>({ ...initialFilters, page: 0, size: PAGE_SIZE })
   const [queue, setQueue] = useState<QueueState>({ kind: 'loading' })
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null)
+  const [detailRequestKey, setDetailRequestKey] = useState(0)
+  const [detail, setDetail] = useState<DetailState | null>(null)
+  const pageHeading = useRef<HTMLHeadingElement>(null)
   const requestGeneration = useRef(0)
   const activeRequest = useRef<AbortController | null>(null)
+  const detailGeneration = useRef(0)
+  const activeDetailRequest = useRef<AbortController | null>(null)
   const navigation: RoleNavigationItem[] = [{ label: 'Incident queue', current: true }]
 
   useEffect(() => {
@@ -75,6 +89,39 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
     }
   }, [query])
 
+  useEffect(() => {
+    pageHeading.current?.focus()
+  }, [selectedIncidentId])
+
+  useEffect(() => {
+    if (!selectedIncidentId) return
+    const controller = new AbortController()
+    const generation = ++detailGeneration.current
+    const request = { incidentId: selectedIncidentId, loginName }
+    activeDetailRequest.current = controller
+    loadResponderIncidentDetail(selectedIncidentId, controller.signal)
+      .then((loaded) => {
+        if (!controller.signal.aborted && generation === detailGeneration.current) {
+          setDetail({ kind: 'loaded', ...request, detail: loaded })
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || generation !== detailGeneration.current) return
+        if (error instanceof ResponderQueueError && error.kind === 'session') {
+          setQueue({ kind: 'session-expired' })
+          setDetail({ kind: 'session-expired', ...request })
+        } else if (error instanceof ResponderQueueError && error.kind === 'denied') {
+          setDetail({ kind: 'denied', ...request })
+        } else {
+          setDetail({ kind: 'service-error', ...request })
+        }
+      })
+    return () => {
+      controller.abort()
+      if (activeDetailRequest.current === controller) activeDetailRequest.current = null
+    }
+  }, [loginName, selectedIncidentId, detailRequestKey])
+
   function submitFilters(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     changeQuery({ ...draft, search: draft.search.trim(), page: 0, size: PAGE_SIZE })
@@ -89,6 +136,29 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
     changeQuery({ ...query, page: 0 })
   }
 
+  function openDetail(incidentId: string) {
+    detailGeneration.current++
+    activeDetailRequest.current?.abort()
+    setDetail({ kind: 'loading', incidentId, loginName })
+    setSelectedIncidentId(incidentId)
+  }
+
+  function retryDetail() {
+    if (!selectedIncidentId) return
+    detailGeneration.current++
+    activeDetailRequest.current?.abort()
+    setDetail({ kind: 'loading', incidentId: selectedIncidentId, loginName })
+    setDetailRequestKey((key) => key + 1)
+  }
+
+  function backToQueue() {
+    detailGeneration.current++
+    activeDetailRequest.current?.abort()
+    setDetail(null)
+    setSelectedIncidentId(null)
+    changeQuery({ ...query })
+  }
+
   function changeQuery(next: ResponderQueueQuery) {
     requestGeneration.current++
     activeRequest.current?.abort()
@@ -98,7 +168,11 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
 
   async function signOut() {
     requestGeneration.current++
+    detailGeneration.current++
     activeRequest.current?.abort()
+    activeDetailRequest.current?.abort()
+    setSelectedIncidentId(null)
+    setDetail(null)
     setQueue({ kind: 'signing-out' })
     try {
       await onLogout()
@@ -123,13 +197,24 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
         <header className="page-header">
           <div>
             <p className="eyebrow">Responder workspace</p>
-            <h1>Incident queue</h1>
-            <p>View incidents assigned to you and unassigned incidents in your accessible categories.</p>
+            <h1 ref={pageHeading} tabIndex={-1}>{selectedIncidentId ? 'Incident details' : 'Incident queue'}</h1>
+            <p>{selectedIncidentId
+              ? 'Review this incident using your current responder access.'
+              : 'View incidents assigned to you and unassigned incidents in your accessible categories.'}</p>
           </div>
-          <button className="secondary-button" type="button" onClick={refreshQueue}>Refresh queue</button>
+          {selectedIncidentId
+            ? <button className="secondary-button" type="button" onClick={backToQueue}>Back to queue</button>
+            : <button className="secondary-button" type="button" onClick={refreshQueue}>Refresh queue</button>}
         </header>
 
-        <section className="incident-panel" aria-labelledby="responder-queue-heading">
+        {selectedIncidentId ? (
+          <ResponderDetailContent
+            state={detail?.incidentId === selectedIncidentId && detail.loginName === loginName
+              ? detail : { kind: 'loading', incidentId: selectedIncidentId, loginName }}
+            onRetry={retryDetail}
+            onLogout={signOut}
+          />
+        ) : <section className="incident-panel" aria-labelledby="responder-queue-heading">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Authorized incidents</p>
@@ -187,18 +272,21 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
             <button className="primary-button" type="submit">Apply filters</button>
           </form>
 
-          <QueueContent state={queue} onRetry={refreshQueue} onLogout={signOut} onPageChange={changePage} />
+          <QueueContent state={queue} onRetry={refreshQueue} onLogout={signOut} onPageChange={changePage}
+            onOpenDetail={openDetail} />
         </section>
+        }
       </main>
     </RoleShell>
   )
 }
 
-function QueueContent({ state, onRetry, onLogout, onPageChange }: {
+function QueueContent({ state, onRetry, onLogout, onPageChange, onOpenDetail }: {
   state: QueueState
   onRetry: () => void
   onLogout: () => Promise<void>
   onPageChange: (page: number) => void
+  onOpenDetail: (incidentId: string) => void
 }) {
   if (state.kind === 'loading') return <p className="panel-state" role="status">Loading incidents…</p>
   if (state.kind === 'signing-out') return <p className="panel-state" role="status">Signing out…</p>
@@ -247,7 +335,7 @@ function QueueContent({ state, onRetry, onLogout, onPageChange }: {
             : 'Incidents assigned to you will appear here, even when no categories are assigned.'}</p>
         </div>
       ) : (
-        <IncidentTable incidents={page.incidents} />
+        <IncidentTable incidents={page.incidents} onOpenDetail={onOpenDetail} />
       )}
       {page.totalPages > 1 && (
         <div className="pagination" aria-label="Incident queue pages">
@@ -265,7 +353,10 @@ function QueueContent({ state, onRetry, onLogout, onPageChange }: {
   )
 }
 
-function IncidentTable({ incidents }: { incidents: ResponderQueuePage['incidents'] }) {
+function IncidentTable({ incidents, onOpenDetail }: {
+  incidents: ResponderQueuePage['incidents']
+  onOpenDetail: (incidentId: string) => void
+}) {
   return (
     <div className="table-region" role="region" aria-label="Responder incidents" tabIndex={0}>
       <table>
@@ -281,7 +372,10 @@ function IncidentTable({ incidents }: { incidents: ResponderQueuePage['incidents
           {incidents.map((incident) => (
             <tr key={incident.id}>
               <th scope="row">
-                <span className="incident-title">{incident.title}</span>
+                <button className="incident-title-link" type="button" aria-label={`View details for ${incident.title}`}
+                  onClick={() => onOpenDetail(incident.id)}>
+                  {incident.title}
+                </button>
                 <small>{incident.id}</small>
               </th>
               <td>{categoryNames[incident.category]}</td>
@@ -292,6 +386,56 @@ function IncidentTable({ incidents }: { incidents: ResponderQueuePage['incidents
         </tbody>
       </table>
     </div>
+  )
+}
+
+function ResponderDetailContent({ state, onRetry, onLogout }: {
+  state: DetailState
+  onRetry: () => void
+  onLogout: () => Promise<void>
+}) {
+  if (state.kind === 'loading') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
+    <h2 className="panel-state" id="responder-detail-heading" role="status">Loading incident details…</h2>
+  </section>
+  if (state.kind === 'session-expired') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
+    <div className="panel-state" role="alert">
+      <h2 id="responder-detail-heading">Session expired</h2>
+      <p>Your session has expired or changed. Sign in again to view this incident.</p>
+      <button type="button" onClick={() => void onLogout()}>Return to portal selection</button>
+    </div>
+  </section>
+  if (state.kind === 'denied') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
+    <div className="panel-state" role="alert">
+      <h2 id="responder-detail-heading">Incident unavailable</h2>
+      <p>This incident is unavailable to your current responder session.</p>
+    </div>
+  </section>
+  if (state.kind === 'service-error') return <section className="incident-panel" aria-labelledby="responder-detail-heading">
+    <div className="panel-state" role="alert">
+      <h2 id="responder-detail-heading">Details unavailable</h2>
+      <p>Incident details are temporarily unavailable.</p>
+      <button type="button" onClick={onRetry}>Try again</button>
+    </div>
+  </section>
+
+  const { detail } = state
+  return (
+    <section className="incident-panel responder-detail" aria-labelledby="responder-detail-heading">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">{categoryNames[detail.category]} · {statusLabel(detail.status)}</p>
+          <h2 id="responder-detail-heading">{detail.title}</h2>
+        </div>
+      </div>
+      <dl className="responder-detail__metadata">
+        <div><dt>Reporter</dt><dd>{detail.reporterLabel}</dd></div>
+        <div><dt>Submitted</dt><dd>{new Date(detail.submittedAt).toLocaleString()}</dd></div>
+      </dl>
+      <section className="responder-detail__description" aria-labelledby="responder-description-heading">
+        <h3 id="responder-description-heading">Description</h3>
+        <p>{detail.description}</p>
+      </section>
+    </section>
   )
 }
 

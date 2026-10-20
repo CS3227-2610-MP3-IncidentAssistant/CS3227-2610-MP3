@@ -113,6 +113,17 @@ thead th { color: var(--color-text-muted); font-size: 12px; text-transform: uppe
 tbody th { min-width: 230px; }
 tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted); font-weight: 400; }
 .incident-title { display: block; overflow-wrap: anywhere; }
+.incident-title-link { display: block; min-height: 40px; padding: 0; border: 0; color: var(--color-action); background: transparent; text-align: left; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer; }
+.incident-title-link:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.responder-detail > .section-heading { align-items: flex-start; padding: 22px; }
+.responder-detail > .section-heading h2 { margin-top: 5px; overflow-wrap: anywhere; }
+.responder-detail__metadata { display: flex; flex-wrap: wrap; gap: 24px 48px; margin: 0; padding: 0 22px 20px; border-bottom: 1px solid var(--color-border); }
+.responder-detail__metadata div { min-width: 150px; }
+.responder-detail__metadata dt { color: var(--color-text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.responder-detail__metadata dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.responder-detail__description { padding: 22px; }
+.responder-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
+.responder-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .status-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; color: var(--color-info); background: var(--color-info-soft); font-size: 12px; font-weight: 700; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px; }
 .pagination button { min-height: 40px; }

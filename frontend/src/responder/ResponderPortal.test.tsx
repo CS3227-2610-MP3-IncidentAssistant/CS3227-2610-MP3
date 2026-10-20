@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ResponderPortal } from './ResponderPortal'
 
@@ -142,6 +142,148 @@ describe('Responder incident queue', () => {
 
     await waitFor(() => expect(screen.queryByText('Stale server row')).not.toBeInTheDocument())
     expect(screen.getByText('Newer server row')).toBeInTheDocument()
+  })
+
+  it('opens authorized detail, renders untrusted fields as text, and returns to the same queue', async () => {
+    const scriptText = '<script>window.compromised = true</script>'
+    const detail = {
+      id: '60000000-0000-0000-0000-000000000001',
+      title: '<img src=x onerror=alert(1)> outage',
+      description: scriptText,
+      reporterLabel: 'Anonymous reporter',
+      category: 'IT',
+      status: 'SUBMITTED',
+      submittedAt: '2026-10-20T01:00:00Z',
+      queueEnteredAt: '2026-10-20T01:00:00Z',
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET') return response(detail)
+      return response({ ...basePage, incidents: [row('Open this incident')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Open this incident' }))
+
+    expect(await screen.findByRole('heading', { name: detail.title })).toBeInTheDocument()
+    expect(screen.getByText(scriptText)).toBeInTheDocument()
+    expect(document.querySelector('script')).not.toBeInTheDocument()
+    expect(document.querySelector('img')).not.toBeInTheDocument()
+    expect(screen.getByText('Anonymous reporter')).toBeInTheDocument()
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/v1/responder/incidents/${detail.id}`)
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to queue' }))
+    expect(await screen.findByRole('button', { name: 'View details for Open this incident' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toMatchObject({ page: 0, size: 25 })
+    expect(screen.queryByText(scriptText)).not.toBeInTheDocument()
+  })
+
+  it('retries a failed detail request and focuses the page heading on navigation', async () => {
+    const detail = {
+      id: row('Retry this incident').id,
+      title: 'Recovered incident details',
+      description: 'Safe after retry',
+      reporterLabel: 'Reporter',
+      category: 'IT',
+      status: 'SUBMITTED',
+      submittedAt: row('Retry this incident').submittedAt,
+      queueEnteredAt: row('Retry this incident').queueEnteredAt,
+    }
+    let detailRequests = 0
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET') {
+        detailRequests++
+        return detailRequests === 1 ? response({ message: 'internal failure' }, 503) : response(detail)
+      }
+      return response({ ...basePage, incidents: [row('Retry this incident')], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Retry this incident' }))
+    expect(await screen.findByRole('heading', { name: 'Details unavailable' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Incident details' })).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByRole('heading', { name: 'Recovered incident details' })).toBeInTheDocument()
+    expect(detailRequests).toBe(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Back to queue' }))
+    expect(await screen.findByRole('button', { name: 'View details for Retry this incident' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Incident queue' })).toHaveFocus()
+  })
+
+  it('preserves the queue page when returning from incident details', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET') return response({
+        id: row('Page two incident').id,
+        title: 'Page two details',
+        description: 'Details',
+        reporterLabel: 'Reporter',
+        category: 'IT',
+        status: 'SUBMITTED',
+        submittedAt: row('Page two incident').submittedAt,
+        queueEnteredAt: row('Page two incident').queueEnteredAt,
+      })
+      const body = JSON.parse(String(init?.body)) as { page: number }
+      return response({ ...basePage, page: body.page, incidents: [row(body.page === 1
+        ? 'Page two incident' : 'Page one incident')], totalElements: 26, totalPages: 2 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    expect(await screen.findByText('Page one incident')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Page two incident' }))
+    expect(await screen.findByRole('heading', { name: 'Page two details' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to queue' }))
+
+    expect(await screen.findByText('Page two incident')).toBeInTheDocument()
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toMatchObject({ page: 1 })
+  })
+
+  it.each([403, 404])('shows the same safe unavailable detail state for HTTP %i', async (status) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
+      ? response({ code: 'UNAVAILABLE', message: 'private server details' }, status)
+      : response({ ...basePage, incidents: [row('Restricted incident')], totalElements: 1 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Restricted incident' }))
+
+    expect(await screen.findByRole('heading', { name: 'Incident unavailable' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('unavailable to your current responder session')
+    expect(screen.queryByText('private server details')).not.toBeInTheDocument()
+  })
+
+  it('does not restore a detail response after returning to the queue', async () => {
+    let finishDetail: ((result: Response) => void) | undefined
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
+      ? new Promise<Response>((resolve) => { finishDetail = resolve })
+      : Promise.resolve(response({ ...basePage, incidents: [row('Delayed incident')], totalElements: 1 })))
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Delayed incident' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to queue' }))
+    expect(await screen.findByRole('button', { name: 'View details for Delayed incident' })).toBeInTheDocument()
+    await act(async () => {
+      finishDetail?.(response({
+        id: row('Delayed incident').id,
+        title: 'Late protected detail',
+        description: 'Late private content',
+        reporterLabel: 'Anonymous reporter',
+        category: 'IT',
+        status: 'SUBMITTED',
+        submittedAt: row('Delayed incident').submittedAt,
+        queueEnteredAt: row('Delayed incident').queueEnteredAt,
+      }))
+    })
+
+    expect(screen.queryByText('Late private content')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Late protected detail' })).not.toBeInTheDocument()
   })
 })
 

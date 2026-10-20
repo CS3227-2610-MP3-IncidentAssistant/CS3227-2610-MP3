@@ -207,8 +207,9 @@ recording credentials, session identifiers, or anonymous reporter identity.
 
 ### Partial detail API progress (does not complete RSP-DETAIL-01)
 
-The current incremental detail API returns only the incident's persisted core
-fields from the web PostgreSQL schema. Its single authorized query checks the
+The current incremental detail API and Responder-local browser view use only
+the incident's persisted core fields from the web PostgreSQL schema. Its
+single authorized query checks the
 current enabled Responder identity and allows either a currently permitted,
 unassigned `SUBMITTED` incident or an incident assigned to that Responder.
 Raw reporter IDs and the anonymous flag are not returned; the display label is
@@ -216,13 +217,14 @@ Raw reporter IDs and the anonymous flag are not returned; the display label is
 non-anonymous reports. Comments, resolution history, and attachment
 metadata/content are not returned. Missing and forbidden detail
 requests use the same safe unavailable response. This API contribution is
-partial: the criterion remains unchecked until the UI, full history/comment
-and attachment persistence, per-resource authorization, safe attachment
-delivery, and privacy evidence are complete.
+partial: the criterion remains unchecked until lifecycle/resolution history,
+comments, attachment metadata/content persistence, per-resource authorization,
+safe attachment delivery, and the remaining privacy evidence are complete.
 
 The API returns incident text as data; any browser view must render it as text,
-not executable HTML. This API-only increment does not claim the browser
-rendering requirement has been verified.
+not executable HTML. The current core-fields UI uses React text rendering;
+later comment/history/attachment surfaces still require their own rendering
+and privacy verification.
 
 ## 7. Approved implementation decisions
 
