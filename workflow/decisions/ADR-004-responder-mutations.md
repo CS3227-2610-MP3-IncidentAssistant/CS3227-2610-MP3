@@ -35,7 +35,13 @@ contributor owns this role-specific work.
    appends a new cycle. History, lifecycle state, and success audit commit
    atomically. Any schema change is made with a new forward-only migration.
 5. A stale or repeated resolution request returns a safe conflict/current
-   state response and does not duplicate history or success audit records.
+  state response and does not duplicate history or success audit records.
+  Each attempt has a UUID persisted with its history row. A replay from the
+  same enabled Responder with the same incident and exact remarks returns the
+  original cycle; a mismatched replay conflicts. Transactions serialize
+  handling by request UUID before checking prior attempts so concurrent reuse
+  cannot turn a safe conflict into an internal error. The resolution JSON body
+  is bounded to 32 KiB before parsing.
 6. Shared components may change only with their current owner's agreement and
    a documented integration contract. Issue #7 does not authorize changing
    Reporter or Administrator behavior.

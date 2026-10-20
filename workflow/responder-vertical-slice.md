@@ -166,7 +166,9 @@ field limit. After non-blank validation, the stored remarks retain entered
 whitespace. The server sets the application-generated UTC resolution
 timestamp and derives the actor from the request context. The current
 assignment and lifecycle state are rechecked within the mutation transaction;
-a stale request after reassignment or another state change fails safely.
+a stale request after reassignment or another state change fails safely. The
+request includes a UUID unique to the resolution attempt, and the JSON body is
+capped at 32 KiB before parsing.
 
 ### RSP-RESOLVE-02 — Atomic resolution and audit
 
@@ -177,8 +179,11 @@ new cycle. The audit stores remarks or a safe reference as allowed by the
 canonical audit policy, never anonymous reporter identity or unnecessary
 incident content. A denied, invalid, stale, or persistence-failed request
 leaves no partial resolution and no misleading success audit. A retry after a
-lost response reports current state safely and does not duplicate resolution
-history or audit records.
+lost response using the same request identifier, enabled Responder, incident,
+and exact remarks reports the original cycle safely and does not duplicate
+resolution history or audit records. Reuse of the identifier with a different
+actor, incident, or remarks returns a safe conflict. The browser preserves the
+request identifier for an explicit retry after an uncertain outcome.
 
 ### RSP-UI-01 — Responsive and accessible interaction
 
@@ -207,46 +212,37 @@ recording credentials, session identifiers, or anonymous reporter identity.
 
 ### Partial detail API progress (does not complete RSP-DETAIL-01)
 
-The current incremental detail API and Responder-local browser view use only
-the incident's persisted core fields from the web PostgreSQL schema. Its
-single authorized query checks the
+The incremental detail API and Responder-local browser view use only the
+incident's persisted web fields. A repeatable-read transaction checks the
 current enabled Responder identity and allows either a currently permitted,
 unassigned `SUBMITTED` incident or an incident assigned to that Responder.
 Raw reporter IDs and the anonymous flag are not returned; the display label is
 `Anonymous reporter` for anonymous reports and the authorized login label for
-non-anonymous reports. Comments, resolution history, and attachment
-metadata/content are not returned. Missing and forbidden detail
-requests use the same safe unavailable response. This API contribution is
-partial: the criterion remains unchecked until lifecycle/resolution history,
-comments, attachment metadata/content persistence, per-resource authorization,
-safe attachment delivery, and the remaining privacy evidence are complete.
+non-anonymous reports. Previous resolution cycles and their remarks are
+returned to an authorized current Responder as text. The web schema has no
+comment or attachment metadata tables, and attachment download/compensation
+design remains approval-gated; these surfaces are not implemented here.
+Missing and forbidden detail requests use the same safe unavailable response.
+This API contribution remains partial until comment and attachment persistence,
+per-resource authorization, safe attachment delivery, and their privacy
+evidence are complete.
 
 The API returns incident text as data; any browser view must render it as text,
 not executable HTML. The current core-fields UI uses React text rendering;
 later comment/history/attachment surfaces still require their own rendering
 and privacy verification.
 
-### Partial claim UI progress (does not complete RSP-UI-01)
+### Partial mutation UI progress (does not complete RSP-UI-01)
 
-The Responder detail view offers a Claim action only for a `SUBMITTED` incident.
-The browser sends the incident identifier with the current CSRF token and
-same-origin session, disables duplicate submission, and does not optimistically
-change assignment. Success, conflict, and uncertain service outcomes trigger
-fresh detail and queue reads; conflict copy does not identify the cause or an
-assignee. Mutation feedback remains visible during detail reconciliation and
-safe detail-read failures. Session expiry clears protected detail and returns
-to the queue's session-expired state. Frontend evidence is recorded in
-`ResponderPortal.test.tsx` (`claims a submitted incident once and confirms the
-server state`, `shows a generic claim conflict and reconciles detail without
-exposing the other assignee`, and `clears protected detail and queue after a
-claim session expiry`). The same test file also verifies that assigned detail
-has no Claim action, Back is disabled during a pending claim, and an uncertain
-service outcome is reconciled without an automatic second POST. RSP-UI-01
-remains unchecked until resolution feedback, complete keyboard/screen-reader
-and narrow-layout verification, and the remaining Responder journey are
-covered. `keeps claim success feedback visible when the follow-up detail read
-fails` verifies that a confirmed mutation remains acknowledged through a
-subsequent detail-read failure.
+The Responder detail view offers Claim for `SUBMITTED` incidents and resolve
+remarks for `ASSIGNED` incidents. Both use same-origin CSRF-protected requests,
+pending-state duplicate prevention, safe stale/error feedback, and no
+optimistic state change. Resolution retries after uncertain outcomes reuse a
+persisted request identifier and exact remarks; confirmed success clears the
+protected incident detail. `ResponderPortal.test.tsx` covers success,
+validation, conflict, uncertain replay, and cache clearing. RSP-UI-01 remains
+unchecked until complete keyboard/screen-reader and narrow-layout verification
+and the remaining comment/attachment interactions are covered.
 
 ## 7. Approved implementation decisions
 
@@ -305,12 +301,18 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
   and `ResponderIncidentControllerTest.claimReturnsNoStoreSuccessOrSafeConflict`.
 - [x] RSP-CLAIM-02: isolated PostgreSQL race yields one winner, one persisted
   assignee, one success audit, and a safe loser response.
-- [ ] RSP-RESOLVE-01: only the current assignee can resolve with valid,
+- [x] RSP-RESOLVE-01: only the current enabled assignee can resolve with valid,
   non-blank remarks and application-generated UTC time; entered whitespace is
-  retained after validation.
+  retained after validation. Verified by `ResponderIncidentPostgresTest` resolution
+  authorization/time/remarks checks and `ResponderIncidentServiceTest` code-point
+  limit validation.
 - [ ] RSP-RESOLVE-02: resolution/history/audit are atomic across denied,
   invalid, reassignment/state-stale, retry, and persistence-failure paths;
   repeated resolution appends a new history cycle and does not duplicate audit.
+  Automated evidence covers atomicity, failure rollback, retry, concurrent
+  resolution, and history persistence. The required reopen-and-reclaim journey
+  is not implemented in this Responder slice, so the full approved criterion
+  remains open.
 - [ ] RSP-UI-01: keyboard, screen-reader labels, focus, narrow layout, and
   mutation feedback are verified.
 - [ ] RSP-E2E-01: promoted-account browser journey is manually demonstrated
@@ -322,25 +324,32 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
 
 ## Verification evidence
 
-- Automated: `./gradlew test` passed with 661 tests, 2 skipped, and no failures
-  or errors. PostgreSQL-backed tests used a disposable local PostgreSQL 18
-  container and random isolated schemas; the container was stopped after the
-  run. Claim evidence includes
+- Automated: `./gradlew test` passed with 681 tests, 2 skipped, and no failures
+  or errors. `npm run check` passed TypeScript, ESLint, and 69 frontend tests.
+  PostgreSQL-backed tests used a disposable local PostgreSQL 18 container and
+  random isolated schemas. Claim evidence includes
   `ResponderIncidentPostgresTest.claimChecksCurrentCategoryAndLifecycleAndAtomicallyWritesAudit`,
   `ResponderIncidentPostgresTest.concurrentClaimsHaveOneWinnerAndOneSuccessAudit`,
   `ResponderIncidentPostgresTest.auditFailureRollsBackTheClaim`,
   `ResponderIncidentControllerTest.claimReturnsNoStoreSuccessOrSafeConflict`,
   and `ReporterWebSecurityTest.responderClaimRequiresResponderRoleAndCsrf`.
-  Verification is against the current uncommitted working tree; commit is
-  pending human review.
+  Resolution evidence includes `ResponderIncidentPostgresTest` atomicity,
+  rollback, idempotent replay, request-ID collision, authorization, and history
+  tests, plus `ResponderResolutionRequestLimitFilterTest` for the pre-parse
+  JSON bound. The Java suite used isolated random schemas and the dedicated
+  test-only PostgreSQL database. These checks apply to the implementation
+  commit recorded below.
 - Manual/deployed: pending; requires approved implementation and issue #6 for
   the promoted-account journey.
 - Human product approver/date: `lqr1019`, 2026-10-20 (Asia/Singapore).
 - Independent security/architecture reviewers/date: waived for issue #7 by
   explicit product-owner decision; see the review record and issue comment.
+- Implementation commit verified: `079c0b3` (backend and UI commits).
 
 ## Review note
 
-The independent agent review found and corrected a direct conflict with the
-canonical whitespace-retention rule for resolution remarks. Its remaining
-recommendations are incorporated above. This review is not human approval.
+Independent agent reviews found and corrected the Unicode whitespace
+constraint gap, bounded-request parsing gap, and concurrent request-ID reuse
+race. RSP-RESOLVE-02 remains unchecked because its complete approved wording
+requires an actual reopen-and-reclaim journey. Agent review is not human
+approval.
