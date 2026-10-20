@@ -1,11 +1,15 @@
 package com.company.incidentdesk.web.responder;
 
+import java.sql.Timestamp;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import javax.sql.DataSource;
 
@@ -13,7 +17,9 @@ import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentP
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentRow;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.ClaimResult;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderDataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -22,10 +28,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** PostgreSQL queue query that scopes data to the current enabled Responder and categories. */
+/** PostgreSQL operations that scope incident access to the current enabled Responder. */
 @Repository
 @ConditionalOnBean(DataSource.class)
-final class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
+class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
     private static final String AUTHORIZED_INCIDENTS = """
             (i.status = 'SUBMITTED' AND i.assignee_id IS NULL AND EXISTS (
                 SELECT 1 FROM responder_category_access category_access
@@ -36,12 +42,25 @@ final class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final PlatformTransactionManager transactionManager;
+    private final Clock clock;
+    private final Supplier<UUID> identifiers;
 
+    @Autowired
     JdbcResponderIncidentGateway(
             NamedParameterJdbcTemplate jdbc,
             PlatformTransactionManager transactionManager) {
+        this(jdbc, transactionManager, Clock.systemUTC(), UUID::randomUUID);
+    }
+
+    JdbcResponderIncidentGateway(
+            NamedParameterJdbcTemplate jdbc,
+            PlatformTransactionManager transactionManager,
+            Clock clock,
+            Supplier<UUID> identifiers) {
         this.jdbc = jdbc;
         this.transactionManager = transactionManager;
+        this.clock = clock;
+        this.identifiers = identifiers;
     }
 
     @Override
@@ -56,6 +75,67 @@ final class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
             throw new ResponderDataAccessException(exception);
         }
     }
+
+    @Override
+    public ClaimResult claim(String loginName, UUID incidentId) {
+        var occurredAt = clock.instant();
+        var auditEventId = identifiers.get();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        try {
+            return transaction.execute(status -> claim(loginName, incidentId, occurredAt, auditEventId));
+        } catch (DataAccessException exception) {
+            throw new ResponderDataAccessException(exception);
+        }
+    }
+
+    private ClaimResult claim(String loginName, UUID incidentId, Instant occurredAt, UUID auditEventId) {
+        Map<String, Object> parameters = Map.of(
+                "loginName", loginName,
+                "incidentId", incidentId,
+                "occurredAt", Timestamp.from(occurredAt));
+        List<ClaimedIncident> claimed = jdbc.query("""
+                UPDATE incidents i
+                   SET status = 'ASSIGNED',
+                       assignee_id = responder.id,
+                       first_assigned_at = COALESCE(i.first_assigned_at, :occurredAt),
+                       latest_assigned_at = :occurredAt,
+                       version = i.version + 1
+                  FROM accounts responder
+                 WHERE i.id = :incidentId
+                   AND i.status = 'SUBMITTED'
+                   AND i.assignee_id IS NULL
+                   AND responder.login_name = :loginName
+                   AND responder.role = 'RESPONDER'
+                   AND responder.status = 'ENABLED'
+                   AND EXISTS (
+                       SELECT 1 FROM responder_category_access access
+                        WHERE access.account_id = responder.id
+                          AND access.category = i.category
+                   )
+                RETURNING i.id, responder.id AS responder_id
+                """, parameters, (result, row) -> new ClaimedIncident(
+                result.getObject("id", UUID.class), result.getObject("responder_id", UUID.class)));
+        if (claimed.isEmpty()) return new ClaimResult(false);
+
+        ClaimedIncident incident = claimed.getFirst();
+        insertClaimAudit(incident, occurredAt, auditEventId);
+        return new ClaimResult(true);
+    }
+
+    private void insertClaimAudit(ClaimedIncident incident, Instant occurredAt, UUID auditEventId) {
+        jdbc.getJdbcTemplate().update("""
+                INSERT INTO audit_events (
+                    id, occurred_at, actor_account_id, actor_role, action,
+                    target_type, target_identifier, outcome, details
+                ) VALUES (?, ?, ?, 'RESPONDER', 'INCIDENT_CLAIMED', 'INCIDENT', ?, 'SUCCESS',
+                          jsonb_build_object(
+                              'status', jsonb_build_object('before', 'SUBMITTED', 'after', 'ASSIGNED'),
+                              'assigneeId', jsonb_build_object('before', NULL, 'after', ?)))
+                """, auditEventId, Timestamp.from(occurredAt), incident.responderId(),
+                incident.incidentId().toString(), incident.responderId());
+    }
+
+    private record ClaimedIncident(UUID incidentId, UUID responderId) { }
 
     private IncidentPage readQueue(String loginName, ListCriteria criteria) {
         List<UUID> actorIds = jdbc.query("""

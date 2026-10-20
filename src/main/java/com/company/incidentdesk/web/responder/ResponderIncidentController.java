@@ -3,6 +3,7 @@ package com.company.incidentdesk.web.responder;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import javax.sql.DataSource;
 
@@ -17,12 +18,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP boundary for the authenticated, read-only Responder queue query. */
+/** HTTP boundary for authenticated Responder incident queue operations. */
 @RestController
 @RequestMapping("/api/v1/responder/incidents")
 @ConditionalOnBean(DataSource.class)
@@ -38,6 +40,15 @@ final class ResponderIncidentController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(incidents.queue(principal.getName(), request.search(), request.categories(), request.statuses(),
                         request.assignment(), request.page(), request.size()));
+    }
+
+    @PostMapping("/{incidentId}/claim")
+    ResponseEntity<?> claim(Principal principal, @PathVariable UUID incidentId) {
+        var result = incidents.claim(principal.getName(), incidentId);
+        if (!result.claimed()) {
+            return safeError(HttpStatus.CONFLICT, "CLAIM_CONFLICT", "This incident is no longer available to claim.");
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("claimed", true));
     }
 
     @ExceptionHandler(ResponderAccessDeniedException.class)

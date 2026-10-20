@@ -67,6 +67,19 @@ class ResponderIncidentServiceTest {
                         ResponderIncidentService.Assignment.ALL, 0, 25));
     }
 
+    @Test
+    void claimUsesTrustedLoginNameAndIncidentIdentifier() {
+        RecordingGateway gateway = new RecordingGateway();
+        gateway.claimResult = new ResponderIncidentService.ClaimResult(true);
+
+        var result = new ResponderIncidentService(gateway).claim(
+                "CurrentResponder", UUID.fromString("50000000-0000-0000-0000-000000000002"));
+
+        assertTrue(result.claimed());
+        assertEquals("CurrentResponder", gateway.claimLoginName);
+        assertEquals(UUID.fromString("50000000-0000-0000-0000-000000000002"), gateway.claimIncidentId);
+    }
+
     private static ListCriteria criteria(String search, List<String> categories, List<String> statuses,
             ResponderIncidentService.Assignment assignment, int page, int size) {
         return new ListCriteria(search, categories, statuses, assignment, page, size);
@@ -83,12 +96,22 @@ class ResponderIncidentServiceTest {
                 List.of(row()), 3, 100, 1, 1, true));
         private String loginName;
         private ListCriteria criteria;
+        private String claimLoginName;
+        private UUID claimIncidentId;
+        private ResponderIncidentService.ClaimResult claimResult = new ResponderIncidentService.ClaimResult(false);
 
         @Override
         public Optional<IncidentPage> findQueue(String loginName, ListCriteria criteria) {
             this.loginName = loginName;
             this.criteria = criteria;
             return page;
+        }
+
+        @Override
+        public ResponderIncidentService.ClaimResult claim(String loginName, UUID incidentId) {
+            claimLoginName = loginName;
+            claimIncidentId = incidentId;
+            return claimResult;
         }
     }
 }

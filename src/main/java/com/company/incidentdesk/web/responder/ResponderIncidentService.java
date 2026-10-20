@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -42,6 +43,12 @@ final class ResponderIncidentService {
         String trustedLoginName = requireLoginName(loginName);
         ListCriteria criteria = new ListCriteria(search, categories, statuses, assignment, page, size);
         return incidents.findQueue(trustedLoginName, criteria).orElseThrow(ResponderAccessDeniedException::new);
+    }
+
+    ClaimResult claim(String loginName, UUID incidentId) {
+        String trustedLoginName = requireLoginName(loginName);
+        Objects.requireNonNull(incidentId, "incidentId");
+        return incidents.claim(trustedLoginName, incidentId);
     }
 
     private static String requireLoginName(String loginName) {
@@ -86,6 +93,9 @@ final class ResponderIncidentService {
         IncidentPage {
             incidents = List.copyOf(incidents);
         }
+    }
+
+    record ClaimResult(boolean claimed) {
     }
 
     /** Deliberately excludes reporter, assignee, anonymity, and storage identifiers. */

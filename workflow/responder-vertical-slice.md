@@ -255,11 +255,12 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
   resources do not enumerate; each attachment read reauthorizes and has safe
   headers; anonymous identity is absent from all responder surfaces, including
   serialized responses, comments, and attachment display names.
-- [ ] RSP-CLAIM-01: eligible claim uses trusted actor and UTC timestamp and
+- [x] RSP-CLAIM-01: eligible claim uses trusted actor and UTC timestamp and
   atomically records the success audit; direct denied/stale attempts, including
   category revocation after queue load, change neither incident nor success
-  audit.
-- [ ] RSP-CLAIM-02: isolated PostgreSQL race yields one winner, one persisted
+  audit. Verified by `ResponderIncidentPostgresTest.claimChecksCurrentCategoryAndLifecycleAndAtomicallyWritesAudit`
+  and `ResponderIncidentControllerTest.claimReturnsNoStoreSuccessOrSafeConflict`.
+- [x] RSP-CLAIM-02: isolated PostgreSQL race yields one winner, one persisted
   assignee, one success audit, and a safe loser response.
 - [ ] RSP-RESOLVE-01: only the current assignee can resolve with valid,
   non-blank remarks and application-generated UTC time; entered whitespace is
@@ -278,8 +279,17 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
 
 ## Verification evidence
 
-- Automated: pending; implementation is authorized, but no implementation or
-  tests have been recorded yet.
+- Automated: `./gradlew test` passed with 661 tests, 2 skipped, and no failures
+  or errors. PostgreSQL-backed tests used a disposable local PostgreSQL 18
+  container and random isolated schemas; the container was stopped after the
+  run. Claim evidence includes
+  `ResponderIncidentPostgresTest.claimChecksCurrentCategoryAndLifecycleAndAtomicallyWritesAudit`,
+  `ResponderIncidentPostgresTest.concurrentClaimsHaveOneWinnerAndOneSuccessAudit`,
+  `ResponderIncidentPostgresTest.auditFailureRollsBackTheClaim`,
+  `ResponderIncidentControllerTest.claimReturnsNoStoreSuccessOrSafeConflict`,
+  and `ReporterWebSecurityTest.responderClaimRequiresResponderRoleAndCsrf`.
+  Verification is against the current uncommitted working tree; commit is
+  pending human review.
 - Manual/deployed: pending; requires approved implementation and issue #6 for
   the promoted-account journey.
 - Human product approver/date: `lqr1019`, 2026-10-20 (Asia/Singapore).

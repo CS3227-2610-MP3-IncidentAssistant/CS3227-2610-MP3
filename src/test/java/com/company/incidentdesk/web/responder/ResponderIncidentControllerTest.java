@@ -8,6 +8,7 @@ import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentPage;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentRow;
+import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.Assignment;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ResponderAccessDeniedException;
 
@@ -26,9 +28,9 @@ class ResponderIncidentControllerTest {
 
     @Test
     void queueIsNoStoreAndSerializesOnlyTheResponderProjection() throws Exception {
-        ResponderIncidentController controller = new ResponderIncidentController(new ResponderIncidentService(
-                (loginName, criteria) -> java.util.Optional.of(
-                        new IncidentPage(List.of(SAFE_ROW), 0, 25, 1, 1, true))));
+        StubGateway gateway = new StubGateway();
+        gateway.page = Optional.of(new IncidentPage(List.of(SAFE_ROW), 0, 25, 1, 1, true));
+        ResponderIncidentController controller = new ResponderIncidentController(new ResponderIncidentService(gateway));
         Principal principal = () -> "responder";
 
         ResponseEntity<IncidentPage> response = controller.queue(principal,
@@ -46,8 +48,7 @@ class ResponderIncidentControllerTest {
 
     @Test
     void deniedAndUnavailableFailuresHaveSafeNoStoreResponses() {
-        ResponderIncidentController controller = new ResponderIncidentController(new ResponderIncidentService(
-                (loginName, criteria) -> java.util.Optional.empty()));
+        ResponderIncidentController controller = new ResponderIncidentController(new ResponderIncidentService(new StubGateway()));
 
         ResponseEntity<?> denied = controller.denied();
         ResponseEntity<?> unavailable = controller.unavailable();
@@ -58,5 +59,46 @@ class ResponderIncidentControllerTest {
         assertEquals("no-store", denied.getHeaders().getCacheControl());
         assertEquals("no-store", unavailable.getHeaders().getCacheControl());
         assertTrue(unavailable.getBody().toString().contains("temporarily unavailable"));
+    }
+
+    @Test
+    void claimReturnsNoStoreSuccessOrSafeConflict() {
+        var gateway = new StubGateway();
+        ResponderIncidentController controller = new ResponderIncidentController(new ResponderIncidentService(gateway));
+        Principal principal = () -> "responder";
+        UUID incidentId = SAFE_ROW.id();
+
+        ResponseEntity<?> success = controller.claim(principal, incidentId);
+        gateway.claimed = false;
+        ResponseEntity<?> conflict = controller.claim(principal, incidentId);
+
+        assertEquals(HttpStatus.OK, success.getStatusCode());
+        assertEquals("no-store", success.getHeaders().getCacheControl());
+        assertEquals(Map.of("claimed", true), success.getBody());
+        assertEquals(HttpStatus.CONFLICT, conflict.getStatusCode());
+        assertEquals("no-store", conflict.getHeaders().getCacheControl());
+        assertEquals(Map.of("code", "CLAIM_CONFLICT",
+                "message", "This incident is no longer available to claim."), conflict.getBody());
+        assertEquals("responder", gateway.loginName);
+        assertEquals(incidentId, gateway.incidentId);
+    }
+
+    private static final class StubGateway implements ResponderIncidentGateway {
+        private boolean claimed = true;
+        private String loginName;
+        private UUID incidentId;
+        private Optional<IncidentPage> page = Optional.empty();
+
+        @Override
+        public Optional<IncidentPage> findQueue(String loginName, ListCriteria criteria) {
+            return page;
+        }
+
+        @Override
+        public ResponderIncidentService.ClaimResult claim(String loginName, UUID incidentId) {
+            this.loginName = loginName;
+            this.incidentId = incidentId;
+            return new ResponderIncidentService.ClaimResult(claimed);
+        }
     }
 }

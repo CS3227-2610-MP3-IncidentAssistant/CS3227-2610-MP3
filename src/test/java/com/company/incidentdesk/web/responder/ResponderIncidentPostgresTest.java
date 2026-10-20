@@ -2,12 +2,19 @@ package com.company.incidentdesk.web.responder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -53,7 +60,8 @@ class ResponderIncidentPostgresTest {
         jdbc = new JdbcTemplate(testDataSource);
         JdbcResponderIncidentGateway gateway = new JdbcResponderIncidentGateway(
                 new NamedParameterJdbcTemplate(testDataSource),
-                new DataSourceTransactionManager(testDataSource));
+                new DataSourceTransactionManager(testDataSource),
+                Clock.fixed(NOW.plusSeconds(30), ZoneOffset.UTC), UUID::randomUUID);
         service = new ResponderIncidentService(gateway);
     }
 
@@ -123,9 +131,9 @@ class ResponderIncidentPostgresTest {
     void searchAndFiltersApplyOnlyInsideTheAuthorizedQueueBeforeCountingAndPaging() {
         grant(RESPONDER, "IT");
         UUID vpn = incident("40000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
-        incident("40000000-0000-0000-0000-000000000002", "IT", "SUBMITTED", null, NOW.plusSeconds(1));
-        incident("40000000-0000-0000-0000-000000000003", "FACILITIES", "SUBMITTED", null, NOW.plusSeconds(2));
-        jdbc.update("UPDATE incidents SET title = 'VPN outage', description = 'Private 100% outage details' WHERE id = ?", vpn);
+        incident("41000000-0000-0000-0000-000000000002", "IT", "SUBMITTED", null, NOW.plusSeconds(1));
+        incident("42000000-0000-0000-0000-000000000003", "FACILITIES", "SUBMITTED", null, NOW.plusSeconds(2));
+        jdbc.update("UPDATE incidents SET title = 'VPN outage', description = 'Private outage details are 100% fixed' WHERE id = ?", vpn);
 
         IncidentPage byDescription = service.queue("responder", "  PRIVATE OUTAGE ", List.of(), List.of(),
                 ResponderIncidentService.Assignment.ALL, 0, 25);
@@ -154,6 +162,112 @@ class ResponderIncidentPostgresTest {
 
         jdbc.update("UPDATE accounts SET status = 'ENABLED', role = 'REPORTER' WHERE id = ?", RESPONDER);
         assertThrowsAccessDenied("responder");
+    }
+
+    @Test
+    void claimChecksCurrentCategoryAndLifecycleAndAtomicallyWritesAudit() {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("60000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        UUID outsideCategory = incident("60000000-0000-0000-0000-000000000002", "FACILITIES", "SUBMITTED", null, NOW);
+        UUID alreadyAssigned = incident("60000000-0000-0000-0000-000000000003", "IT", "ASSIGNED", OTHER_RESPONDER, NOW);
+        UUID resolved = incident("60000000-0000-0000-0000-000000000004", "IT", "RESOLVED", null, NOW);
+        UUID draft = incident("60000000-0000-0000-0000-000000000006", "IT", "DRAFT", null, NOW);
+
+        assertTrue(service.claim("responder", eligible).claimed());
+        assertFalse(service.claim("responder", eligible).claimed());
+        assertFalse(service.claim("responder", outsideCategory).claimed());
+        assertFalse(service.claim("responder", alreadyAssigned).claimed());
+        assertFalse(service.claim("responder", resolved).claimed());
+        assertFalse(service.claim("responder", UUID.fromString("60000000-0000-0000-0000-000000000099")).claimed());
+        assertFalse(service.claim("other-responder", outsideCategory).claimed());
+        grant(REPORTER, "IT");
+        assertFalse(service.claim("reporter", draft).claimed());
+        jdbc.update("DELETE FROM responder_category_access WHERE account_id = ? AND category = 'IT'", RESPONDER);
+        UUID revoked = incident("60000000-0000-0000-0000-000000000005", "IT", "SUBMITTED", null, NOW);
+        assertFalse(service.claim("responder", revoked).claimed());
+        grant(RESPONDER, "IT");
+        jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", RESPONDER);
+        assertFalse(service.claim("responder", revoked).claimed());
+        jdbc.update("UPDATE accounts SET status = 'ENABLED', role = 'REPORTER' WHERE id = ?", RESPONDER);
+        assertFalse(service.claim("responder", revoked).claimed());
+
+        assertEquals("ASSIGNED", jdbc.queryForObject("SELECT status FROM incidents WHERE id = ?", String.class, eligible));
+        assertEquals(RESPONDER, jdbc.queryForObject("SELECT assignee_id FROM incidents WHERE id = ?", UUID.class, eligible));
+        assertEquals(Timestamp.from(NOW.plusSeconds(30)), jdbc.queryForObject(
+                "SELECT first_assigned_at FROM incidents WHERE id = ?", Timestamp.class, eligible));
+        assertEquals(Timestamp.from(NOW.plusSeconds(30)), jdbc.queryForObject(
+                "SELECT latest_assigned_at FROM incidents WHERE id = ?", Timestamp.class, eligible));
+        assertEquals(Timestamp.from(NOW), jdbc.queryForObject(
+                "SELECT queue_entered_at FROM incidents WHERE id = ?", Timestamp.class, eligible));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE action = 'INCIDENT_CLAIMED' AND outcome = 'SUCCESS'",
+                Integer.class));
+        assertEquals(RESPONDER, jdbc.queryForObject(
+                "SELECT actor_account_id FROM audit_events WHERE action = 'INCIDENT_CLAIMED'", UUID.class));
+        assertEquals("RESPONDER", jdbc.queryForObject(
+                "SELECT actor_role FROM audit_events WHERE action = 'INCIDENT_CLAIMED'", String.class));
+        assertEquals("60000000-0000-0000-0000-000000000001", jdbc.queryForObject(
+                "SELECT target_identifier FROM audit_events WHERE action = 'INCIDENT_CLAIMED'", String.class));
+        assertFalse(jdbc.queryForObject("SELECT details::text FROM audit_events WHERE action = 'INCIDENT_CLAIMED'",
+                String.class).contains("reporter-private-marker"));
+    }
+
+    @Test
+    void concurrentClaimsHaveOneWinnerAndOneSuccessAudit() throws Exception {
+        grant(RESPONDER, "IT");
+        grant(OTHER_RESPONDER, "IT");
+        UUID eligible = incident("70000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> claimWhenReleased("responder", eligible, ready, start));
+            var second = executor.submit(() -> claimWhenReleased("other-responder", eligible, ready, start));
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+
+            List<Boolean> outcomes = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+            assertEquals(1, outcomes.stream().filter(Boolean::booleanValue).count());
+            assertEquals("ASSIGNED", jdbc.queryForObject("SELECT status FROM incidents WHERE id = ?", String.class, eligible));
+            assertTrue(List.of(RESPONDER, OTHER_RESPONDER).contains(jdbc.queryForObject(
+                    "SELECT assignee_id FROM incidents WHERE id = ?", UUID.class, eligible)));
+            assertEquals(1, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM audit_events WHERE action = 'INCIDENT_CLAIMED' AND outcome = 'SUCCESS'",
+                    Integer.class));
+        }
+    }
+
+    @Test
+    void auditFailureRollsBackTheClaim() {
+        grant(RESPONDER, "IT");
+        UUID eligible = incident("80000000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
+        jdbc.execute("""
+                CREATE FUNCTION reject_claim_audit() RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.action = 'INCIDENT_CLAIMED' THEN RAISE EXCEPTION 'injected audit failure'; END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """);
+        jdbc.execute("CREATE TRIGGER reject_claim_audit BEFORE INSERT ON audit_events "
+                + "FOR EACH ROW EXECUTE FUNCTION reject_claim_audit()");
+        try {
+            org.junit.jupiter.api.Assertions.assertThrows(ResponderIncidentService.ResponderDataAccessException.class,
+                    () -> service.claim("responder", eligible));
+            assertEquals("SUBMITTED", jdbc.queryForObject("SELECT status FROM incidents WHERE id = ?", String.class, eligible));
+            assertNull(jdbc.queryForObject("SELECT assignee_id FROM incidents WHERE id = ?", UUID.class, eligible));
+            assertEquals(0, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM audit_events WHERE action = 'INCIDENT_CLAIMED'", Integer.class));
+        } finally {
+            jdbc.execute("DROP TRIGGER reject_claim_audit ON audit_events");
+            jdbc.execute("DROP FUNCTION reject_claim_audit()");
+        }
+    }
+
+    private static boolean claimWhenReleased(
+            String loginName, UUID incidentId, CountDownLatch ready, CountDownLatch start) throws InterruptedException {
+        ready.countDown();
+        if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("claim race did not start");
+        return service.claim(loginName, incidentId).claimed();
     }
 
     private static void assertThrowsAccessDenied(String loginName) {
