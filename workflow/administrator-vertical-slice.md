@@ -302,6 +302,37 @@ An Administrator cannot delete their own currently authenticated account. The
 server rechecks eligibility and commits the tombstone and audit event in one
 transaction. This operation is irreversible in this slice.
 
+Every tombstone request derives the acting Administrator from the trusted
+security context, then locks that actor's account row with `SELECT ... FOR
+UPDATE` and rechecks that the actor is still enabled with persisted role
+`ADMINISTRATOR` before changing the target. The actor and target must differ.
+Every path that disables, tombstones, or demotes an Administrator must follow
+the same locking protocol. The target mutation and its audit event commit in
+the transaction that holds the actor lock.
+
+Reciprocal concurrent attempts by two Administrators to tombstone each other
+cannot both commit: each target update conflicts with the other transaction's
+actor-row lock, so PostgreSQL serialization or deadlock resolution aborts at
+least one attempt. The application maps the losing attempt to a stable safe
+conflict, writes no success audit for it, and does not retry it automatically.
+Any explicit later attempt starts a new transaction and reauthorizes and
+rechecks the acting Administrator. Together with the self-deletion denial,
+this preserves at least one enabled Administrator without globally serializing
+unrelated Administrator actions.
+
+### ADM-ACC-05 acceptance criteria — account tombstoning
+
+- [ ] `ADM-ACC-05-A`: A tombstone succeeds only after the trusted acting
+  account row is locked and rechecked as an enabled persisted Administrator;
+  self-deletion, a missing/disabled/demoted actor, an ineligible target, and an
+  audit or persistence failure leave the target unchanged and create no
+  misleading success audit.
+- [ ] `ADM-ACC-05-B`: Isolated PostgreSQL concurrency tests prove reciprocal
+  Administrator tombstone attempts cannot both commit, at least one enabled
+  Administrator remains, the losing deadlock/serialization path returns a
+  stable conflict without automatic retry or success audit, and an explicit
+  retry performs fresh authorization.
+
 ### ADM-ACC-06 — Administrator provisioning
 
 Although the desktop Accounts page does not provide it, MP3 requires controlled
@@ -447,6 +478,28 @@ unnecessary incident content, raw AI prompts/responses, or anonymous reporter
 identity. Deleted actors render with a tombstoned label while retaining their
 stable identifier. No browser or application operation can edit or delete an
 audit event.
+
+The canonical audit record retains the truthful internal actor required by
+`.agents/audit-policy.md`, but the Administrator audit projection applies the
+anonymous-report policy before filtering, counting, paging, or serialization.
+When an event represents an anonymous Reporter's action on their anonymous
+incident, the UI and API use only `Anonymous reporter`; they expose no account
+identifier, login name, identity-bearing change value, or link to an account.
+Such Reporters do not appear as actor-filter options because of those events.
+An actor-specific query, including a direct forged request for that internal
+Reporter identifier, excludes the anonymous-incident association from rows,
+counts, page metadata, and empty/error distinctions. Events performed by an
+Administrator, Responder, or system actor on an anonymous incident may retain
+that non-reporter actor's privacy-safe label.
+
+### ADM-AUD-01 acceptance criteria — anonymous actor filtering
+
+- [ ] `ADM-AUD-01-A`: For every anonymous-incident audit event authored by the
+  Reporter, unfiltered lists and event detail use only `Anonymous reporter`,
+  actor-filter options contain no protected Reporter identity, and direct
+  actor-filter requests cannot reveal the association through rows, counts,
+  pagination metadata, or distinguishable empty/error behavior; the canonical
+  append-only record still retains its truthful protected actor reference.
 
 ### ADM-SELF-01 — Own password, notifications, and logout
 
@@ -617,6 +670,7 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-INC-03/04/05 | incident lifecycle, authorization matrix, audit | service + PostgreSQL conflict/atomicity + E2E tests |
 | ADM-ACC-01/02/03 | requirements, authorization matrix, security | service + MVC + session invalidation + E2E tests |
 | ADM-ACC-04/05/06 | requirements, security, audit, MP2 improvements | credential/tombstone/bootstrap security tests |
+| ADM-ACC-05-A/B | authorization matrix, security, persistence, audit | trusted-actor/self-denial tests plus isolated PostgreSQL reciprocal-tombstone concurrency, rollback, audit, and explicit-retry tests |
 | ADM-ACC-06-A/B | authorization matrix, security, issue #5 | forged-role HTTP tests, route-denial tests, bootstrap configuration unit tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
 | ADM-ACC-06-C/D | persistence, audit, MP2 improvements, issue #5 | isolated PostgreSQL success, system actor/target attribution, replay, pre-existing-admin, and concurrent-startup tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
 | ADM-ACC-06-E | persistence, audit, issue #5 | isolated PostgreSQL audit-write failure and transaction rollback test; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
@@ -626,6 +680,7 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
 | ADM-AUD-01 | audit policy, anonymity | append-only/privacy/filter tests |
+| ADM-AUD-01-A | anonymity and audit policies | audit-projection and direct actor-filter tests covering rows, options, counts, pagination metadata, detail, and canonical-record retention |
 | ADM-SELF-01 | requirements, security, audit | password/session/CSRF tests |
 
 ## 11. Decisions required before implementation
