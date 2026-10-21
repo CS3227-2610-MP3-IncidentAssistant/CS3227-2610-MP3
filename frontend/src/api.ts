@@ -38,6 +38,26 @@ export type SloTarget = {
   effectiveAt: string | null
 }
 
+export type SloTargetVersion = {
+  id: string
+  category: IncidentCategory
+  timeToClaimMinutes: number
+  timeInProgressMinutes: number
+  reopenRatePercent: number
+  effectiveAt: string
+}
+
+export type SloCategoryConfiguration = {
+  category: IncidentCategory
+  current: SloTargetVersion | null
+  history: SloTargetVersion[]
+}
+
+export type SloConfiguration = {
+  outcome: 'AVAILABLE'
+  categories: SloCategoryConfiguration[]
+}
+
 export type IncidentRow = {
   id: string
   title: string
@@ -213,6 +233,33 @@ export async function logout(refreshSession: SessionRefresher): Promise<void> {
 export async function loadDashboard(search: string, page: number, signal: AbortSignal): Promise<DashboardPage> {
   const parameters = new URLSearchParams({ search: search.trim(), page: String(page), size: '25' })
   return requestJson<DashboardPage>(`/api/v1/admin/dashboard?${parameters}`, { signal })
+}
+
+export async function loadSloConfiguration(signal?: AbortSignal): Promise<SloConfiguration> {
+  return requestJson<SloConfiguration>('/api/v1/admin/slo', { signal })
+}
+
+export async function saveSloTarget(
+  category: IncidentCategory,
+  target: {
+    timeToClaimMinutes: number
+    timeInProgressMinutes: number
+    reopenRatePercent: number
+    expectedVersionId: string | null
+  },
+  refreshSession: SessionRefresher,
+): Promise<{ changed: boolean }> {
+  const response = await csrfRequest(`/api/v1/admin/slo/${encodeURIComponent(category)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(target),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The SLO target could not be saved. Refresh and try again.',
+  })
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<{ changed: boolean }>
 }
 
 export type ReporterIncident = {

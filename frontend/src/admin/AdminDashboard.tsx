@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError, loadDashboard, type DashboardPage, type IncidentRow, type SloTarget } from '../api'
+import { Pagination } from '../shared/Pagination'
 
 type DashboardQuery = {
   search: string
@@ -111,7 +112,13 @@ function IncidentPanel({ dashboard }: { dashboard: DashboardState }) {
     {!dashboard.loading && dashboard.error && <div className="panel-state" role="alert">{dashboard.error}</div>}
     {!dashboard.loading && !dashboard.error && incidents.length === 0 && <IncidentEmptyState />}
     {!dashboard.error && incidents.length > 0 && <IncidentTable incidents={incidents} />}
-    {dashboard.result && dashboard.result.totalPages > 1 && <Pagination dashboard={dashboard} />}
+    {dashboard.result && <Pagination
+      page={dashboard.page}
+      totalPages={dashboard.result.totalPages}
+      ariaLabel="Incident pages"
+      disabled={dashboard.loading}
+      onPageChange={(page) => page < dashboard.page ? dashboard.previousPage() : dashboard.nextPage()}
+    />}
   </section>
 }
 
@@ -145,24 +152,6 @@ function IncidentTableRow({ incident }: { incident: IncidentRow }) {
     <td>{incident.assigneeLabel ?? 'Unassigned'}</td>
     <td><time dateTime={incident.createdAt}>{new Date(incident.createdAt).toLocaleString()}</time></td>
   </tr>
-}
-
-function Pagination({ dashboard }: { dashboard: DashboardState }) {
-  const result = dashboard.result
-  if (!result) return null
-  return <nav className="pagination" aria-label="Incident pages">
-    <button type="button" disabled={dashboard.page === 0 || dashboard.loading} onClick={dashboard.previousPage}>
-      Previous
-    </button>
-    <span>Page {dashboard.page + 1} of {result.totalPages}</span>
-    <button
-      type="button"
-      disabled={dashboard.page + 1 >= result.totalPages || dashboard.loading}
-      onClick={dashboard.nextPage}
-    >
-      Next
-    </button>
-  </nav>
 }
 
 function IncidentEmptyState() {

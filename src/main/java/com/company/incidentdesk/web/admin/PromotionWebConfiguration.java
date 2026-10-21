@@ -53,4 +53,11 @@ class PromotionWebConfiguration {
             Clock promotionClock) {
         return new AdministratorAccountService(store, promotionClock, UUID::randomUUID);
     }
+
+    @Bean
+    AdministratorSloService administratorSloService(
+            AdministratorSloStore store,
+            Clock promotionClock) {
+        return new AdministratorSloService(store, promotionClock, UUID::randomUUID);
+    }
 }

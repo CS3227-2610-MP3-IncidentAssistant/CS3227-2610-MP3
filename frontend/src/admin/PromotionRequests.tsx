@@ -7,6 +7,7 @@ import {
   type PromotionRequestRecord,
   type SessionRefresher,
 } from '../api'
+import { Pagination } from '../shared/Pagination'
 
 const categories: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
 const categoryNames: Record<IncidentCategory, string> = {
@@ -165,17 +166,8 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
           </section>
         )
       })}
-      {!loading && !loadError && totalPages > 1 && (
-        <nav className="pagination" aria-label="Promotion request pages">
-          <button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)}>
-            Previous
-          </button>
-          <span>Page {page + 1} of {totalPages}</span>
-          <button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>
-            Next
-          </button>
-        </nav>
-      )}
+      {!loadError && <Pagination page={page} totalPages={totalPages} ariaLabel="Promotion request pages"
+        disabled={loading} onPageChange={setPage} />}
     </section>
   )
 }
