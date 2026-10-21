@@ -148,7 +148,7 @@ public final class AdministratorDashboardQuery {
                 SELECT DISTINCT ON (category) category, average_time_to_claim_minutes,
                        average_time_in_progress_minutes, average_reopen_rate_percent, effective_at
                   FROM slo_target_versions
-              ORDER BY category, effective_at DESC, id ASC
+              ORDER BY category, effective_at DESC, id DESC
                 """, result -> {
                     Map<String, SloTarget> values = new HashMap<>();
                     while (result.next()) {

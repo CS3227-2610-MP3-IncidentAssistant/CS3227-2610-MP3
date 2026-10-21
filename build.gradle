@@ -299,6 +299,7 @@ tasks.register('registrationDatabaseTest', Test) {
         includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionWorkflowPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionJourneyHttpPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorAccountPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorSloPostgresTest'
     }
 
     doFirst {
