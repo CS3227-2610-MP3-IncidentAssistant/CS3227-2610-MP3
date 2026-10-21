@@ -57,6 +57,9 @@ a separate static frontend.
   issue #7 backend-only attachment streaming and privacy-safe comment read
   projection. Reporter upload, comment writes, and cleanup compensation remain
   outside the decision.
+- `decisions/ADR-006-cloud-run-deployment-identity.md`: proposed keyless GitHub
+  Actions deployment identity and least-privilege Cloud Run service identities;
+  independent architecture/security approval remains pending.
 
 Create one record in `decisions/` for each material choice. At minimum cover:
 

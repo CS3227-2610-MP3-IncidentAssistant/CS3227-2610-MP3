@@ -69,10 +69,14 @@ Vite proxies `/health` and future `/api` requests to Spring Boot. A normal
 Gradle build compiles the React production assets into the Spring Boot web JAR.
 Production deployment builds one container and deploys it to Cloud Run through
 the protected `production` GitHub environment. Configure that environment with
-the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets, plus
-`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`, and
-`CLOUD_RUN_SERVICE` variables. Only the assessed `master` branch can reach the
-deployment job; a manual run from another branch performs verification only.
+the `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`,
+`CLOUD_RUN_SERVICE`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
+`GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT` variables. The
+workflow uses GitHub OIDC and Google Workload Identity Federation; no Google
+service-account key is stored in GitHub. Only the assessed `master` branch can
+reach the deployment job; a manual run from another branch performs
+verification only. Follow [the Cloud Run deployment runbook](docs/CloudRunDeployment.md)
+for the one-time Google Cloud and GitHub environment setup.
 
 ## Testing the entire application
 
