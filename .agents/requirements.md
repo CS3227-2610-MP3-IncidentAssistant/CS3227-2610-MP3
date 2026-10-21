@@ -113,6 +113,13 @@ A responder can:
 
 ## Administrator requirements
 
+The MP3 web application must migrate every functional capability exposed by
+the MP2 JavaFX Administrator experience. The authoritative inventory and web
+disposition for those capabilities is
+`workflow/administrator-vertical-slice.md`; desktop implementation details and
+explicitly non-functional placeholders are replaced or omitted as specified
+there, rather than treated as product features.
+
 An administrator can:
 
 - View, search, filter, and sort incidents across the company.

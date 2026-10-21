@@ -10,6 +10,11 @@
 - Test successful, denied, stale, concurrent, malformed, and unavailable paths.
 - Verify persisted state and audit evidence rather than trusting HTTP status or
   visible text alone.
+- Purely visual presentation changes may be accepted through documented human
+  review instead of dedicated DOM-structure or CSS-class assertions. Interactive
+  behavior, state transitions, validation, accessibility semantics, data flow,
+  authorization, and security controls still require the applicable automated
+  verification below.
 
 ## Required suites
 

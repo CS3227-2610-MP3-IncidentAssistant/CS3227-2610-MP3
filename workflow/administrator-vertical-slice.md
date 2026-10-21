@@ -423,6 +423,38 @@ version. A valid change receives a server-generated ID and UTC effective time,
 commits with an audit event, applies prospectively, and never rewrites historic
 cycle evaluation. Persistence failure leaves the prior target effective.
 
+The React page follows the desktop interaction model: a labelled category
+drop-down at the top selects one category at a time, a separate summary shows
+that category's current effective target, and the editable new-version fields
+remain visually distinct. Version history is paginated with the shared
+Previous/Page/Next control also used by the account directory and dashboard.
+
+### ADM-SLO-01 acceptance criteria — versioned category targets
+
+- [x] `ADM-SLO-01-A`: An enabled authenticated Administrator can read every
+  category's current target and chronological append-only history; signed-out,
+  wrong-role, disabled, or demoted actors receive no SLO representation. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-B`: A valid change containing non-negative whole-minute
+  durations and a reopen-rate percentage from 0 through 100 creates one
+  server-identified, application-UTC version and one secret-free audit event
+  atomically, while the prior versions remain unchanged. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-C`: Invalid fields, an unchanged target, a stale expected
+  version, or a persistence/audit failure creates neither a target version nor
+  a misleading success audit. Concurrent updates from the same current version
+  have at most one winner and a safe conflict response for the loser. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-D`: The React page exposes a labelled category selector, a
+  distinct current-effective-target summary, editable new-version fields, and
+  paginated read-only history for every category; it keeps entered values after
+  recoverable errors, prevents duplicate submission, and provides loading,
+  empty, validation, success, conflict, and retry states. Its visual
+  presentation was approved in
+  [the 2026-10-21 UI and implementation review](reviews/2026-10-21-administrator-slo-ui-review.md).
+  Automated interaction evidence is recorded in
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+
 ### ADM-STAT-01 — Operational statistics
 
 An Administrator can filter statistics by responder, non-anonymous reporter,
@@ -644,7 +676,10 @@ The following suites are required before the slice can be called complete:
    assignment/reassignment/deletion/access changes.
 4. React component tests for semantic structure, keyboard/focus behavior,
    validation, confirmation, loading/empty/error states, stale responses, and
-   malicious/long text rendering.
+   malicious/long text rendering. Purely visual composition and styling do not
+   require brittle DOM-structure or CSS-class assertions when a documented human
+   review approves them; this exception does not cover interactive behavior,
+   accessibility semantics, or state handling.
 5. Browser end-to-end tests covering each navigation destination and one
    successful plus denied/stale path for each mutation family.
 6. AI gateway tests for aggregate-only payloads, prompt injection, anonymous
@@ -687,6 +722,7 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-ACC-06-F | deployment, issue #5 | first-run/recovery runbook and deployment-workflow configuration review |
 | ADM-ACC-06-G | security ADR gate, issue #5 | named independent approval plus protected route/mutation tests; currently blocked |
 | ADM-SLO-01 | SLO, audit | calculation + versioning + PostgreSQL tests |
+| ADM-SLO-01-A/B/C/D | SLO, authorization matrix, persistence, audit, style guide | MVC security and validation tests, isolated PostgreSQL authorization/atomicity/concurrency tests, and React interaction/accessibility tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
 | ADM-AUD-01 | audit policy, anonymity | append-only/privacy/filter tests |
