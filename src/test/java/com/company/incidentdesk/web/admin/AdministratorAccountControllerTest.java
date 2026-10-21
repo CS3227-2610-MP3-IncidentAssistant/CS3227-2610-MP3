@@ -8,12 +8,14 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
@@ -32,6 +35,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
+import com.company.incidentdesk.domain.incident.IncidentCategory;
 import com.company.incidentdesk.web.security.WebSecurityConfiguration;
 
 class AdministratorAccountControllerTest {
@@ -103,8 +107,85 @@ class AdministratorAccountControllerTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
     }
 
+    @Test
+    void responderCategoryReplacementRequiresAdministratorAndCsrf() throws Exception {
+        UUID target = UUID.randomUUID();
+        String path = categoryPath(target);
+        String body = "{\"categories\":[\"IT\"]}";
+
+        mvc.perform(put(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put(path).with(user("reporter").roles("REPORTER")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isNotFound());
+        mvc.perform(put(path).with(user("admin").roles("ADMINISTRATOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+
+        verifyNoInteractions(accounts);
+    }
+
+    @Test
+    void responderCategoryReplacementUsesTrustedActorAndValidatedFullSet() throws Exception {
+        UUID target = UUID.randomUUID();
+        when(accounts.replaceResponderCategories("admin", target,
+                Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES)))
+                .thenReturn(ResponderCategoryAccessOutcome.UPDATED);
+
+        mvc.perform(put(categoryPath(target)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[\"IT\",\"FACILITIES\"]}"))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string("Cache-Control", "no-store"));
+
+        verify(accounts).replaceResponderCategories("admin", target,
+                Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES));
+    }
+
+    @Test
+    void responderCategoryReplacementRejectsMissingUnknownAndDuplicateValues() throws Exception {
+        UUID target = UUID.randomUUID();
+        for (String body : List.of(
+                "{}",
+                "{\"categories\":[\"UNKNOWN\"]}",
+                "{\"categories\":[\"IT\",\"IT\"]}")) {
+            mvc.perform(put(categoryPath(target)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.fieldErrors.categories").exists());
+        }
+
+        verifyNoInteractions(accounts);
+    }
+
+    @Test
+    void responderCategoryReplacementMapsSafeResourceAndPersistenceFailures() throws Exception {
+        UUID unavailable = UUID.randomUUID();
+        UUID failed = UUID.randomUUID();
+        when(accounts.replaceResponderCategories("admin", unavailable, Set.of()))
+                .thenReturn(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE);
+        when(accounts.replaceResponderCategories("admin", failed, Set.of()))
+                .thenReturn(ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE);
+
+        mvc.perform(put(categoryPath(unavailable)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"categories\":[]}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("UNAVAILABLE"));
+        mvc.perform(put(categoryPath(failed)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"categories\":[]}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_UPDATE_UNAVAILABLE"));
+    }
+
     private static String path(UUID accountId) {
         return "/api/v1/admin/accounts/" + accountId + "/tombstone";
+    }
+
+    private static String categoryPath(UUID accountId) {
+        return "/api/v1/admin/accounts/" + accountId + "/responder-categories";
     }
 
     @Configuration(proxyBeanMethods = false)

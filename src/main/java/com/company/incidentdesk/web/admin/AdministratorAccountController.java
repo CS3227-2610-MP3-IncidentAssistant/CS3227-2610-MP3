@@ -1,18 +1,26 @@
 package com.company.incidentdesk.web.admin;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.sql.DataSource;
 
+import com.company.incidentdesk.domain.incident.IncidentCategory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +62,43 @@ final class AdministratorAccountController {
         };
     }
 
+    @PutMapping(path = "/{accountId}/responder-categories", consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<?> replaceResponderCategories(
+            Principal principal,
+            @PathVariable UUID accountId,
+            @RequestBody ResponderCategoriesBody body) {
+        if (principal == null) return unavailable();
+        if (body == null || body.categories() == null) return validation();
+        List<String> invalidFields = new ArrayList<>();
+        Set<IncidentCategory> categories = parseCategories(body.categories(), invalidFields);
+        if (!invalidFields.isEmpty()) return validation();
+
+        return switch (accounts.replaceResponderCategories(principal.getName(), accountId, categories)) {
+        case UPDATED, UNCHANGED -> ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+        case RESOURCE_UNAVAILABLE -> unavailable();
+        case PERSISTENCE_FAILURE -> error(HttpStatus.SERVICE_UNAVAILABLE, "ACCOUNT_UPDATE_UNAVAILABLE",
+                "Responder access could not be updated");
+        };
+    }
+
+    private static Set<IncidentCategory> parseCategories(List<String> values, List<String> invalidFields) {
+        EnumSet<IncidentCategory> categories = EnumSet.noneOf(IncidentCategory.class);
+        for (String value : values) {
+            try {
+                if (!categories.add(IncidentCategory.valueOf(value))) invalidFields.add("categories");
+            } catch (IllegalArgumentException | NullPointerException exception) {
+                invalidFields.add("categories");
+            }
+        }
+        return Set.copyOf(categories);
+    }
+
+    private static ResponseEntity<Map<String, Object>> validation() {
+        return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).body(Map.of(
+                "code", "VALIDATION_FAILED",
+                "fieldErrors", Map.of("categories", "Invalid value.")));
+    }
+
     private static ResponseEntity<Map<String, String>> unavailable() {
         return error(HttpStatus.NOT_FOUND, "UNAVAILABLE", "Resource unavailable");
     }
@@ -62,4 +107,6 @@ final class AdministratorAccountController {
         return ResponseEntity.status(status).cacheControl(CacheControl.noStore())
                 .body(Map.of("code", code, "message", message));
     }
+
+    record ResponderCategoriesBody(List<String> categories) { }
 }

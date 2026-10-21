@@ -2,13 +2,16 @@ package com.company.incidentdesk.web.admin;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.sql.DataSource;
 
 import com.company.incidentdesk.domain.account.AccountStatus;
 import com.company.incidentdesk.domain.account.Role;
+import com.company.incidentdesk.domain.incident.IncidentCategory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
@@ -17,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Locks and reauthorizes the acting Administrator before any account tombstone. */
+/** Locks and reauthorizes the acting Administrator before account mutations. */
 @Repository
 @ConditionalOnBean(DataSource.class)
 class JdbcAdministratorAccountStore implements AdministratorAccountStore {
@@ -82,6 +85,82 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
         }
     }
 
+    @Override
+    public ResponderCategoryAccessOutcome replaceResponderCategories(
+            String administratorLoginName,
+            UUID targetAccountId,
+            Set<IncidentCategory> categories,
+            UUID auditEventId,
+            Instant occurredAt) {
+        try {
+            ResponderCategoryAccessOutcome outcome = transactions.execute(status -> replaceResponderCategoriesInTransaction(
+                    administratorLoginName, targetAccountId, categories, auditEventId, occurredAt));
+            return outcome == null ? ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE : outcome;
+        } catch (DataAccessException exception) {
+            return ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE;
+        }
+    }
+
+    private ResponderCategoryAccessOutcome replaceResponderCategoriesInTransaction(
+            String administratorLoginName,
+            UUID targetAccountId,
+            Set<IncidentCategory> categories,
+            UUID auditEventId,
+            Instant occurredAt) {
+        List<ActorState> actors = jdbc.query("""
+                SELECT id, role, status
+                  FROM accounts
+                 WHERE login_name = ?
+                 FOR SHARE
+                """, (result, row) -> new ActorState(
+                result.getObject("id", UUID.class), result.getString("role"), result.getString("status")),
+                administratorLoginName);
+        if (actors.size() != 1 || !actors.getFirst().isEnabledAdministrator()) {
+            return ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE;
+        }
+        ActorState actor = actors.getFirst();
+
+        List<TargetState> targets = jdbc.query("""
+                SELECT login_name, role, status
+                  FROM accounts
+                 WHERE id = ?
+                 FOR UPDATE
+                """, (result, row) -> new TargetState(
+                result.getString("login_name"), result.getString("role"), result.getString("status")),
+                targetAccountId);
+        if (targets.size() != 1 || !targets.getFirst().isEnabledResponder()) {
+            return ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE;
+        }
+        TargetState target = targets.getFirst();
+        Set<IncidentCategory> current = categorySet(targetAccountId);
+        if (current.equals(categories)) return ResponderCategoryAccessOutcome.UNCHANGED;
+
+        int changed = jdbc.update("""
+                UPDATE accounts
+                   SET version = version + 1
+                 WHERE id = ? AND role = 'RESPONDER' AND status = 'ENABLED'
+                """, targetAccountId);
+        if (changed != 1) return ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE;
+
+        jdbc.update("DELETE FROM responder_category_access WHERE account_id = ?", targetAccountId);
+        for (IncidentCategory category : categories.stream().sorted().toList()) {
+            jdbc.update("""
+                    INSERT INTO responder_category_access (account_id, category, granted_at)
+                    VALUES (?, ?, ?)
+                    """, targetAccountId, category.name(), Timestamp.from(occurredAt));
+        }
+        jdbc.update("DELETE FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?", target.loginName());
+        jdbc.update("""
+                INSERT INTO audit_events (
+                    id, occurred_at, actor_account_id, actor_role, action,
+                    target_type, target_identifier, outcome, details
+                ) VALUES (?, ?, ?, 'ADMINISTRATOR', 'RESPONDER_ACCESS_CHANGED',
+                    'ACCOUNT', ?, 'SUCCESS', CAST(? AS jsonb))
+                """, auditEventId, Timestamp.from(occurredAt), actor.id(), targetAccountId.toString(),
+                categoryAuditDetails(current, categories));
+        return ResponderCategoryAccessOutcome.UPDATED;
+    }
+
     private AccountTombstoneOutcome tombstoneInTransaction(
             String administratorLoginName,
             UUID targetAccountId,
@@ -103,11 +182,12 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
 
         actorLockedHook.run();
         List<TargetState> targets = jdbc.query("""
-                SELECT login_name, status
+                SELECT login_name, role, status
                   FROM accounts
                  WHERE id = ?
                  FOR UPDATE
-                """, (result, row) -> new TargetState(result.getString("login_name"), result.getString("status")),
+                """, (result, row) -> new TargetState(
+                result.getString("login_name"), result.getString("role"), result.getString("status")),
                 targetAccountId);
         if (targets.size() != 1 || !AccountStatus.ENABLED.name().equals(targets.getFirst().status())) {
             return AccountTombstoneOutcome.RESOURCE_UNAVAILABLE;
@@ -152,11 +232,32 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
                 """, String.class, accountId);
     }
 
+    private Set<IncidentCategory> categorySet(UUID accountId) {
+        EnumSet<IncidentCategory> categories = EnumSet.noneOf(IncidentCategory.class);
+        for (String value : categories(accountId)) categories.add(IncidentCategory.valueOf(value));
+        return Set.copyOf(categories);
+    }
+
+    private static String categoryAuditDetails(
+            Set<IncidentCategory> before,
+            Set<IncidentCategory> after) {
+        return "{\"changes\":[{\"field\":\"RESPONDER_CATEGORIES\",\"before\":\""
+                + formatCategories(before) + "\",\"after\":\"" + formatCategories(after) + "\"}]}";
+    }
+
+    private static String formatCategories(Set<IncidentCategory> categories) {
+        return categories.isEmpty() ? "none" : String.join(",", categories.stream().sorted().map(Enum::name).toList());
+    }
+
     private record ActorState(UUID id, String role, String status) {
         boolean isEnabledAdministrator() {
             return Role.ADMINISTRATOR.name().equals(role) && AccountStatus.ENABLED.name().equals(status);
         }
     }
 
-    private record TargetState(String loginName, String status) { }
+    private record TargetState(String loginName, String role, String status) {
+        boolean isEnabledResponder() {
+            return Role.RESPONDER.name().equals(role) && AccountStatus.ENABLED.name().equals(status);
+        }
+    }
 }

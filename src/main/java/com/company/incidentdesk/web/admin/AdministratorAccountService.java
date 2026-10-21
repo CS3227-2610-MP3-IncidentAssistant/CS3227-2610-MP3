@@ -3,10 +3,13 @@ package com.company.incidentdesk.web.admin;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/** Coordinates bounded account directory reads and account tombstone commands. */
+import com.company.incidentdesk.domain.incident.IncidentCategory;
+
+/** Coordinates bounded account directory reads and administrator account commands. */
 final class AdministratorAccountService {
     static final int DEFAULT_PAGE_SIZE = 25;
     static final int MAX_PAGE_SIZE = 100;
@@ -36,6 +39,18 @@ final class AdministratorAccountService {
         return store.tombstone(
                 requireActor(administratorLoginName),
                 Objects.requireNonNull(targetAccountId, "targetAccountId"),
+                Objects.requireNonNull(identifiers.get(), "generated audit event identifier"),
+                clock.instant());
+    }
+
+    ResponderCategoryAccessOutcome replaceResponderCategories(
+            String administratorLoginName,
+            UUID targetAccountId,
+            Set<IncidentCategory> categories) {
+        return store.replaceResponderCategories(
+                requireActor(administratorLoginName),
+                Objects.requireNonNull(targetAccountId, "targetAccountId"),
+                Set.copyOf(Objects.requireNonNull(categories, "categories")),
                 Objects.requireNonNull(identifiers.get(), "generated audit event identifier"),
                 clock.instant());
     }

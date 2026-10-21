@@ -2,15 +2,25 @@ package com.company.incidentdesk.web.admin;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
-/** PostgreSQL boundary for authorized account-directory reads and tombstones. */
+import com.company.incidentdesk.domain.incident.IncidentCategory;
+
+/** PostgreSQL boundary for authorized account-directory reads and mutations. */
 interface AdministratorAccountStore {
     AccountDirectoryResult findAccounts(String administratorLoginName, long offset, int limit);
 
     AccountTombstoneOutcome tombstone(
             String administratorLoginName,
             UUID targetAccountId,
+            UUID auditEventId,
+            Instant occurredAt);
+
+    ResponderCategoryAccessOutcome replaceResponderCategories(
+            String administratorLoginName,
+            UUID targetAccountId,
+            Set<IncidentCategory> categories,
             UUID auditEventId,
             Instant occurredAt);
 

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -25,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.company.incidentdesk.domain.incident.IncidentCategory;
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
 import com.company.incidentdesk.support.PostgresTestDataSource;
 
@@ -68,6 +70,106 @@ class AdministratorAccountPostgresTest {
         jdbc.update("DELETE FROM account_credentials");
         jdbc.update("DELETE FROM responder_category_access");
         jdbc.update("DELETE FROM accounts");
+    }
+
+    @Test
+    void categoryReplacementCommitsAccessSessionInvalidationAndAuditAtomically() {
+        UUID administrator = account("admin", "ADMINISTRATOR");
+        UUID responder = account("responder", "RESPONDER");
+        session("responder");
+        jdbc.update("INSERT INTO responder_category_access (account_id, category, granted_at) VALUES (?, 'IT', ?)",
+                responder, Timestamp.from(NOW));
+
+        ResponderCategoryAccessOutcome outcome = store().replaceResponderCategories(
+                "admin", responder, Set.of(IncidentCategory.FACILITIES, IncidentCategory.HUMAN_RELATIONS),
+                UUID.randomUUID(), NOW);
+
+        assertEquals(ResponderCategoryAccessOutcome.UPDATED, outcome);
+        assertEquals(List.of("FACILITIES", "HUMAN_RELATIONS"), jdbc.queryForList("""
+                SELECT category FROM responder_category_access
+                 WHERE account_id = ? ORDER BY category
+                """, String.class, responder));
+        assertEquals(1L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
+        assertEquals(0, count("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = 'responder'"));
+        assertEquals(1, count("""
+                SELECT COUNT(*) FROM audit_events
+                 WHERE actor_account_id = ? AND action = 'RESPONDER_ACCESS_CHANGED'
+                """, administrator));
+        assertEquals("IT", value("""
+                SELECT details -> 'changes' -> 0 ->> 'before' FROM audit_events
+                 WHERE action = 'RESPONDER_ACCESS_CHANGED'
+                """));
+        assertEquals("HUMAN_RELATIONS,FACILITIES", value("""
+                SELECT details -> 'changes' -> 0 ->> 'after' FROM audit_events
+                 WHERE action = 'RESPONDER_ACCESS_CHANGED'
+                """));
+    }
+
+    @Test
+    void emptyAndUnchangedCategorySetsAreSupportedWithoutMisleadingAudit() {
+        account("admin", "ADMINISTRATOR");
+        UUID responder = account("responder", "RESPONDER");
+        session("responder");
+        jdbc.update("INSERT INTO responder_category_access (account_id, category, granted_at) VALUES (?, 'IT', ?)",
+                responder, Timestamp.from(NOW));
+
+        assertEquals(ResponderCategoryAccessOutcome.UPDATED,
+                store().replaceResponderCategories("admin", responder, Set.of(), UUID.randomUUID(), NOW));
+        session("responder");
+        assertEquals(ResponderCategoryAccessOutcome.UNCHANGED,
+                store().replaceResponderCategories("admin", responder, Set.of(), UUID.randomUUID(), NOW));
+
+        assertEquals(0, count("SELECT COUNT(*) FROM responder_category_access WHERE account_id = ?", responder));
+        assertEquals(1L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
+        assertEquals(1, count("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = 'responder'"));
+        assertEquals(1, count("SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_ACCESS_CHANGED'"));
+    }
+
+    @Test
+    void categoryReplacementReauthorizesActorAndEnabledResponderInsideTransaction() {
+        account("reporter-actor", "REPORTER");
+        UUID responder = account("responder", "RESPONDER");
+        account("admin", "ADMINISTRATOR");
+        UUID reporterTarget = account("reporter-target", "REPORTER");
+
+        assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
+                store().replaceResponderCategories("reporter-actor", responder,
+                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+        assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
+                store().replaceResponderCategories("admin", reporterTarget,
+                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+        jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", responder);
+        assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
+                store().replaceResponderCategories("admin", responder,
+                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+
+        assertEquals(0, count("SELECT COUNT(*) FROM responder_category_access"));
+        assertEquals(0, count("SELECT COUNT(*) FROM audit_events"));
+    }
+
+    @Test
+    void categoryAuditFailureRollsBackAccessVersionAndSessionInvalidation() {
+        account("admin", "ADMINISTRATOR");
+        UUID responder = account("responder", "RESPONDER");
+        session("responder");
+        jdbc.update("INSERT INTO responder_category_access (account_id, category, granted_at) VALUES (?, 'IT', ?)",
+                responder, Timestamp.from(NOW));
+        UUID duplicateAudit = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO audit_events (id, occurred_at, actor_account_id, actor_role, action,
+                    target_type, target_identifier, outcome, details)
+                VALUES (?, ?, NULL, 'SYSTEM', 'TEST_SETUP', 'APPLICATION_DATA', 'setup', 'SUCCESS', '{}'::jsonb)
+                """, duplicateAudit, Timestamp.from(NOW));
+
+        ResponderCategoryAccessOutcome outcome = store().replaceResponderCategories(
+                "admin", responder, Set.of(IncidentCategory.FACILITIES), duplicateAudit, NOW);
+
+        assertEquals(ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE, outcome);
+        assertEquals(List.of("IT"), jdbc.queryForList(
+                "SELECT category FROM responder_category_access WHERE account_id = ?", String.class, responder));
+        assertEquals(0L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
+        assertEquals(1, count("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = 'responder'"));
+        assertEquals(0, count("SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_ACCESS_CHANGED'"));
     }
 
     @Test
