@@ -182,9 +182,27 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .confirmation-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .promotion-requests > .section-heading { align-items: flex-start; }
 .promotion-requests > .section-heading p:not(.eyebrow) { margin: 6px 0 0; color: var(--color-text-muted); }
+.slo-configuration-list { display: grid; gap: 24px; }
+.slo-category-selector { margin-bottom: 24px; }
+.slo-category-selector > label { display: block; padding: 18px 22px 7px; font-size: 13px; font-weight: 700; }
+.slo-category-selector > select { width: min(360px, calc(100% - 44px)); min-height: 42px; margin: 0 22px 22px; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.slo-current-target > .section-heading { align-items: flex-end; }
+.slo-target-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 0; padding: 22px; }
+.slo-category > .section-heading { align-items: flex-start; }
+.slo-target-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 22px; border-bottom: 1px solid var(--color-border); }
+.slo-field { display: grid; align-content: start; gap: 7px; }
+.slo-field label { font-size: 13px; font-weight: 700; }
+.slo-field input { min-width: 0; min-height: 42px; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.slo-field input[aria-invalid="true"] { border-color: var(--color-danger); }
+.slo-target-form > button { grid-column: 1; justify-self: start; }
+.slo-target-form > .account-feedback, .slo-target-form > .form-error { grid-column: 1 / -1; margin: 0; border: 0; border-radius: 8px; }
+.slo-history { padding: 22px; }
+.slo-history h3 { margin: 0 0 14px; font-size: 16px; }
+.slo-history > p { margin: 0; color: var(--color-text-muted); }
 
 @media (max-width: 920px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slo-target-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -202,6 +220,9 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
   .responder-filters > label:first-child, .responder-filters > input:first-of-type,
   .responder-filters > label[for="responder-assignment"], .responder-filters > select,
   .responder-filters > button { grid-column: 1; }
+  .slo-target-form { grid-template-columns: 1fr; }
+  .slo-target-metrics { grid-template-columns: 1fr; }
+  .slo-target-form > button, .slo-target-form > .account-feedback, .slo-target-form > .form-error { grid-column: 1; }
   .incident-form textarea, .incident-form #incident-description + .field-error, .incident-form label[for="incident-description"] { grid-column: auto; }
 }
 

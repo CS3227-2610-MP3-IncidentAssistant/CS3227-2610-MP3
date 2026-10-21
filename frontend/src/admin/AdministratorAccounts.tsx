@@ -6,6 +6,7 @@ import {
   type AdministratorAccount,
   type SessionRefresher,
 } from '../api'
+import { Pagination } from '../shared/Pagination'
 import { PromotionRequests } from './PromotionRequests'
 
 export function AdministratorAccounts({ currentLoginName, onRefreshSession }: {
@@ -117,11 +118,8 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
         </tr>)}</tbody>
       </table>
     </div>}
-    {!loading && !loadError && totalPages > 1 && <nav className="pagination" aria-label="Account pages">
-      <button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)}>Previous</button>
-      <span>Page {page + 1} of {totalPages}</span>
-      <button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>Next</button>
-    </nav>}
+    {!loadError && <Pagination page={page} totalPages={totalPages} ariaLabel="Account pages"
+      disabled={loading} onPageChange={setPage} />}
     <DeleteAccountDialog
       account={confirmingAccount}
       error={actionError}

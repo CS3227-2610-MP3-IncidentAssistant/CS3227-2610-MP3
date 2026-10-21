@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
 import { AdministratorAccounts } from './admin/AdministratorAccounts'
+import { AdministratorSloConfiguration } from './admin/AdministratorSloConfiguration'
 import {
   loadSession,
   logout,
@@ -46,6 +47,7 @@ export function App() {
           currentLoginName={session.loginName ?? ''}
           onRefreshSession={sessionState.refresh}
         />}
+        sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}

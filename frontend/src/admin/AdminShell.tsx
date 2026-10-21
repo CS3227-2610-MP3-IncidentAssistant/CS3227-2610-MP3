@@ -5,22 +5,23 @@ import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 type AdminShellProps = {
   children: ReactNode
   accountsContent: ReactNode
+  sloContent: ReactNode
   serviceHealth: HealthState
   loginName: string
   onLogout: () => Promise<void>
 }
 
 const disabledNavigation: RoleNavigationItem[] = [
-  { label: 'SLO configuration', current: false, unavailableLabel: 'Soon' },
   { label: 'Audit log', current: false, unavailableLabel: 'Soon' },
   { label: 'Statistics', current: false, unavailableLabel: 'Soon' },
 ]
 
-export function AdminShell({ children, accountsContent, serviceHealth, loginName, onLogout }: AdminShellProps) {
-  const [activePage, setActivePage] = useState<'dashboard' | 'accounts'>('dashboard')
+export function AdminShell({ children, accountsContent, sloContent, serviceHealth, loginName, onLogout }: AdminShellProps) {
+  const [activePage, setActivePage] = useState<'dashboard' | 'accounts' | 'slo'>('dashboard')
   const navigation: RoleNavigationItem[] = [
     { label: 'Dashboard', current: activePage === 'dashboard', onSelect: () => setActivePage('dashboard') },
     { label: 'Accounts', current: activePage === 'accounts', onSelect: () => setActivePage('accounts') },
+    { label: 'SLO configuration', current: activePage === 'slo', onSelect: () => setActivePage('slo') },
     ...disabledNavigation,
   ]
   return (
@@ -35,7 +36,7 @@ export function AdminShell({ children, accountsContent, serviceHealth, loginName
       roleLabel="Administrator"
       serviceHealth={serviceHealth}
     >
-      {activePage === 'dashboard' ? children : accountsContent}
+      {activePage === 'dashboard' ? children : activePage === 'accounts' ? accountsContent : sloContent}
     </RoleShell>
   )
 }
