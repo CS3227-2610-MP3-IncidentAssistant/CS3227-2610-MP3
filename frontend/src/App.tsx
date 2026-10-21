@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
-import { PromotionRequests } from './admin/PromotionRequests'
+import { AdministratorAccounts } from './admin/AdministratorAccounts'
 import {
   loadSession,
   logout,
@@ -42,7 +42,10 @@ export function App() {
   if (session.authenticated && session.role === 'ADMINISTRATOR') {
     return (
       <AdminShell
-        accountsContent={<PromotionRequests onRefreshSession={sessionState.refresh} />}
+        accountsContent={<AdministratorAccounts
+          currentLoginName={session.loginName ?? ''}
+          onRefreshSession={sessionState.refresh}
+        />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}

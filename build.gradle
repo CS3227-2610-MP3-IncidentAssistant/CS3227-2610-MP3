@@ -248,6 +248,18 @@ def readEnvironmentFile = { File environmentFile, Set<String> allowedNames ->
     return values
 }
 
+def databaseTarget = { String rawUrl ->
+    String uriValue = rawUrl.startsWith('jdbc:') ? rawUrl.substring('jdbc:'.length()) : rawUrl
+    try {
+        java.net.URI uri = new java.net.URI(uriValue)
+        int port = uri.port < 0 ? 5432 : uri.port
+        String host = uri.host?.toLowerCase(Locale.ROOT)?.replaceFirst(/-pooler(?=\.)/, '')
+        return "${host}:${port}${uri.rawPath}"
+    } catch (java.net.URISyntaxException ignored) {
+        return rawUrl
+    }
+}
+
 tasks.named('bootRun') {
     mainClass = 'com.company.incidentdesk.IncidentDeskWebApplication'
     doFirst {
@@ -260,7 +272,16 @@ tasks.named('bootRun') {
     }
 }
 
-def registrationDatabaseEnvironmentNames = [
+def neonTestEnvironmentNames = [
+    'DATABASE_URL',
+    'DATABASE_URL_UNPOOLED',
+    'NEON_BRANCH',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_ENDPOINT_URL_S3',
+    'AWS_REGION',
+    'INCIDENT_DESK_ATTACHMENT_BUCKET',
+    'INCIDENT_DESK_NEON_REQUIRED',
     'INCIDENT_DESK_TEST_DATABASE_URL',
     'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED'
 ] as Set
@@ -277,19 +298,22 @@ tasks.register('registrationDatabaseTest', Test) {
         includeTestsMatching 'com.company.incidentdesk.web.security.AdministratorBootstrapPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionWorkflowPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionJourneyHttpPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorAccountPostgresTest'
     }
 
     doFirst {
         File testEnvironmentFile = layout.projectDirectory.file('.env.test.local').asFile
         Map<String, String> fileValues = readEnvironmentFile(
                 testEnvironmentFile,
-                registrationDatabaseEnvironmentNames)
-        Map<String, String> resolvedValues = [:]
-        registrationDatabaseEnvironmentNames.each { name ->
-            resolvedValues[name] = System.getenv().containsKey(name)
-                    ? System.getenv(name)
-                    : fileValues[name]
-        }
+                neonTestEnvironmentNames)
+        Map<String, String> resolvedValues = [
+            INCIDENT_DESK_TEST_DATABASE_URL: System.getenv('INCIDENT_DESK_TEST_DATABASE_URL')
+                    ?: fileValues.INCIDENT_DESK_TEST_DATABASE_URL
+                    ?: fileValues.DATABASE_URL_UNPOOLED,
+            INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED:
+                    System.getenv('INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED')
+                    ?: fileValues.INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED
+        ]
 
         List<String> missingNames = resolvedValues.findAll { name, value ->
             value == null || value.isBlank()
@@ -324,17 +348,6 @@ tasks.register('registrationDatabaseTest', Test) {
                     'Registration database tests require a direct Neon endpoint, not a pooled endpoint.')
         }
 
-        def databaseTarget = { String rawUrl ->
-            String uriValue = rawUrl.startsWith('jdbc:') ? rawUrl.substring('jdbc:'.length()) : rawUrl
-            try {
-                java.net.URI uri = new java.net.URI(uriValue)
-                int port = uri.port < 0 ? 5432 : uri.port
-                String host = uri.host?.toLowerCase(Locale.ROOT)?.replaceFirst(/-pooler(?=\.)/, '')
-                return "${host}:${port}${uri.rawPath}"
-            } catch (java.net.URISyntaxException ignored) {
-                return rawUrl
-            }
-        }
         Map<String, String> localApplicationValues = readEnvironmentFile(
                 layout.projectDirectory.file('.env.local').asFile,
                 null)
@@ -361,6 +374,54 @@ tasks.register('neonServiceSmoke', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.company.incidentdesk.infrastructure.neon.NeonServiceSmoke'
     environment 'INCIDENT_DESK_NEON_REQUIRED', 'true'
+}
+
+tasks.register('neonTestServiceSmoke', JavaExec) {
+    group = 'verification'
+    description = 'Loads .env.test.local and runs bounded PostgreSQL and Object Storage checks.'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.company.incidentdesk.infrastructure.neon.NeonServiceSmoke'
+
+    doFirst {
+        File testEnvironmentFile = layout.projectDirectory.file('.env.test.local').asFile
+        Map<String, String> testValues = readEnvironmentFile(testEnvironmentFile, neonTestEnvironmentNames)
+        List<String> requiredNames = [
+            'DATABASE_URL', 'DATABASE_URL_UNPOOLED', 'AWS_ACCESS_KEY_ID',
+            'AWS_SECRET_ACCESS_KEY', 'AWS_ENDPOINT_URL_S3', 'AWS_REGION'
+        ]
+        List<String> missingNames = requiredNames.findAll { name ->
+            testValues[name] == null || testValues[name].isBlank()
+        }
+        if (!missingNames.isEmpty()) {
+            throw new GradleException(
+                    "Missing Neon test service configuration: ${missingNames.join(', ')}")
+        }
+        if (!'true'.equalsIgnoreCase(testValues.INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED)) {
+            throw new GradleException(
+                    'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED must be true before live test-service checks run.')
+        }
+
+        Map<String, String> localApplicationValues = readEnvironmentFile(
+                layout.projectDirectory.file('.env.local').asFile,
+                null)
+        Set<String> protectedTargets = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
+                .collect { name -> localApplicationValues[name] }
+                .findAll { it != null && !it.isBlank() }
+                .collect(databaseTarget)
+                .toSet()
+        if (protectedTargets.contains(databaseTarget(testValues.DATABASE_URL_UNPOOLED))) {
+            throw new GradleException('.env.test.local must not target the .env.local database.')
+        }
+
+        testValues.each { name, value ->
+            if (name != 'INCIDENT_DESK_TEST_DATABASE_URL'
+                    && name != 'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED') {
+                environment name, value
+            }
+        }
+        environment 'INCIDENT_DESK_NEON_REQUIRED', 'true'
+    }
 }
 
 def shadowJarMacArm64 = tasks.register('shadowJarMacArm64', ShadowJar) {

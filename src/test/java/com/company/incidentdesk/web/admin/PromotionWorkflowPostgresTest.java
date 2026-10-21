@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.company.incidentdesk.application.account.PromotionRequestService;
@@ -48,8 +47,9 @@ import com.company.incidentdesk.domain.audit.AuditAction;
 import com.company.incidentdesk.domain.audit.AuditEventId;
 import com.company.incidentdesk.domain.incident.IncidentCategory;
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
+import com.company.incidentdesk.support.PostgresTestDataSource;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class PromotionWorkflowPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-19T06:00:00Z");
     private static final String SCHEMA = "promotion_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -63,10 +63,11 @@ class PromotionWorkflowPostgresTest {
     static void createIsolatedSchema() {
         requireIsolationConfirmation();
         NeonDatabaseUrl database = NeonDatabaseUrl.parse(requiredEnvironment("INCIDENT_DESK_TEST_DATABASE_URL"));
-        administrativeDataSource = dataSource(database.jdbcUrl(), database.username(), database.password());
+        administrativeDataSource = PostgresTestDataSource.administrative(
+                database.jdbcUrl(), database.username(), database.password());
         new JdbcTemplate(administrativeDataSource).execute("CREATE SCHEMA " + SCHEMA);
-        testDataSource = dataSource(withCurrentSchema(database.jdbcUrl(), SCHEMA),
-                database.username(), database.password());
+        testDataSource = PostgresTestDataSource.isolated(
+                database.jdbcUrl(), database.username(), database.password(), SCHEMA);
         Flyway.configure().dataSource(testDataSource).locations("classpath:db/migration")
                 .defaultSchema(SCHEMA).schemas(SCHEMA).load().migrate();
         jdbc = new JdbcTemplate(testDataSource);
@@ -278,14 +279,6 @@ class PromotionWorkflowPostgresTest {
             Thread.currentThread().interrupt();
             throw new AssertionError("test thread was interrupted", exception);
         }
-    }
-
-    private static DataSource dataSource(String url, String username, String password) {
-        return new DriverManagerDataSource(url, username, password);
-    }
-
-    private static String withCurrentSchema(String url, String schema) {
-        return url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema;
     }
 
     private static String requiredEnvironment(String name) {

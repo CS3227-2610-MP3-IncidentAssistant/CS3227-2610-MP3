@@ -12,7 +12,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class AiMigrationUpgradePostgresTest {
     @Test
     void canonicalPromotionSchemaUpgradesToAiWithoutLosingExistingAccounts() {

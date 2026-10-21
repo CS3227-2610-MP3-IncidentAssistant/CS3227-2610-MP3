@@ -298,6 +298,14 @@ resolutions, promotion history, or audit evidence. Historical references use a
 neutral deleted-account label. The target cannot authenticate, and existing
 sessions are invalidated or rejected on their next use.
 
+The account directory presents the action as a compact outlined danger button
+labelled `Delete`, matching the original desktop page. Activating it opens a
+modal confirmation dialog that identifies the account, states that the action
+cannot be undone, explains that login access is disabled while incident and
+audit history remains, and requires an explicit destructive confirmation.
+Cancel or Escape closes the dialog without a request and returns focus to the
+trigger.
+
 An Administrator cannot delete their own currently authenticated account. The
 server rechecks eligibility and commits the tombstone and audit event in one
 transaction. This operation is irreversible in this slice.
@@ -322,16 +330,18 @@ unrelated Administrator actions.
 
 ### ADM-ACC-05 acceptance criteria — account tombstoning
 
-- [ ] `ADM-ACC-05-A`: A tombstone succeeds only after the trusted acting
+- [x] `ADM-ACC-05-A`: A tombstone succeeds only after the trusted acting
   account row is locked and rechecked as an enabled persisted Administrator;
   self-deletion, a missing/disabled/demoted actor, an ineligible target, and an
   audit or persistence failure leave the target unchanged and create no
-  misleading success audit.
-- [ ] `ADM-ACC-05-B`: Isolated PostgreSQL concurrency tests prove reciprocal
+  misleading success audit. Automated evidence is recorded in
+  [the 2026-10-21 tombstone verification](test-evidence/2026-10-21-administrator-account-tombstone.md).
+- [x] `ADM-ACC-05-B`: Isolated PostgreSQL concurrency tests prove reciprocal
   Administrator tombstone attempts cannot both commit, at least one enabled
   Administrator remains, the losing deadlock/serialization path returns a
   stable conflict without automatic retry or success audit, and an explicit
-  retry performs fresh authorization.
+  retry performs fresh authorization. See the
+  [2026-10-21 verification evidence](test-evidence/2026-10-21-administrator-account-tombstone.md).
 
 ### ADM-ACC-06 — Administrator provisioning
 

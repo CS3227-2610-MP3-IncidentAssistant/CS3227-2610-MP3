@@ -29,14 +29,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
+import com.company.incidentdesk.support.PostgresTestDataSource;
 import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.RegistrationOutcome;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class ReporterAccountRegistrationPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-18T09:00:00Z");
     private static final String SCHEMA = "registration_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -50,14 +50,12 @@ class ReporterAccountRegistrationPostgresTest {
         requireIsolationConfirmation();
         NeonDatabaseUrl database = NeonDatabaseUrl.parse(
                 requiredEnvironment("INCIDENT_DESK_TEST_DATABASE_URL"));
-        administrativeDataSource = dataSource(
+        administrativeDataSource = PostgresTestDataSource.administrative(
                 database.jdbcUrl(), database.username(), database.password());
         new JdbcTemplate(administrativeDataSource).execute("CREATE SCHEMA " + SCHEMA);
 
-        testDataSource = dataSource(
-                withCurrentSchema(database.jdbcUrl(), SCHEMA),
-                database.username(),
-                database.password());
+        testDataSource = PostgresTestDataSource.isolated(
+                database.jdbcUrl(), database.username(), database.password(), SCHEMA);
         Flyway.configure()
                 .dataSource(testDataSource)
                 .locations("classpath:db/migration")
@@ -183,14 +181,6 @@ class ReporterAccountRegistrationPostgresTest {
                 encoder,
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 identifiers::removeFirst);
-    }
-
-    private static DataSource dataSource(String url, String username, String password) {
-        return new DriverManagerDataSource(url, username, password);
-    }
-
-    private static String withCurrentSchema(String url, String schema) {
-        return url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema;
     }
 
     private static String requiredEnvironment(String name) {

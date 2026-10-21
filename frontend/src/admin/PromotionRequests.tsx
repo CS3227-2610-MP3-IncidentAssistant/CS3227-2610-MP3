@@ -91,11 +91,11 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
   }
 
   return (
-    <main id="main-content" className="content">
-      <header className="page-header">
+    <section className="promotion-requests" aria-labelledby="promotion-requests-heading">
+      <header className="section-heading">
         <div>
-          <p className="eyebrow">Accounts</p>
-          <h1>Promotion requests</h1>
+          <p className="eyebrow">Access review</p>
+          <h2 id="promotion-requests-heading">Promotion requests</h2>
           <p>Review Reporter requests and approve only the categories they requested.</p>
         </div>
         <button
@@ -176,6 +176,6 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
           </button>
         </nav>
       )}
-    </main>
+    </section>
   )
 }

@@ -148,6 +148,43 @@ export async function decidePromotionRequest(
   return response.json() as Promise<PromotionRequestRecord>
 }
 
+export type AdministratorAccount = {
+  id: string
+  loginName: string
+  role: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
+  status: 'ENABLED' | 'DISABLED'
+  categories: IncidentCategory[]
+}
+
+export type AdministratorAccountPage = {
+  accounts: AdministratorAccount[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export async function loadAdministratorAccounts(
+  page: number,
+  signal?: AbortSignal,
+): Promise<AdministratorAccountPage> {
+  const parameters = new URLSearchParams({ page: String(page), size: '25' })
+  return requestJson<AdministratorAccountPage>(`/api/v1/admin/accounts?${parameters}`, { signal })
+}
+
+export async function tombstoneAdministratorAccount(
+  accountId: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/accounts/${encodeURIComponent(accountId)}/tombstone`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The account could not be deleted. Refresh and try again.',
+  })
+}
+
 export async function registerAccount(
   loginName: string,
   password: string,

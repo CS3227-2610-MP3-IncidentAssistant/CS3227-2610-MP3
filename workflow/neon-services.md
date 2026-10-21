@@ -125,3 +125,12 @@ separate versioned-schema implementation slice.
   Storage round trip and cleanup, and packaged health check passed; see
   [`test-evidence/2026-10-17-neon-services.md`](test-evidence/2026-10-17-neon-services.md).
 - Independent security/release approver and date: pending
+
+## Dedicated test environment
+
+The separate Neon project `quiet-dawn-13912485` and its `production` branch are
+configured for local test-service verification through the git-ignored
+`.env.test.local`. The production `.env.local` remains unchanged. PostgreSQL,
+Object Storage, the packaged runtime, the isolated PostgreSQL suite, and the
+full repository build passed on 2026-10-21. See
+[`test-evidence/2026-10-21-neon-test-services.md`](test-evidence/2026-10-21-neon-test-services.md).

@@ -46,4 +46,11 @@ class PromotionWebConfiguration {
                 () -> new com.company.incidentdesk.domain.account.PromotionRequestId(UUID.randomUUID()),
                 ignored -> { });
     }
+
+    @Bean
+    AdministratorAccountService administratorAccountService(
+            AdministratorAccountStore store,
+            Clock promotionClock) {
+        return new AdministratorAccountService(store, promotionClock, UUID::randomUUID);
+    }
 }

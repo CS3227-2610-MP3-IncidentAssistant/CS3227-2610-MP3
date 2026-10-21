@@ -66,6 +66,10 @@ button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2p
 .primary-button { border: 1px solid var(--color-action); color: #fff; background: var(--color-action); }
 .ghost-button { border: 1px solid transparent; color: var(--color-action); background: transparent; }
 .primary-button:disabled { cursor: wait; opacity: .7; }
+.danger-button { min-height: 40px; padding: 0 14px; border: 1px solid var(--color-danger); border-radius: 8px; color: #fff; background: var(--color-danger); font-weight: 700; cursor: pointer; }
+.danger-button:disabled { cursor: wait; opacity: .7; }
+.danger-outline-button { min-height: 40px; padding: 0 14px; border: 1px solid var(--color-danger); border-radius: 8px; color: var(--color-danger); background: #fff; font-weight: 700; cursor: pointer; }
+.danger-outline-button:hover { background: #fff7f7; }
 .notice { display: grid; grid-template-columns: auto 1fr; gap: 14px; margin-bottom: 36px; padding: 18px 20px; border: 1px solid #cbd9ff; border-radius: 12px; background: #edf2ff; }
 .notice__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; background: var(--color-info); font-family: Georgia, serif; font-weight: 700; }
 .notice h2 { margin: 1px 0 4px; font-size: 16px; }
@@ -166,6 +170,18 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .category-choice input { width: 18px; height: 18px; margin: 0; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .help-text { grid-column: 1 / -1; margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+.account-directory { margin-bottom: 32px; }
+.account-directory tbody th { min-width: 160px; }
+.account-feedback { margin: 0; padding: 14px 22px; border-bottom: 1px solid var(--color-border); color: var(--color-info); background: var(--color-info-soft); }
+.confirmation-dialog { width: min(480px, calc(100% - 32px)); padding: 0; border: 1px solid var(--color-border); border-radius: 12px; color: var(--color-text); background: var(--color-surface); box-shadow: 0 24px 70px rgb(23 35 63 / 28%); }
+.confirmation-dialog::backdrop { background: rgb(23 35 63 / 55%); }
+.confirmation-dialog__content { padding: 24px; }
+.confirmation-dialog h2 { margin: 6px 0 10px; font-size: 21px; }
+.confirmation-dialog #delete-account-description { margin: 0; color: var(--color-text-muted); line-height: 1.55; }
+.confirmation-dialog .form-error { margin-bottom: 0; }
+.confirmation-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.promotion-requests > .section-heading { align-items: flex-start; }
+.promotion-requests > .section-heading p:not(.eyebrow) { margin: 6px 0 0; color: var(--color-text-muted); }
 
 @media (max-width: 920px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
