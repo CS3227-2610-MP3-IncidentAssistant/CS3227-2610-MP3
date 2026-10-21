@@ -27,7 +27,8 @@ Use a separate `incident-desk-runtime` service account for Cloud Run revisions.
 The deployment service account receives only:
 
 - Artifact Registry Writer on the one deployment repository;
-- Cloud Run Admin for service deployment and the public-invoker policy; and
+- Cloud Run Admin on the existing `incidentdesk-run` service for revision
+  deployment and its public-invoker policy; and
 - Service Account User on the runtime service account.
 
 The runtime service account receives no project role by default. Add narrowly
@@ -46,10 +47,10 @@ required human reviewer where the repository plan supports that control.
 - Renaming or transferring the GitHub repository requires an intentional WIF
   provider update. Deleting and recreating a repository does not inherit trust
   because the provider checks the immutable repository ID.
-- The broad `roles/run.admin` role remains a known compromise because the
-  workflow currently maintains unauthenticated public access. A later bootstrap
-  process may set that policy once and reduce recurring deployment access to
-  `roles/run.developer`.
+- The deployer cannot create or administer other Cloud Run services. Creating a
+  replacement service requires a separate human bootstrap operation. A later
+  bootstrap process may set the public-invoker policy once and reduce recurring
+  access on `incidentdesk-run` to `roles/run.developer`.
 - WIF, IAM, Artifact Registry, the GitHub environment, production runtime
   configuration, and the first deployment are external setup steps and cannot
   be proven by repository-only tests.

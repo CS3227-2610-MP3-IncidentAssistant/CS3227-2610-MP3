@@ -56,3 +56,34 @@ No criterion in `workflow/cloud-run-deployment.md` is ticked. The local results
 support only part of CR-CD-01 and repository syntax portions of CR-CD-03 and
 CR-CD-04. Each criterion still requires CI, external, deployed, or human
 evidence described in that specification.
+
+## External identity bootstrap
+
+After commit `ec16071`, the repository owner authorized the Google Cloud and
+GitHub identity bootstrap. The following sanitized state was created beginning
+on 2026-10-21 and read back on 2026-10-22; no application deployment or
+production-data access was performed:
+
+- Google project `project-d78274d3-3ad4-431f-bc4` (`IncidentDesk`), project
+  number `660566661066`, remained the selected active project.
+- Existing Singapore resources were preserved: Artifact Registry repository
+  `incidentdeskrepo` and Cloud Run service `incidentdesk-run`.
+- IAM Credentials and Security Token Service APIs were enabled.
+- Dedicated `incident-desk-deployer` and `incident-desk-runtime` service
+  accounts were created. No service-account key was created.
+- WIF pool `github-actions` and provider `incident-desk` were created. The
+  provider condition requires immutable GitHub repository ID `1411389653`, ref
+  `refs/heads/master`, and a subject ending in `environment:production`.
+- The immutable repository principal may impersonate only the deployer service
+  account. The deployer has Artifact Registry Writer only on
+  `incidentdeskrepo`, Cloud Run Admin only on `incidentdesk-run`, and Service
+  Account User only on the runtime service account. It has no project-level
+  Cloud Run role.
+- GitHub environment `production` was created with a custom deployment branch
+  policy allowing only `master`. Seven non-secret workflow variables were set;
+  no Google credential or application secret was stored in GitHub.
+
+Required reviewer selection remains pending a human team decision. OIDC token
+exchange, image publication, deployment, health verification, rollback, and
+three-role smoke evidence also remain pending, so no acceptance criterion is
+ticked.

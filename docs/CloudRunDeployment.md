@@ -34,8 +34,8 @@ Singapore Cloud Run is `asia-southeast1`.
 ```powershell
 $GcpProjectId = 'REPLACE_WITH_PROJECT_ID'
 $GcpRegion = 'asia-southeast1'
-$ArtifactRepository = 'incident-desk'
-$CloudRunService = 'incident-desk'
+$ArtifactRepository = 'incidentdeskrepo'
+$CloudRunService = 'incidentdesk-run'
 $DeployServiceAccountId = 'incident-desk-deployer'
 $RuntimeServiceAccountId = 'incident-desk-runtime'
 $WorkloadPoolId = 'github-actions'
@@ -109,7 +109,9 @@ gcloud artifacts repositories add-iam-policy-binding $ArtifactRepository `
   --member="serviceAccount:$DeployServiceAccount" `
   --role='roles/artifactregistry.writer'
 
-gcloud projects add-iam-policy-binding $GcpProjectId `
+gcloud run services add-iam-policy-binding $CloudRunService `
+  --project=$GcpProjectId `
+  --region=$GcpRegion `
   --member="serviceAccount:$DeployServiceAccount" `
   --role='roles/run.admin'
 
@@ -118,9 +120,10 @@ gcloud iam service-accounts add-iam-policy-binding $RuntimeServiceAccount `
   --role='roles/iam.serviceAccountUser'
 ```
 
-Do not grant Owner, Editor, or service-account-key administration. The runtime
-identity needs no Google project role while the application uses only Neon
-PostgreSQL and Neon Object Storage.
+Do not grant Owner, Editor, project-wide Cloud Run Admin, or service-account-key
+administration. The deployer may administer only the existing
+`incidentdesk-run` service. The runtime identity needs no Google project role
+while the application uses only Neon PostgreSQL and Neon Object Storage.
 
 ## 6. Configure the protected GitHub environment
 
