@@ -2,12 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   loadAdministratorAccounts,
+  replaceResponderCategories,
   tombstoneAdministratorAccount,
   type AdministratorAccount,
+  type IncidentCategory,
   type SessionRefresher,
 } from '../api'
 import { Pagination } from '../shared/Pagination'
 import { PromotionRequests } from './PromotionRequests'
+
+const categories: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
+const categoryNames: Record<IncidentCategory, string> = {
+  IT: 'IT',
+  HUMAN_RELATIONS: 'Human relations',
+  FACILITIES: 'Facilities',
+}
 
 export function AdministratorAccounts({ currentLoginName, onRefreshSession }: {
   currentLoginName: string
@@ -38,6 +47,7 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
   const [feedback, setFeedback] = useState('')
   const [actionError, setActionError] = useState('')
   const [confirmingAccount, setConfirmingAccount] = useState<AdministratorAccount | null>(null)
+  const [configuringAccount, setConfiguringAccount] = useState<AdministratorAccount | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
 
@@ -82,6 +92,24 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
     }
   }
 
+  async function saveCategories(account: AdministratorAccount, selectedCategories: IncidentCategory[]) {
+    setSubmittingId(account.id)
+    setFeedback('')
+    setActionError('')
+    try {
+      await replaceResponderCategories(account.id, selectedCategories, onRefreshSession)
+      setConfiguringAccount(null)
+      setFeedback(`${account.loginName}'s responder categories were updated.`)
+      reload()
+    } catch (error) {
+      setActionError(error instanceof Error
+        ? error.message
+        : 'Responder categories could not be updated.')
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
   return <section className="incident-panel account-directory" aria-labelledby="account-directory-heading">
     <div className="section-heading">
       <div>
@@ -109,7 +137,12 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
           <td><AccountActions
             account={account}
             currentLoginName={currentLoginName}
-            onStart={() => {
+            onConfigure={() => {
+              setFeedback('')
+              setActionError('')
+              setConfiguringAccount(account)
+            }}
+            onDelete={() => {
               setFeedback('')
               setActionError('')
               setConfirmingAccount(account)
@@ -132,22 +165,112 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
         if (confirmingAccount) void confirmTombstone(confirmingAccount)
       }}
     />
+    <ConfigureCategoriesDialog
+      account={configuringAccount}
+      error={actionError}
+      submitting={submittingId === configuringAccount?.id}
+      onCancel={() => {
+        setActionError('')
+        setConfiguringAccount(null)
+      }}
+      onConfirm={(selectedCategories) => {
+        if (configuringAccount) void saveCategories(configuringAccount, selectedCategories)
+      }}
+    />
   </section>
 }
 
-function AccountActions({ account, currentLoginName, onStart }: {
+function AccountActions({ account, currentLoginName, onConfigure, onDelete }: {
   account: AdministratorAccount
   currentLoginName: string
-  onStart: () => void
+  onConfigure: () => void
+  onDelete: () => void
 }) {
   if (account.loginName === currentLoginName) return <span>Current account</span>
   if (account.status !== 'ENABLED') return <span>Unavailable</span>
-  return <button
-    aria-label={`Delete account ${account.loginName}`}
-    className="danger-outline-button"
-    type="button"
-    onClick={onStart}
-  >Delete</button>
+  return <div className="account-actions">
+    {account.role === 'RESPONDER' && <button
+      aria-label={`Configure categories for ${account.loginName}`}
+      className="secondary-button"
+      type="button"
+      onClick={onConfigure}
+    >Configure categories</button>}
+    <button
+      aria-label={`Delete account ${account.loginName}`}
+      className="danger-outline-button"
+      type="button"
+      onClick={onDelete}
+    >Delete</button>
+  </div>
+}
+
+function ConfigureCategoriesDialog({ account, error, submitting, onCancel, onConfirm }: {
+  account: AdministratorAccount | null
+  error: string
+  submitting: boolean
+  onCancel: () => void
+  onConfirm: (categories: IncidentCategory[]) => void
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [selectedCategories, setSelectedCategories] = useState<IncidentCategory[]>([])
+
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    if (account && !element.open) {
+      setSelectedCategories(account.categories)
+      if (typeof element.showModal === 'function') element.showModal()
+      else element.setAttribute('open', '')
+    } else if (!account && element.open) {
+      if (typeof element.close === 'function') element.close()
+      else element.removeAttribute('open')
+    }
+  }, [account])
+
+  function toggleCategory(category: IncidentCategory) {
+    setSelectedCategories((current) => current.includes(category)
+      ? current.filter((selected) => selected !== category)
+      : [...current, category])
+  }
+
+  return <dialog
+    aria-describedby="configure-categories-description"
+    aria-labelledby="configure-categories-title"
+    className="confirmation-dialog"
+    ref={dialog}
+    onCancel={(event) => {
+      event.preventDefault()
+      if (!submitting) onCancel()
+    }}
+  >
+    {account && <div className="confirmation-dialog__content">
+      <p className="eyebrow">Responder access</p>
+      <h2 id="configure-categories-title">Configure categories</h2>
+      <p id="configure-categories-description">
+        Choose the incident categories {account.loginName} can access as a responder.
+      </p>
+      <fieldset className="category-choice">
+        <legend>Incident categories</legend>
+        {categories.map((category) => <label key={category}>
+          <input
+            type="checkbox"
+            checked={selectedCategories.includes(category)}
+            disabled={submitting}
+            onChange={() => toggleCategory(category)}
+          />
+          {categoryNames[category]}
+        </label>)}
+      </fieldset>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="confirmation-dialog__actions">
+        <button className="ghost-button" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
+        <button className="primary-button" type="button" disabled={submitting}
+          onClick={() => onConfirm(selectedCategories)}>
+          {submitting ? 'Saving…' : 'Save categories'}
+        </button>
+      </div>
+    </div>}
+  </dialog>
 }
 
 function DeleteAccountDialog({ account, error, submitting, onCancel, onConfirm }: {

@@ -96,6 +96,88 @@ describe('Administrator account directory', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('configures categories for enabled responders from a preselected popup', async () => {
+    let responderCategories = ['IT']
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/v1/admin/accounts?')) return response({
+        accounts: [
+          { id: 'responder-id', loginName: 'triage-responder', role: 'RESPONDER', status: 'ENABLED', categories: responderCategories },
+          { id: 'reporter-id', loginName: 'case-reporter', role: 'REPORTER', status: 'ENABLED', categories: [] },
+        ],
+        page: 0, size: 25, totalElements: 2, totalPages: 1,
+      })
+      if (url.startsWith('/api/v1/admin/promotion-requests')) {
+        return response({ requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url === '/api/v1/admin/accounts/responder-id/responder-categories' && init?.method === 'PUT') {
+        responderCategories = JSON.parse(String(init.body)).categories
+        return new Response(null, { status: 204 })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AdministratorAccounts currentLoginName="admin"
+      onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+
+    const responderRow = (await screen.findByText('triage-responder')).closest('tr')!
+    const reporterRow = screen.getByText('case-reporter').closest('tr')!
+    expect(within(reporterRow).queryByRole('button', { name: /Configure categories/ })).not.toBeInTheDocument()
+    fireEvent.click(within(responderRow).getByRole('button', { name: 'Configure categories for triage-responder' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Configure categories' })
+    expect(within(dialog).getByRole('checkbox', { name: 'IT' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Human relations' })).not.toBeChecked()
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'IT' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Facilities' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save categories' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/accounts/responder-id/responder-categories',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ categories: ['FACILITIES'] }),
+        headers: expect.any(Headers),
+      }),
+    ))
+    expect(screen.queryByRole('dialog', { name: 'Configure categories' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent("triage-responder's responder categories were updated")
+    await waitFor(() => expect(within(screen.getByText('triage-responder').closest('tr')!).getByText('Facilities')).toBeInTheDocument())
+  })
+
+  it('allows clearing all categories and keeps the popup open after a failed update', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/v1/admin/accounts?')) return response({
+        accounts: [{ id: 'responder-id', loginName: 'responder', role: 'RESPONDER', status: 'ENABLED', categories: ['IT'] }],
+        page: 0, size: 25, totalElements: 1, totalPages: 1,
+      })
+      if (url.startsWith('/api/v1/admin/promotion-requests')) {
+        return response({ requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url.endsWith('/responder-categories') && init?.method === 'PUT') {
+        return response({ code: 'ACCOUNT_UPDATE_UNAVAILABLE', message: 'Responder access could not be updated' }, 503)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AdministratorAccounts currentLoginName="admin"
+      onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Configure categories for responder' }))
+    const dialog = screen.getByRole('dialog', { name: 'Configure categories' })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'IT' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save categories' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/accounts/responder-id/responder-categories',
+      expect.objectContaining({ body: JSON.stringify({ categories: [] }) }),
+    ))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('could not be updated')
+    expect(screen.getByRole('dialog', { name: 'Configure categories' })).toBeInTheDocument()
+  })
+
   it('keeps the popup open when deletion is rejected', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)

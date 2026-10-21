@@ -205,6 +205,24 @@ export async function tombstoneAdministratorAccount(
   })
 }
 
+export async function replaceResponderCategories(
+  accountId: string,
+  categories: IncidentCategory[],
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/accounts/${encodeURIComponent(accountId)}/responder-categories`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ categories }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'Responder categories could not be updated. Refresh and try again.',
+  })
+}
+
 export async function registerAccount(
   loginName: string,
   password: string,
