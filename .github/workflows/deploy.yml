@@ -2,7 +2,7 @@ name: Deploy web application
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -46,7 +46,7 @@ jobs:
   deploy:
     name: Deploy to Cloud Run
     needs: verify
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

@@ -32,8 +32,8 @@ GitHub Actions must automate:
 2. PostgreSQL integration and migration tests;
 3. formatting or Checkstyle and security-focused tests;
 4. production artifact creation;
-5. deployment from the canonical release branch to the independently managed
-   host; and
+5. deployment from `main`, the canonical day-to-day branch, to the
+   independently managed host; and
 6. a post-deployment health or smoke check.
 
 The production deployment job uses a GitHub `production` environment with
@@ -55,8 +55,9 @@ approved secret-store procedure; see `docs/AdministratorBootstrap.md`.
 
 ## Release and submission
 
-- `master` is the assessed release branch unless the teaching team confirms a
-  different branch in writing.
+- `main` is the routine production deployment branch. `master` remains the
+  assessed submission branch and is updated only through the separately
+  approved submission procedure in `AGENTS.md`.
 - The public repository, GitHub Pages product site, deployed application, and
   tagged release must identify the same assessed commit.
 - Verify the deployed application as Reporter, Responder, and Administrator,

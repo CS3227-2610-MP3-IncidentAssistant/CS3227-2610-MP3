@@ -73,9 +73,10 @@ the `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`,
 `CLOUD_RUN_SERVICE`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
 `GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT` variables. The
 workflow uses GitHub OIDC and Google Workload Identity Federation; no Google
-service-account key is stored in GitHub. Only the assessed `master` branch can
-reach the deployment job; a manual run from another branch performs
-verification only. Follow [the Cloud Run deployment runbook](docs/CloudRunDeployment.md)
+service-account key is stored in GitHub. Only `main` can reach the routine
+deployment job; a manual run from another branch performs verification only.
+`master` remains reserved for the separately approved assignment-submission
+snapshot. Follow [the Cloud Run deployment runbook](docs/CloudRunDeployment.md)
 for the one-time Google Cloud and GitHub environment setup.
 
 ## Testing the entire application

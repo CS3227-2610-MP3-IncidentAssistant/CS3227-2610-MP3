@@ -87,3 +87,12 @@ Required reviewer selection remains pending a human team decision. OIDC token
 exchange, image publication, deployment, health verification, rollback, and
 three-role smoke evidence also remain pending, so no acceptance criterion is
 ticked.
+
+### Branch-policy correction — 2026-10-22
+
+The repository user clarified that routine production deployment must use
+`main`; `master` remains reserved for the final assignment submission snapshot
+described in `AGENTS.md`. The original bootstrap state above accurately records
+the initial `master` restriction. The specification, workflow, WIF provider,
+and GitHub production environment were then changed together to require
+`refs/heads/main`. No application deployment was triggered by this correction.

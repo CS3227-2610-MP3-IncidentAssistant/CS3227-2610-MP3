@@ -12,12 +12,13 @@ approval.
 
 ## Actors and trust boundaries
 
-- A repository contributor may run verification, but only an approved
-  `master` workflow run may enter the protected `production` environment.
+- A repository contributor may run verification, but only an approved `main`
+  workflow run may enter the protected `production` environment. `master` is
+  reserved for the separately approved submission operation.
 - A human production reviewer approves the environment deployment where that
   GitHub control is available.
 - GitHub OIDC authenticates the workflow to the WIF provider. The provider
-  condition constrains the immutable repository ID, `master` ref, and
+  condition constrains the immutable repository ID, `main` ref, and
   `production` environment; the IAM binding uses the mapped repository ID and
   therefore supports both GitHub OIDC subject formats.
 - The deployer service account publishes and deploys. A distinct runtime
@@ -71,10 +72,10 @@ copying, or replacing those values.
   tests, isolated PostgreSQL integration/migration tests, security-focused
   tests, and production container construction without any production or AI
   credentials.
-- [ ] **CR-CD-02:** A non-`master` ref, untrusted fork, wrong repository,
+- [ ] **CR-CD-02:** A non-`main` ref, untrusted fork, wrong repository,
   recreated repository with a different immutable ID, or job outside the
   `production` environment cannot obtain the Google deployment identity.
-- [ ] **CR-CD-03:** An approved `master` deployment authenticates without a
+- [ ] **CR-CD-03:** An approved `main` deployment authenticates without a
   service-account key, pushes a commit-tagged image, resolves its digest, and
   deploys that digest with the dedicated runtime service account.
 - [ ] **CR-CD-04:** After deployment, the workflow discovers the Cloud Run URL

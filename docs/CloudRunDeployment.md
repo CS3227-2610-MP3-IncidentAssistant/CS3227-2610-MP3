@@ -74,7 +74,7 @@ unrelated identity or repository.
 gcloud iam workload-identity-pools create $WorkloadPoolId --location=global --display-name='GitHub Actions'
 
 $AttributeMapping = 'google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.ref=assertion.ref'
-$AttributeCondition = "assertion.repository_id == '$GitHubRepositoryId' && assertion.ref == 'refs/heads/master' && assertion.sub.endsWith(':environment:production')"
+$AttributeCondition = "assertion.repository_id == '$GitHubRepositoryId' && assertion.ref == 'refs/heads/main' && assertion.sub.endsWith(':environment:production')"
 
 gcloud iam workload-identity-pools providers create-oidc $WorkloadProviderId `
   --location=global `
@@ -143,7 +143,7 @@ gh variable set GCP_RUNTIME_SERVICE_ACCOUNT --env production --body $RuntimeServ
 
 In **GitHub → Settings → Environments → production**:
 
-1. allow deployments only from `master`;
+1. allow routine deployments only from `main`;
 2. add a required human reviewer and prevent self-review where supported; and
 3. confirm that no Google JSON key or production application secret is stored
    in repository-level Actions settings.
@@ -171,10 +171,11 @@ separate, approval-gated procedure in `AdministratorBootstrap.md`.
 
 Push this feature branch and open a pull request to `main`. Its normal CI must
 pass without production access. A manual run of `deploy.yml` from any branch
-other than `master` runs verification only; the deploy job is skipped.
+other than `main` runs verification only; the deploy job is skipped.
 
 The first production deployment is allowed only after the repository's human
-architecture/security and release gates are recorded. At release time, the
+architecture/security and release gates are recorded. Routine production
+deployments come from `main`. At assignment-submission time, the separately
 approved process moves the exact verified `main` commit to `master`; do not
 force or replace `master` merely to test this workflow.
 

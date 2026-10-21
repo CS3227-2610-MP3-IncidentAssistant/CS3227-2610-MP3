@@ -6,9 +6,9 @@ Status: **Proposed — independent architecture/security approval pending**
 
 The approved deployment strategy selects a single container on Google Cloud
 Run in Singapore. GitHub Actions must publish that container to Artifact
-Registry and deploy the assessed `master` commit without placing a long-lived
+Registry and deploy the canonical `main` commit without placing a long-lived
 Google credential in GitHub. The application also needs a runtime identity that
-is separate from the deployment identity.
+is separate from the deployment identity. `master` remains submission-only.
 
 ## Decision
 
@@ -17,7 +17,7 @@ Federation (WIF), impersonating a dedicated `incident-desk-deployer` service
 account. Do not create or store a service-account JSON key.
 
 The WIF provider admits only tokens for the immutable GitHub repository ID, the
-`refs/heads/master` ref, and the protected `production` environment. The
+`refs/heads/main` ref, and the protected `production` environment. The
 service-account binding uses the mapped immutable repository ID rather than the
 OIDC subject string, so it remains valid with GitHub's legacy and immutable
 subject formats. The deployment job alone receives `id-token: write`;
@@ -37,7 +37,7 @@ database and object-storage credentials remain runtime configuration and are
 not permissions of either Google service account.
 
 The GitHub `production` environment holds identifiers as environment
-variables, not secrets. It must restrict deployments to `master` and use a
+variables, not secrets. It must restrict deployments to `main` and use a
 required human reviewer where the repository plan supports that control.
 
 ## Consequences
