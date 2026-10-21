@@ -1,6 +1,6 @@
 # Cloud Run CI/CD specification
 
-Status: **Implementation prepared; external setup, review, and deployed evidence pending**
+Status: **Implementation and external configuration prepared; review and application deployment evidence pending**
 
 ## Scope
 
@@ -12,11 +12,12 @@ approval.
 
 ## Actors and trust boundaries
 
-- A repository contributor may run verification, but only an approved `main`
+- A repository contributor may run verification, but only an eligible `main`
   workflow run may enter the protected `production` environment. `master` is
   reserved for the separately approved submission operation.
-- A human production reviewer approves the environment deployment where that
-  GitHub control is available.
+- GitHub restricts the `production` environment to `main`. This school project
+  intentionally has no required environment reviewer, so an eligible workflow
+  does not pause for a second person to approve the job.
 - GitHub OIDC authenticates the workflow to the WIF provider. The provider
   condition constrains the immutable repository ID, `main` ref, and
   `production` environment; the IAM binding uses the mapped repository ID and
@@ -38,10 +39,13 @@ The GitHub `production` environment supplies these non-secret variables:
 - `GCP_DEPLOY_SERVICE_ACCOUNT`
 - `GCP_RUNTIME_SERVICE_ACCOUNT`
 
-Runtime database, Object Storage, AI, and bootstrap values are configured on
-Cloud Run through a separately approved secret-store procedure. The deployment
-workflow changes the image and declared deployment metadata without printing,
-copying, or replacing those values.
+Sensitive runtime database and Object Storage values are stored in Google
+Secret Manager and exposed to Cloud Run through secret references. Non-secret
+runtime settings are configured directly on Cloud Run. They are not GitHub
+environment variables or secrets. AI stays disabled, and bootstrap values
+remain a separate procedure. The deployment workflow changes the image and
+declared deployment metadata without printing, copying, or replacing runtime
+values.
 
 ## Failure and recovery
 
@@ -75,7 +79,7 @@ copying, or replacing those values.
 - [ ] **CR-CD-02:** A non-`main` ref, untrusted fork, wrong repository,
   recreated repository with a different immutable ID, or job outside the
   `production` environment cannot obtain the Google deployment identity.
-- [ ] **CR-CD-03:** An approved `main` deployment authenticates without a
+- [ ] **CR-CD-03:** An eligible `main` deployment authenticates without a
   service-account key, pushes a commit-tagged image, resolves its digest, and
   deploys that digest with the dedicated runtime service account.
 - [ ] **CR-CD-04:** After deployment, the workflow discovers the Cloud Run URL
@@ -94,6 +98,8 @@ copying, or replacing those values.
 
 - Repository-only: pending after workflow and documentation validation.
 - GitHub Actions: pending authenticated run.
-- Manual/deployed: pending Cloud Run, Neon, and three-role smoke verification.
+- Manual/deployed: runtime secret references are configured; application image,
+  Neon connectivity, `/health`, rollback, and three-role smoke verification are
+  pending.
 - Architecture/security reviewer: pending.
 - Release approver/date: pending.

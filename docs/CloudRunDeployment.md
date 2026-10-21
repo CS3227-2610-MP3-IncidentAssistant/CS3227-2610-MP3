@@ -144,19 +144,23 @@ gh variable set GCP_RUNTIME_SERVICE_ACCOUNT --env production --body $RuntimeServ
 In **GitHub → Settings → Environments → production**:
 
 1. allow routine deployments only from `main`;
-2. add a required human reviewer and prevent self-review where supported; and
+2. leave required reviewers empty for this school project; and
 3. confirm that no Google JSON key or production application secret is stored
    in repository-level Actions settings.
 
-The names above are identifiers and are safe as environment variables. OIDC
-creates the short-lived credential only after the environment gate passes.
+An environment reviewer would approve whether a particular workflow job may
+enter the GitHub environment; they do not approve or edit environment
+variables. This repository instead uses the `main` branch restriction as its
+technical gate. The names above are non-secret identifiers. OIDC creates a
+short-lived credential only for an eligible job.
 
 ## 7. Configure runtime secrets separately
 
-Before the first real deployment, configure the Cloud Run service with approved
-secret-store references for the production `DATABASE_URL`, Object Storage
-credentials, and any enabled AI provider values described in `.env.example`.
-Set these non-secret production values as well:
+Before the first real application deployment, store the production
+`DATABASE_URL` and Object Storage credentials in Google Secret Manager and
+configure Cloud Run to reference them. Do not put these values in the GitHub
+environment. Set these non-secret production values directly on Cloud Run as
+well:
 
 - `INCIDENT_DESK_NEON_REQUIRED=true`
 - `INCIDENT_DESK_SECURE_COOKIES=true`

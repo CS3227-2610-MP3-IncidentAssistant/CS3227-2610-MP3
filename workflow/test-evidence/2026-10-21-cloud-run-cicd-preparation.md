@@ -83,10 +83,11 @@ production-data access was performed:
   policy allowing only `master`. Seven non-secret workflow variables were set;
   no Google credential or application secret was stored in GitHub.
 
-Required reviewer selection remains pending a human team decision. OIDC token
-exchange, image publication, deployment, health verification, rollback, and
-three-role smoke evidence also remain pending, so no acceptance criterion is
-ticked.
+The repository owner subsequently chose not to require a GitHub environment
+reviewer for this school project. The `main` deployment-branch restriction
+remains the technical environment gate. OIDC token exchange, image publication,
+application deployment, application health verification, rollback, and
+three-role smoke evidence remain pending, so no acceptance criterion is ticked.
 
 ### Branch-policy correction — 2026-10-22
 
@@ -96,3 +97,22 @@ described in `AGENTS.md`. The original bootstrap state above accurately records
 the initial `master` restriction. The specification, workflow, WIF provider,
 and GitHub production environment were then changed together to require
 `refs/heads/main`. No application deployment was triggered by this correction.
+
+### Runtime secret-store configuration — 2026-10-22
+
+The repository owner authorized creation and attachment of the existing local
+runtime values. Values were streamed to Google Secret Manager without placing
+them in command arguments or recorded output:
+
+- `incidentdesk-database-url`, `incidentdesk-aws-access-key-id`, and
+  `incidentdesk-aws-secret-access-key` each have one enabled version.
+- The dedicated runtime service account has Secret Manager accessor only on
+  those three secrets.
+- Cloud Run revision `incidentdesk-run-00002-7dt` uses the dedicated runtime
+  service account and references each secret at `latest`.
+- Non-secret Object Storage endpoint/region, attachment bucket, secure-cookie,
+  required-database, and disabled-AI settings are configured directly on Cloud
+  Run.
+- The existing Google placeholder image was not replaced. Its service root
+  returned HTTP 200, which verifies platform reachability only and is not
+  evidence for the application's `/health` acceptance criterion.
