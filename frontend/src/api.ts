@@ -106,6 +106,23 @@ export type AdministratorStatisticsFilters = {
   periodThrough: string
 }
 
+export type AdministratorInsight = {
+  outcome: 'ANSWER' | 'NEEDS_CLARIFICATION'
+  clarificationCode: string | null
+  summary: string
+  metric: string | null
+  periodStart: string | null
+  periodEndExclusive: string | null
+  snapshotAt: string
+  rows: Array<{ label: string, numericValue: number | null, displayValue: string, sampleSize: number }>
+  advisoryNotice: string
+  grouping: string | null
+  rankingDirection: string | null
+  limit: number | null
+  categoryFilters: string[]
+  responderFilters: string[]
+}
+
 export type IncidentRow = {
   id: string
   title: string
@@ -472,6 +489,25 @@ export async function loadAdministratorStatistics(
   if (filters.periodThrough) parameters.set('periodThrough', `${filters.periodThrough}T23:59:59.999Z`)
   const query = parameters.size > 0 ? `?${parameters}` : ''
   return requestJson<AdministratorStatistics>(`/api/v1/admin/statistics${query}`, { signal })
+}
+
+export async function requestAdministratorInsight(
+  question: string,
+  categories: IncidentCategory[],
+  responderIds: string[],
+  refreshSession: SessionRefresher,
+  signal?: AbortSignal,
+): Promise<AdministratorInsight> {
+  const response = await csrfRequest('/api/v1/admin/statistics/insights', {
+    method: 'POST', credentials: 'same-origin', signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, categories, responderIds }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'AI insights are temporarily unavailable.',
+  })
+  if (!response) throw new ApiError(401, 'Your session has expired.', undefined, 'UNAUTHENTICATED')
+  return response.json() as Promise<AdministratorInsight>
 }
 
 export async function saveSloTarget(

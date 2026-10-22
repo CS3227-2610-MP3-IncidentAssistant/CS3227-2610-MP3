@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react'
-import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 
 type AdminShellProps = {
@@ -7,13 +6,12 @@ type AdminShellProps = {
   accountsContent: ReactNode
   sloContent: ReactNode
   statisticsContent: ReactNode
-  serviceHealth: HealthState
   loginName: string
   onLogout: () => Promise<void>
   onUpdatePassword?: () => void
 }
 
-export function AdminShell({ children, accountsContent, sloContent, statisticsContent, serviceHealth, loginName, onLogout, onUpdatePassword }: AdminShellProps) {
+export function AdminShell({ children, accountsContent, sloContent, statisticsContent, loginName, onLogout, onUpdatePassword }: AdminShellProps) {
   const [activePage, setActivePage] = useState<'dashboard' | 'accounts' | 'slo' | 'statistics'>('dashboard')
   const navigation: RoleNavigationItem[] = [
     { label: 'Dashboard', current: activePage === 'dashboard', onSelect: () => setActivePage('dashboard') },
@@ -32,7 +30,6 @@ export function AdminShell({ children, accountsContent, sloContent, statisticsCo
       onLogout={onLogout}
       onUpdatePassword={onUpdatePassword}
       roleLabel="Administrator"
-      serviceHealth={serviceHealth}
     >
       {activePage === 'dashboard' ? children
         : activePage === 'accounts' ? accountsContent

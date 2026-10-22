@@ -51,6 +51,9 @@ tokens deliberately; do not introduce one-off variants for individual pages.
 - On authenticated role pages, place the signed-in account identity and logout
   action in a separated block anchored to the bottom of the sidebar. Reserve
   the top bar for the accessible menu trigger when the sidebar is collapsed.
+- Do not show backend or infrastructure health indicators in the role sidebar.
+  The deployment health endpoint is for automated probes, not user-facing
+  availability reporting.
 - Use approximately 32px horizontal content padding on wide screens, 24px at
   medium widths, and 16px on narrow screens.
 - Metrics move from four columns to two and then one. Forms and detail layouts

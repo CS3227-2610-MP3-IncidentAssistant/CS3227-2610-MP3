@@ -13,7 +13,6 @@ import {
   type SessionRefresher,
   type SessionState,
 } from './api'
-import { useServiceHealth } from './health/useServiceHealth'
 import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
 import { PromotionPanel } from './reporter/PromotionPanel'
@@ -23,7 +22,6 @@ import { PasswordChangeDialog } from './shared/PasswordChangeDialog'
 type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
 export function App() {
-  const serviceHealth = useServiceHealth()
   const sessionState = useSession()
   const [portal, setPortal] = useState<Portal | null>(null)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
@@ -74,8 +72,7 @@ export function App() {
           onRefreshSession={sessionState.refresh}
         />}
         sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
-        statisticsContent={<AdministratorStatistics />}
-        serviceHealth={serviceHealth}
+        statisticsContent={<AdministratorStatistics onRefreshSession={sessionState.refresh} />}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
@@ -88,7 +85,6 @@ export function App() {
     return (
       <><ReporterShell
         promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
-        serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
@@ -100,11 +96,11 @@ export function App() {
   if (session.authenticated && session.role === 'RESPONDER') {
     return (
       <><ResponderPortal
+        key={sessionState.revision}
         categories={session.responderCategories ?? []}
         loginName={session.loginName ?? 'Responder'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
-        serviceHealth={serviceHealth}
       />{passwordDialog}</>
     )
   }
@@ -122,9 +118,11 @@ export function App() {
 
 function useSession() {
   const [session, setSession] = useState<SessionState | null>(null)
+  const [revision, setRevision] = useState(0)
   const [failed, setFailed] = useState(false)
   const receive = useCallback((next: SessionState) => {
     setSession(next)
+    setRevision((current) => current + 1)
     setFailed(false)
   }, [])
   const reload = useCallback(
@@ -148,6 +146,7 @@ function useSession() {
   }, [reload])
   return {
     session,
+    revision,
     failed,
     reload: () => reload(),
     refresh,

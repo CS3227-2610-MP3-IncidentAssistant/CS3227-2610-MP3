@@ -250,6 +250,32 @@ class ResponderIncidentPostgresTest {
     }
 
     @Test
+    void detailIncludesAdministratorAssignmentAndReassignmentHistory() {
+        UUID administrator = UUID.fromString("57200000-0000-0000-0000-000000000001");
+        account(administrator, "administrator", "ADMINISTRATOR");
+        UUID assigned = incident("57200000-0000-0000-0000-000000000002", "IT", "ASSIGNED", RESPONDER, NOW);
+        for (String action : List.of("INCIDENT_ASSIGNED", "INCIDENT_REASSIGNED")) {
+            String before = action.equals("INCIDENT_ASSIGNED") ? "SUBMITTED" : "ASSIGNED";
+            jdbc.update("""
+                    INSERT INTO audit_events (id, occurred_at, actor_account_id, actor_role, action,
+                                              target_type, target_identifier, outcome, details)
+                    VALUES (?, ?, ?, 'ADMINISTRATOR', ?, 'INCIDENT', ?, 'SUCCESS',
+                            jsonb_build_object('status', jsonb_build_object('before', ?, 'after', 'ASSIGNED')))
+                    """, UUID.randomUUID(), Timestamp.from(NOW.plusSeconds(
+                    action.equals("INCIDENT_ASSIGNED") ? 1 : 2)), administrator, action, assigned.toString(), before);
+        }
+
+        var detail = service.detail("responder", assigned);
+
+        assertEquals(List.of("INCIDENT_ASSIGNED", "INCIDENT_REASSIGNED"),
+                detail.lifecycleHistory().stream().map(ResponderIncidentService.LifecycleHistoryEntry::action).toList());
+        assertEquals(List.of("ASSIGNED", "ASSIGNED"),
+                detail.lifecycleHistory().stream().map(ResponderIncidentService.LifecycleHistoryEntry::toStatus).toList());
+        assertEquals(List.of("SUBMITTED", "ASSIGNED"),
+                detail.lifecycleHistory().stream().map(ResponderIncidentService.LifecycleHistoryEntry::fromStatus).toList());
+    }
+
+    @Test
     void databaseRejectsCommentsContainingOnlyAsciiOrUnicodeWhitespace() {
         UUID eligible = incident("57100000-0000-0000-0000-000000000001", "IT", "SUBMITTED", null, NOW);
         for (String whitespace : List.of(" \t\n\r", "\u2003\u3000")) {

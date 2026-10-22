@@ -242,6 +242,13 @@ not executable HTML. The current core-fields UI uses React text rendering;
 later comment/history/attachment surfaces still require their own rendering
 and privacy verification.
 
+The Responder timeline now also includes Administrator assignment and
+reassignment transitions, with neutral labels and status changes only. The
+PostgreSQL read test and shared React rendering test are recorded in
+[`test-evidence/2026-10-23-issue-7-timeline-completion.md`](test-evidence/2026-10-23-issue-7-timeline-completion.md).
+RSP-DETAIL-01 remains open for the broader content and privacy verification
+described above.
+
 ### Partial mutation UI progress (does not complete RSP-UI-01)
 
 The Responder detail view offers Claim for `SUBMITTED` incidents and resolve
@@ -254,6 +261,14 @@ validation, conflict, uncertain replay, and cache clearing. RSP-UI-01 remains
 unchecked until complete keyboard/screen-reader and narrow-layout verification
 and keyboard access to the detail comments and attachment downloads is
 verified.
+
+The shared role shell now removes closed narrow-screen navigation from the
+accessibility and keyboard trees and restores focus to the Menu control after a
+navigation choice. The focused React regression and full project check are
+recorded in
+[`test-evidence/2026-10-23-issue-7-mobile-navigation.md`](test-evidence/2026-10-23-issue-7-mobile-navigation.md).
+RSP-UI-01 remains unchecked pending actual narrow-browser, keyboard, and
+screen-reader verification of the complete Responder journey.
 
 ## 7. Approved implementation decisions
 
@@ -301,9 +316,13 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
   `ReporterWebSecurityTest.roleSpecificLoginPathsAcceptOnlyTheirPersistedRole`,
   `ReporterWebSecurityTest.responderLoginChangesThePreAuthenticationSessionId`,
   and the Responder queue/detail/attachment role-denial tests.
-- [ ] RSP-QUEUE-01: only the authorized queue and stable ordering are returned;
+- [x] RSP-QUEUE-01: only the authorized queue and stable ordering are returned;
   empty, no-category, expired, denied, and failure states are distinct without
-  leaking protected categories or incident existence.
+  leaking protected categories or incident existence. Verified by
+  `ResponderIncidentPostgresTest` queue authorization/filter/paging tests,
+  `ResponderPortal.test.tsx` queue-state/stale-response tests, and
+  `ResponderSessionChange.test.tsx` session-refresh cache clearing; see
+  [`test-evidence/2026-10-23-issue-7-queue-completion.md`](test-evidence/2026-10-23-issue-7-queue-completion.md).
 - [ ] RSP-DETAIL-01: authorized detail and attachments work; forbidden/missing
   resources do not enumerate; each attachment read reauthorizes and has safe
   headers; anonymous identity is absent from all responder surfaces, including

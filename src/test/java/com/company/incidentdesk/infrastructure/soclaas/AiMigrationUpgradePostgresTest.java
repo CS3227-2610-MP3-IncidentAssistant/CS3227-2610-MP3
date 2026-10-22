@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
+import com.company.incidentdesk.support.PostgresTestDataSource;
 
 @EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class AiMigrationUpgradePostgresTest {
@@ -23,8 +24,8 @@ class AiMigrationUpgradePostgresTest {
         String schema = "ai_upgrade_" + UUID.randomUUID().toString().replace("-", "");
         admin.execute("CREATE SCHEMA " + schema);
         try {
-            String url = database.jdbcUrl() + (database.jdbcUrl().contains("?") ? "&" : "?") + "currentSchema=" + schema;
-            var source = new DriverManagerDataSource(url, database.username(), database.password());
+            var source = PostgresTestDataSource.isolated(
+                    database.jdbcUrl(), database.username(), database.password(), schema);
             var jdbc = new JdbcTemplate(source);
             Flyway.configure().dataSource(source).locations("classpath:db/migration")
                     .schemas(schema).defaultSchema(schema).target("4").load().migrate();
@@ -50,10 +51,10 @@ class AiMigrationUpgradePostgresTest {
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM incident_resolutions", Integer.class));
             for (String table : new String[] {"responder_promotion_requested_categories",
                     "responder_promotion_approved_categories", "responder_category_access"}) {
-                assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class));
+                assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class), table);
             }
-            assertEquals(10, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
-            assertEquals(10, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
+            assertEquals(11, jdbc.queryForObject("SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success", Integer.class));
+            assertEquals(11, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE NOT success", Integer.class));
         } finally {
             admin.execute("DROP SCHEMA " + schema + " CASCADE");
