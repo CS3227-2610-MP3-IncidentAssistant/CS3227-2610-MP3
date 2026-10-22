@@ -80,6 +80,12 @@ authenticated browser
   is never committed or placed in the image, and is unavailable to pull
   requests, frontend builds, tests, and preview environments. A suspected leak
   disables AI and triggers key rotation; incident management remains online.
+- On Cloud Run, `SOCLAAS_API_KEY` is a numeric-version Google Secret Manager
+  reference granted only to the runtime service account. `AI_ENABLED`,
+  `SOCLAAS_MODEL`, `AI_CONFIGURATION_REVISION`, and approved downward-only
+  limits are non-secret Cloud Run runtime settings. They are not GitHub Actions
+  variables or secrets, and the deployment workflow does not copy or replace
+  them.
 - Production startup fails if AI is enabled but its key, fixed base URL,
   selected model, local limits, or provider-budget ceiling is absent or
   syntactically invalid. Provider catalog or budget unavailability opens the AI
@@ -301,6 +307,10 @@ is admitted only after the applicable local/circuit limit permits it.
   provider outage, timeout, malformed response, cancellation, or oversized
   response produces the specified safe category and leaves all non-AI
   workflows available.
+- [ ] `AI-GW-05` — Production exposes the provider key only through a
+  numeric-version secret-store reference granted to the runtime identity;
+  non-secret AI runtime settings remain outside GitHub Actions, and an ordinary
+  image deployment preserves both classes of configuration.
 
 ### Usage limits (`AI-LIM`)
 
