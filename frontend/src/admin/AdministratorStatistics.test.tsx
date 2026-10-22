@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AdministratorStatistics } from './AdministratorStatistics'
 
+const refreshSession = async () => ({ authenticated: true, role: 'ADMINISTRATOR' })
+
 const statistics = {
   outcome: 'AVAILABLE',
   summary: {
@@ -15,7 +17,10 @@ const statistics = {
     reopenedCycleCount: 1, reopenRate: 0.5, administratorResolvedCount: 1,
   }],
   filterOptions: {
-    responders: [{ id: '10000000-0000-0000-0000-000000000001', displayName: 'response-one' }],
+    responders: [
+      { id: '10000000-0000-0000-0000-000000000001', displayName: 'response-one' },
+      { id: '10000000-0000-0000-0000-000000000002', displayName: 'response-two' },
+    ],
     reporters: [{ id: '20000000-0000-0000-0000-000000000002', displayName: 'visible-reporter' }],
   },
 }
@@ -28,7 +33,7 @@ afterEach(() => {
 describe('AdministratorStatistics', () => {
   it('renders company metrics and an accessible privacy-safe responder breakdown', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(statistics)))
-    render(<AdministratorStatistics />)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading operational statistics')
     expect(await screen.findByRole('heading', { name: 'Incident outcomes' })).toBeInTheDocument()
@@ -52,7 +57,7 @@ describe('AdministratorStatistics', () => {
       },
       responders: [],
     })))
-    render(<AdministratorStatistics />)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
 
     expect(await screen.findAllByText('No data')).toHaveLength(3)
     expect(screen.getByRole('heading', { name: 'No responder data' })).toBeInTheDocument()
@@ -61,7 +66,7 @@ describe('AdministratorStatistics', () => {
   it('sends category, identity, and inclusive UTC period filters', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(statistics))
     vi.stubGlobal('fetch', fetchMock)
-    render(<AdministratorStatistics />)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
     await screen.findByRole('heading', { name: 'Incident outcomes' })
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'IT' }))
@@ -88,7 +93,7 @@ describe('AdministratorStatistics', () => {
   it('rejects an inverted period without issuing another statistics request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(statistics))
     vi.stubGlobal('fetch', fetchMock)
-    render(<AdministratorStatistics />)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
     await screen.findByRole('heading', { name: 'Incident outcomes' })
 
     fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-22' } })
@@ -106,7 +111,7 @@ describe('AdministratorStatistics', () => {
       .mockResolvedValueOnce(jsonResponse({ code: 'PERSISTENCE_FAILURE' }, 503))
       .mockResolvedValueOnce(jsonResponse(statistics))
     vi.stubGlobal('fetch', fetchMock)
-    render(<AdministratorStatistics />)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
     await screen.findByRole('heading', { name: 'Incident outcomes' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
@@ -116,6 +121,73 @@ describe('AdministratorStatistics', () => {
 
     expect(await screen.findByRole('heading', { name: 'Incident outcomes' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('submits filters separately and renders deterministic insight rows as escaped text', async () => {
+    const insight = {
+      outcome: 'ANSWER', clarificationCode: null, summary: 'Responder operational indicator.',
+      metric: 'AVERAGE_TIME_IN_PROGRESS', periodStart: '2026-09-23T00:00:00Z',
+      periodEndExclusive: '2026-10-23T00:00:00Z', snapshotAt: '2026-10-23T00:00:00Z',
+      rows: [{ label: '<script>alert(1)</script>', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 5 }],
+      eligibleCount: 1, excludedCount: 2,
+      advisoryNotice: 'AI interpreted the question; application code calculated every value.', grouping: 'RESPONDER',
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init
+      return String(input).includes('/insights') ? jsonResponse(insight) : jsonResponse(statistics)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
+    await screen.findByRole('heading', { name: 'Incident outcomes' })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'IT' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Responder' }), {
+      target: { value: statistics.filterOptions.responders[0].id },
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'response-one' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'response-two' }))
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Who had the longest average time in progress during the past 30 days?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Get insight' }))
+
+    const region = await screen.findByRole('region', { name: 'AI insight result' })
+    expect(within(region).getByText('<script>alert(1)</script>')).toBeInTheDocument()
+    expect(region.querySelector('script')).toBeNull()
+    expect(screen.getByText(/2 responder samples were excluded/)).toBeInTheDocument()
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/insights'))!
+    expect(JSON.parse(String(init?.body))).toEqual({
+      question: 'Who had the longest average time in progress during the past 30 days?',
+      categories: ['IT'], responderIds: statistics.filterOptions.responders.map((responder) => responder.id),
+    })
+  })
+
+  it('refreshes a stale session once before retrying the insight request', async () => {
+    const answer = {
+      outcome: 'NEEDS_CLARIFICATION', clarificationCode: 'MISSING_PERIOD',
+      summary: 'Specify a reporting period.', metric: null, periodStart: null,
+      periodEndExclusive: null, snapshotAt: '2026-10-23T00:00:00Z', rows: [],
+      eligibleCount: 0, excludedCount: 0, advisoryNotice: 'No analytics query was run.', grouping: null,
+    }
+    let insightCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (!String(input).includes('/insights')) return jsonResponse(statistics)
+      insightCalls++
+      return insightCalls === 1
+        ? jsonResponse({ code: 'SECURITY_SESSION_EXPIRED' }, 403)
+        : jsonResponse(answer)
+    })
+    const refresh = vi.fn(async () => ({ authenticated: true, role: 'ADMINISTRATOR' }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AdministratorStatistics onRefreshSession={refresh} />)
+    await screen.findByRole('heading', { name: 'Incident outcomes' })
+
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Which category is slowest?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Get insight' }))
+
+    expect(await screen.findByRole('heading', { name: 'Specify a reporting period.' })).toBeInTheDocument()
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(insightCalls).toBe(2)
   })
 })
 

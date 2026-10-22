@@ -296,23 +296,23 @@ statistics-unavailable result and never retries the provider.
   bounded question; Reporter, Responder, unauthenticated, disabled, and stale
   Administrator sessions receive a non-enumerating denial with no provider or
   analytics call.
-- [ ] `AI-ADM-AUTH-02` — The server derives actor, role, request instant, model,
+- [x] `AI-ADM-AUTH-02` — The server derives actor, role, request instant, model,
   and capability catalog from trusted application state and ignores or rejects
   browser attempts to supply them.
-- [ ] `AI-ADM-AUTH-03` — Blank, over-500-code-point, control-bearing, known
+- [x] `AI-ADM-AUTH-03` — Blank, over-500-code-point, control-bearing, known
   login-name, identifier, email, and URL inputs fail before provider disclosure;
   structured responder selection is excluded from the provider payload.
-- [ ] `AI-ADM-AUTH-04` — Captured provider requests contain only the validated
+- [x] `AI-ADM-AUTH-04` — Captured provider requests contain only the validated
   question, request instant, fixed instructions, and closed plan vocabulary,
   with no statistics, selections, identities, incident data, or credentials.
-- [ ] `AI-ADM-AUTH-05` — Malformed JSON, extra prose, unknown fields or enums,
+- [x] `AI-ADM-AUTH-05` — Malformed JSON, extra prose, unknown fields or enums,
   invalid periods, excessive limits, and unsupported or ambiguous questions
   execute no analytics handler and return only an application-owned safe error
   or clarification.
 
 ### Deterministic analytics (`AI-ADM-QUERY`)
 
-- [ ] `AI-ADM-QUERY-01` — Each query type dispatches only to its allowlisted
+- [x] `AI-ADM-QUERY-01` — Each query type dispatches only to its allowlisted
   typed handler; adversarial plans cannot invoke SQL, reflection, URLs, files,
   incident details, audit data, repository methods, or mutations.
 - [x] `AI-ADM-QUERY-02` — Deterministic-clock tests prove every relative and UTC
@@ -324,7 +324,7 @@ statistics-unavailable result and never retries the provider.
 - [ ] `AI-ADM-QUERY-04` — Category trend, period comparison, backlog snapshot,
   and operational overview tests prove their metric definitions, bounds, row
   limits, and empty-result behavior against isolated persisted lifecycle data.
-- [ ] `AI-ADM-QUERY-05` — Responder names and factual values are resolved and
+- [x] `AI-ADM-QUERY-05` — Responder names and factual values are resolved and
   rendered only from the post-provider application result; fabricated names or
   values in provider output cannot enter the answer.
 - [ ] `AI-ADM-QUERY-06` — A read-consistent snapshot and application-generated
@@ -339,7 +339,7 @@ statistics-unavailable result and never retries the provider.
 - [ ] `AI-ADM-SAFE-02` — Comparative responder output excludes samples below
   five, reports eligible/excluded counts and ties, states the metric and exact
   period, and carries the operational-indicator notice.
-- [ ] `AI-ADM-SAFE-03` — The browser renders only escaped deterministic text and
+- [x] `AI-ADM-SAFE-03` — The browser renders only escaped deterministic text and
   structured rows; provider HTML, Markdown, URLs, tool calls, and instructions
   are rejected and cannot execute, fetch, persist, or mutate anything.
 - [ ] `AI-ADM-SAFE-04` — Each admitted request writes one content-free audit
@@ -362,22 +362,16 @@ statistics-unavailable result and never retries the provider.
 | `AI-ADM-QUERY-*` | `.agents/slo.md`, `.agents/persistence.md` | Typed analytics registry, statistics services, deterministic renderer | Domain calculations, PostgreSQL integration, deterministic-clock and concurrency tests |
 | `AI-ADM-SAFE-*` | `.agents/anonymity-policy.md`, `.agents/audit-policy.md`, `threat-model.md` | Privacy projection, UI, audit and observability integration | Anonymous/differencing, escaped output, audit/log capture, resilience and load tests |
 
-- Automated evidence: the application-layer safety boundary is partially
-  implemented on the working tree based on approval commit `d403ee5`.
-  `AdministratorInsightQuestionValidatorTest`,
-  `AdministratorInsightPlanParserTest`, and
-  `AdministratorInsightPeriodResolverTest` cover pre-disclosure text limits,
-  identity-shaped input, strict closed-plan parsing, every named/explicit UTC
-  period, comparison rules, future bounds, and the 366-day limit. Verified on
-  2026-10-23 with
-  `gradle test --tests "com.company.incidentdesk.application.ai.insights.*"
-  -PfrontendSkipBuild=true` and `gradle test -PfrontendSkipBuild=true`; the
-  latter reported 786 tests, 0 failures, 0 errors, and 130 skipped
-  environment-dependent tests. `AI-ADM-QUERY-02` is satisfied by this evidence.
-  The `AI-ADM-AUTH-*` criteria remain open until the trusted account lookup,
-  endpoint, provider payload, reauthorization, and no-dispatch failure paths
-  are integrated and verified. The remaining `AI-ADM-QUERY-*` and all
-  `AI-ADM-SAFE-*` criteria also remain open.
+- Automated evidence: the question validator, strict plan parser, deterministic
+  UTC resolver, trusted service orchestration, closed typed analytics registry,
+  deterministic renderer, strict HTTP boundary, provider-payload builder,
+  migration V11, and React review UI are implemented. On 2026-10-23,
+  `.\gradlew.bat check --no-daemon` passed with 796 Java tests (0 failures,
+  0 errors, 132 environment-dependent skips) plus 135 passing frontend tests,
+  and `.\gradlew.bat registrationDatabaseTest --no-daemon
+  -PfrontendSkipBuild=true` passed 63 isolated PostgreSQL tests with no skips or
+  failures. Reproducible details are recorded in
+  [`test-evidence/2026-10-23-administrator-ai-insights.md`](test-evidence/2026-10-23-administrator-ai-insights.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
@@ -387,5 +381,6 @@ statistics-unavailable result and never retries the provider.
 - Provider-retention risk acceptance: repository user explicitly accepted the
   provider's undocumented prompt/response-retention risk on 2026-10-23.
 
-No criterion is checked because implementation and verification evidence are
-pending. See `reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.
+Unchecked criteria remain pending for their complete role, metric, concurrency,
+privacy, audit-capture, resilience, load, manual, or deployed evidence. See
+`reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.

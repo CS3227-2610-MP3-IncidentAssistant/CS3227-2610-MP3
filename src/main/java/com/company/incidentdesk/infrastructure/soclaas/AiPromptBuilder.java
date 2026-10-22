@@ -47,6 +47,26 @@ final class AiPromptBuilder {
             data = Map.of("from", range.from().toString(), "until", range.until().toString(), "groups", groups);
             task = "Describe operational trends using only these aggregates. Label conclusions as advisory and avoid identity inference.";
         }
+        case AiRequest.AdministratorInsight insight -> {
+            data = Map.of("question", insight.question(), "requestInstant", insight.requestInstant().toString());
+            task = """
+                    Interpret the question as exactly one JSON object and return JSON only. Never include prose,
+                    Markdown, names, identifiers, SQL, URLs, filters, code, or tool calls. Use only these fields:
+                    outcome, queryType, metric, period, comparisonPeriod, direction, limit, grouping,
+                    clarificationCode. outcome is QUERY or NEEDS_CLARIFICATION. queryType is one of
+                    RANK_RESPONDERS, COMPARE_SELECTED_RESPONDERS, RANK_CATEGORIES, CATEGORY_TREND,
+                    PERIOD_COMPARISON, BACKLOG_SNAPSHOT, SLO_TARGET_COMPARISON, OPERATIONAL_OVERVIEW.
+                    metric is one of RESOLVED_CYCLE_COUNT, AVERAGE_TIME_TO_CLAIM,
+                    AVERAGE_TIME_IN_PROGRESS, REOPEN_RATE, REOPEN_EVENT_COUNT, INCIDENT_COUNT,
+                    UNASSIGNED_BACKLOG_COUNT, OLDEST_UNASSIGNED_AGE. period and comparisonPeriod are one of
+                    ROLLING_7_DAYS, ROLLING_30_DAYS, THIS_UTC_WEEK, PREVIOUS_UTC_WEEK, THIS_UTC_MONTH,
+                    PREVIOUS_UTC_MONTH, or {\"fromDate\":\"YYYY-MM-DD\",\"throughDate\":\"YYYY-MM-DD\"}.
+                    direction is ASCENDING or DESCENDING; limit is 1 through 10; grouping is COMPANY,
+                    CATEGORY, or RESPONDER. clarificationCode is MISSING_PERIOD, AMBIGUOUS_METRIC,
+                    UNSUPPORTED_QUESTION, or CONFLICTING_PERIODS. Omit every field not required by the plan.
+                    A question without a period must use NEEDS_CLARIFICATION and MISSING_PERIOD.
+                    """;
+        }
         }
         return new Prepared(request.feature(), BOUNDARY + task, JSON.writeValueAsString(data));
     }

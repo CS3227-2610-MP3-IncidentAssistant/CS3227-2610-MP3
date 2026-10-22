@@ -74,7 +74,7 @@ export function App() {
           onRefreshSession={sessionState.refresh}
         />}
         sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
-        statisticsContent={<AdministratorStatistics />}
+        statisticsContent={<AdministratorStatistics onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}

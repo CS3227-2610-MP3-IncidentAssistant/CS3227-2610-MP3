@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import {
   ApiError,
   loadAdministratorStatistics,
+  requestAdministratorInsight,
+  type AdministratorInsight,
   type AdministratorStatistics as StatisticsResult,
   type AdministratorStatisticsFilters,
   type IncidentCategory,
+  type SessionRefresher,
 } from '../api'
 
 const CATEGORIES: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
@@ -14,13 +17,18 @@ const EMPTY_FILTERS: AdministratorStatisticsFilters = {
 
 type StatisticsQuery = AdministratorStatisticsFilters & { revision: number }
 
-export function AdministratorStatistics() {
+export function AdministratorStatistics({ onRefreshSession }: { onRefreshSession: SessionRefresher }) {
   const [filters, setFilters] = useState<AdministratorStatisticsFilters>(EMPTY_FILTERS)
   const [query, setQuery] = useState<StatisticsQuery>({ ...EMPTY_FILTERS, revision: 0 })
   const [result, setResult] = useState<StatisticsResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterError, setFilterError] = useState('')
+  const [insightQuestion, setInsightQuestion] = useState('')
+  const [insight, setInsight] = useState<AdministratorInsight | null>(null)
+  const [insightLoading, setInsightLoading] = useState(false)
+  const [insightError, setInsightError] = useState('')
+  const [insightResponderIds, setInsightResponderIds] = useState<string[]>([])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,6 +78,33 @@ export function AdministratorStatistics() {
         ? current.categories.filter((value) => value !== category)
         : [...current.categories, category],
     }))
+  }
+
+  async function askInsight(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!insightQuestion.trim() || Array.from(insightQuestion).length > 500) {
+      setInsightError('Enter a question of 1 to 500 characters.')
+      return
+    }
+    setInsightLoading(true)
+    setInsightError('')
+    setInsight(null)
+    try {
+      setInsight(await requestAdministratorInsight(insightQuestion, filters.categories,
+        insightResponderIds, onRefreshSession))
+    } catch (reason) {
+      setInsightError(reason instanceof ApiError ? reason.message : 'AI insights are temporarily unavailable.')
+    } finally {
+      setInsightLoading(false)
+    }
+  }
+
+  function toggleInsightResponder(responderId: string) {
+    setInsightResponderIds((current) => current.includes(responderId)
+      ? current.filter((value) => value !== responderId)
+      : current.length < 5 ? [...current, responderId] : current)
+    setInsight(null)
+    setInsightError('')
   }
 
   return <main id="main-content" className="content">
@@ -137,6 +172,35 @@ export function AdministratorStatistics() {
       </form>
     </section>
 
+    <section className="incident-panel statistics-insight-panel" aria-labelledby="statistics-insight-heading">
+      <div className="section-heading"><div>
+        <p className="eyebrow">AI-assisted interpretation</p>
+        <h2 id="statistics-insight-heading">Ask about operational statistics</h2>
+      </div></div>
+      <form className="statistics-insight-form" onSubmit={askInsight}>
+        <label htmlFor="statistics-insight-question">Question</label>
+        <textarea id="statistics-insight-question" rows={3} maxLength={500} value={insightQuestion}
+          onChange={(event) => { setInsightQuestion(event.target.value); setInsight(null); setInsightError('') }}
+          aria-describedby="statistics-insight-help" />
+        <p id="statistics-insight-help" className="help-text">Include a period. Do not enter names, incident details, comments, reporter information, identifiers, or links. Current category and responder filters are applied separately and are not sent to the AI provider.</p>
+        <fieldset className="insight-responder-choice">
+          <legend>Responders to compare (optional, select 2–5)</legend>
+          {result?.filterOptions.responders.map((option) => <label key={option.id}>
+            <input type="checkbox" checked={insightResponderIds.includes(option.id)}
+              disabled={!insightResponderIds.includes(option.id) && insightResponderIds.length >= 5}
+              onChange={() => toggleInsightResponder(option.id)} />
+            {option.displayName}
+          </label>)}
+        </fieldset>
+        <div className="form-actions">
+          <button className="primary-button" type="submit" disabled={insightLoading}>{insightLoading ? 'Interpreting…' : 'Get insight'}</button>
+          {(insight || insightError) && <button className="ghost-button" type="button" onClick={() => { setInsight(null); setInsightError('') }}>Clear</button>}
+        </div>
+      </form>
+      {insightError && <p className="field-error statistics-insight-message" role="alert">{insightError}</p>}
+      {insight && <InsightResult insight={insight} />}
+    </section>
+
     {loading && !result && <p className="panel-state" role="status">Loading operational statistics…</p>}
     {error && <div className="incident-panel panel-state statistics-state" role="alert">
       <p>{error}</p>
@@ -148,6 +212,24 @@ export function AdministratorStatistics() {
       <ResponderBreakdown responders={result.responders} />
     </>}
   </main>
+}
+
+function InsightResult({ insight }: { insight: AdministratorInsight }) {
+  return <div className="statistics-insight-result" aria-live="polite">
+    <p className="eyebrow">{insight.outcome === 'ANSWER' ? 'Deterministic answer' : 'Clarification needed'}</p>
+    <h3>{insight.summary}</h3>
+    {insight.periodStart && insight.periodEndExclusive && <p className="help-text">
+      UTC period: {new Date(insight.periodStart).toISOString()} to {new Date(insight.periodEndExclusive).toISOString()} (end exclusive)
+    </p>}
+    {insight.rows.length > 0 && <div className="table-region" role="region" aria-label="AI insight result" tabIndex={0}>
+      <table><thead><tr><th scope="col">Result</th><th scope="col">Value</th><th scope="col">Sample</th></tr></thead>
+        <tbody>{insight.rows.map((row) => <tr key={row.label}>
+          <th scope="row">{row.label}</th><td>{row.displayValue}</td><td>{row.sampleSize}</td>
+        </tr>)}</tbody></table>
+    </div>}
+    {insight.excludedCount > 0 && <p className="help-text">{insight.excludedCount} responder samples were excluded because they contained fewer than five completed cycles.</p>}
+    <p className="statistics-table-note">{insight.advisoryNotice} Treat responder comparisons as operational indicators, not employee-performance or disciplinary judgments.</p>
+  </div>
 }
 
 function StatisticsSummary({ summary }: { summary: StatisticsResult['summary'] }) {

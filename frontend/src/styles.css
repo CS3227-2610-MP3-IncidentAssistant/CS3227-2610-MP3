@@ -231,6 +231,16 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .statistics-state p, .statistics-refresh-state { margin: 0; }
 .statistics-refresh-state { margin-bottom: 16px; color: var(--color-info); }
 .statistics-table-note { margin: 0; padding: 14px 22px; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+.statistics-insight-panel { margin-bottom: 28px; }
+.statistics-insight-form { display: grid; gap: 9px; padding: 22px; }
+.statistics-insight-form label { font-size: 13px; font-weight: 700; }
+.statistics-insight-form textarea { resize: vertical; min-height: 84px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
+.statistics-insight-form .help-text, .statistics-insight-message { margin: 0; }
+.insight-responder-choice { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 6px 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+.insight-responder-choice legend { padding: 0 5px; font-size: 13px; font-weight: 700; }
+.insight-responder-choice label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.statistics-insight-result { display: grid; gap: 12px; padding: 0 22px 22px; }
+.statistics-insight-result h3, .statistics-insight-result p { margin: 0; }
 
 @media (max-width: 920px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
