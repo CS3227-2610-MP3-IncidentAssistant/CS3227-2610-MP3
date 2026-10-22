@@ -18,6 +18,7 @@ Incident Desk is a web application for reporting workplace incidents, assigning 
 - [Use responder AI incident assistance](#use-responder-ai-incident-assistance)
 - [Administer incidents and accounts](#administer-incidents-and-accounts)
 - [Configure SLOs and review statistics](#configure-slos-and-review-statistics)
+- [Ask about operational statistics](#ask-about-operational-statistics)
 - [Troubleshooting and current limits](#troubleshooting-and-current-limits)
 
 Screenshots captured on 23 October 2026 show a local demonstration with fictional accounts and incidents. Each image focuses on the relevant form, list, or result. They illustrate the interface, not evidence of a public deployment. Your data and available categories may differ.
@@ -177,6 +178,125 @@ The page reports incident outcomes and responder resolution performance, includi
 
 ![Incident outcome metrics before any resolutions](images/mp3/admin-statistics-results.png)
 
+## Ask about operational statistics
+
+The **Statistics** page includes **Ask about operational statistics**, where you
+can ask a question in plain language instead of building filters by hand. The AI
+only interprets your wording into one of the supported queries listed below.
+Every name, count, duration, rate, ranking, date bound, and sample size you see
+is then calculated by the application from stored records, so the numbers are
+reproducible and do not vary between identical questions.
+
+### Ask a question
+
+1. Type a question of 1 to 500 characters into **Question**. Always include a
+   reporting period; without one the application asks you to specify it rather
+   than silently choosing a window.
+2. To compare named responders, tick 2 to 5 people under the responder
+   selector. Responder names typed into the question are not recognised, and
+   your selections are never sent to the AI provider.
+3. Select **Get insight**. While **Interpreting…** appears, the question is
+   being interpreted. **Clear** discards a result or message.
+4. Read the result. **Deterministic answer** shows the metric, ranking
+   direction, limit, grouping, and the exact period in Singapore time with the
+   end bound exclusive, followed by up to 10 rows.
+
+![Statistics filters](images/mp3/admin-statistics-filters.png)
+
+The category and responder filters already applied to the page are applied to
+your question separately. They are not disclosed to the AI provider.
+
+### Sample questions
+
+| Question | What you get |
+| --- | --- |
+| Who had the longest average time in progress in the last 30 days? | Responders ranked by average time in progress, each with its sample size. |
+| Which responder resolved the most incidents this month? | Responder ranking by resolved-cycle count. |
+| Which responders have the highest reopen rate over the past week? | Responder ranking by reopen rate; a zero denominator reads Not available. |
+| Compare the selected responders by resolved count this month. | One row for each responder you ticked, including a zero row for anyone without a qualifying cycle. |
+| Which category had the longest average time to claim this week? | Category ranking by queue time to claim. |
+| Which category has the most reopened incidents in the last 30 days? | Category ranking by reopen count or rate. |
+| Show the weekly incident volume by category for the last 30 days. | A bounded daily, weekly, or monthly series for up to 10 categories. |
+| How did incident volume this month compare with last month? | The same metric across two adjacent, non-overlapping periods. |
+| Where is the oldest unassigned backlog right now? | Current unassigned counts and age buckets by category, plus the oldest age. |
+| Which category metrics were above their configured SLO targets last month? | Observed averages and reopen rate against each applicable target version, one row per version. |
+| Give me an operational overview for the past 30 days. | A fixed combination of volume, resolved count, claim and progress averages, reopen rate, SLO comparisons, and backlog count. |
+
+### Exactly what can be accessed
+
+The feature reads only aggregated operational statistics. It can report:
+
+- incident volume and resolved counts;
+- average time to claim and average time in progress;
+- reopen rate and reopen event count;
+- unassigned backlog counts, age buckets, and oldest unassigned age;
+- observed values compared with the versioned category SLO targets; and
+- administrator-resolved counts.
+
+These can be grouped company-wide, by category, or by responder, over a rolling
+7 or 30 days, a UTC calendar week or month, the previous week or month, or
+explicit dates. A reporting interval may not exceed 366 days, and periods
+ending in the future are rejected.
+
+It cannot access individual incidents or personal data. There is no way to
+retrieve an incident's identifier, title, description, comments, or
+attachments, no reporter grouping or reporter filtering, no access to anonymous
+reporter identities, and no access to audit records or account credentials.
+Questions about one specific incident, including its extremes or details, are
+unsupported and are not quietly widened into a company-level summary. Anonymous
+reports still count towards company and category totals, but their reporters
+cannot be identified or inferred through this feature.
+
+The feature is read-only. An answer cannot create, edit, claim, assign, resolve,
+reopen, withdraw, delete, promote, reset a password, change SLOs, or notify
+anyone. Any action you decide to take afterwards uses the ordinary workflow.
+
+### What the AI provider receives
+
+The provider receives only your validated question, the time of the request, and
+the fixed list of supported queries. It never receives the calculated
+statistics, your category or responder selections, any name, login, identifier,
+incident text, comment, attachment, or audit record.
+
+Because the question itself is disclosed, do not type names, incident details,
+comments, reporter information, identifiers, or links. The application also
+rejects a question containing a known login name, an account or incident
+identifier, an email address, a URL, or control characters before any
+disclosure. Use the responder selector for named comparisons.
+
+### When a question needs changing
+
+If the question is unsupported or unclear, the result is **Clarification
+needed** with one of four prompts, and no statistics query runs:
+
+| Prompt | What to change |
+| --- | --- |
+| Specify a reporting period. | Add a period, such as "in the last 30 days" or "this month". |
+| Specify the operational metric to analyze. | Name one metric, such as time to claim or reopen rate. |
+| Ask about one supported operational statistic. | Rephrase as one of the supported questions above. Individual incidents are unsupported. |
+| Specify one primary period and, if needed, one adjacent comparison period. | Reduce the question to one period, or one period plus one comparison. |
+
+A question that matches no stored activity returns a successful "No qualifying
+data was found." That is an accurate empty result, not a failure.
+
+### Limits to expect
+
+- At most 10 rows per answer. Every responder tied for first place is kept, up
+  to that ceiling.
+- Every responder with at least one qualifying completed cycle appears,
+  whatever their sample size. Nothing is hidden for being a small sample, and
+  each responder row shows its exact sample size.
+- A value that would divide by zero reads Not available rather than zero.
+- Responder results are labelled operational indicators. Treat them as such
+  and not as employee-performance or disciplinary judgments; the feature infers
+  no cause, intent, or competence.
+- Each question is answered on its own. There is no chat history, follow-up
+  context, scheduled analysis, alerting, or forecasting.
+- Results come from a snapshot taken when the query runs, so an incident
+  changed at the same moment may appear only in a later request.
+- If AI is unavailable, over budget, or times out, the message says so and the
+  ordinary statistics view above keeps working.
+
 ## Troubleshooting and current limits
 
 | Situation | What to do |
@@ -187,8 +307,9 @@ The page reports incident outcomes and responder resolution performance, includi
 | Service or network error | Keep a copy of an important draft, restore connectivity, and use the displayed retry or status-check control. |
 | Improve description is disabled | Enter a nonblank title and description and choose a category first. |
 | AI request fails | Continue manually or retry later as the message advises. AI availability is separate from normal incident submission. |
+| An insight question is not answered | Read the clarification prompt and add a period, name one metric, or ask about one supported statistic. Individual incidents are unsupported. |
 | Another user changed the same item | Refresh and review its latest state before acting again. |
 
 The web application stores shared records on its server database. A browser refresh can lose an unsubmitted form; there is no saved-draft workflow. Do not use the old desktop application's local JSON files or JAR instructions for this web version.
 
-The current web interface does not offer Reporter incident editing/reopening, attachment upload, Reporter or Responder comment creation, responder handoff, or an audit-log browser. AI assistance is available for Reporter descriptions and authorized Responder incident details. This guide describes available controls rather than planned desktop-feature parity.
+The current web interface does not offer Reporter incident editing/reopening, attachment upload, Reporter or Responder comment creation, responder handoff, or an audit-log browser. AI assistance is available for Reporter descriptions, authorized Responder incident details, and Administrator questions about operational statistics. This guide describes available controls rather than planned desktop-feature parity.
