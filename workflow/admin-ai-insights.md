@@ -1,7 +1,7 @@
 # Administrator AI Insights Specification
 
-Status: **Draft — product and security/architecture approval are required
-before implementation.**
+Status: **Approved for implementation on 2026-10-23 — verification and release
+approval remain pending.**
 
 This specification refines the Administrator AI capability in
 `.agents/ai-policy.md` and `ai-features.md`. It allows an authenticated
@@ -362,9 +362,11 @@ statistics-unavailable result and never retries the provider.
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
-- Product approver/date: pending.
-- Security/architecture approver/date: pending.
-- Provider-retention risk acceptance: pending.
+- Product approver/date: repository user, 2026-10-23 (Asia/Singapore).
+- Security/architecture approver/date: repository user, 2026-10-23
+  (Asia/Singapore).
+- Provider-retention risk acceptance: repository user explicitly accepted the
+  provider's undocumented prompt/response-retention risk on 2026-10-23.
 
-No criterion is checked because this document is a draft and implementation
-and required human approvals are pending.
+No criterion is checked because implementation and verification evidence are
+pending. See `reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.

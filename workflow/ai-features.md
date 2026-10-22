@@ -1,7 +1,7 @@
 # SoCLaaS AI Feature and Gateway Specification
 
-Status: **Draft — provider documentation verified on 2026-10-18; product and
-security/architecture approval are required before implementation.**
+Status: **Approved for implementation on 2026-10-23 — provider documentation
+was verified on 2026-10-18; verification and release approval remain pending.**
 
 This specification refines `.agents/ai-policy.md` for the three approved
 advisory AI features. The Administrator contract is further refined by
@@ -341,6 +341,14 @@ below.
 The repository user confirmed agreement with this specification and authorized
 issue #2 implementation in the working session on 2026-10-18. This is not an
 independent security review or release approval.
+
+On 2026-10-23 the repository user explicitly approved this specification and
+`admin-ai-insights.md` as both product owner and security/architecture reviewer,
+including acceptance of the provider's undocumented prompt/response-retention
+risk. This authorizes implementation but does not satisfy implementation
+verification, independent code review, deployed verification, or release
+approval. See
+`reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.
 
 The provider adapter in `infrastructure.soclaas` uses Java's built-in HTTP client
 and existing Jackson support; Spring AI is not required. It has no public route

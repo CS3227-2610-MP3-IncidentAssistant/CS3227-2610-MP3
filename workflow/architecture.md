@@ -36,8 +36,10 @@ a separate static frontend.
   call. The provider has no application credentials, database access,
   application or MCP tools, callback, result visibility, or mutation path.
   Exact limits, key handling, circuit behavior, and acceptance criteria are
-  specified in `ai-features.md` and `admin-ai-insights.md`; the design remains
-  draft until the required human security/architecture approval.
+  specified in `ai-features.md` and `admin-ai-insights.md`; the repository user
+  approved this AI trust boundary for implementation as product owner and
+  security/architecture reviewer on 2026-10-23, including the documented
+  provider-retention risk. Verification and release approval remain pending.
 - Development/test/production configuration: TODO
 - Health checks, logging, monitoring, backup, and restore: TODO
 - Deployment topology and rollback/forward-fix strategy: TODO
