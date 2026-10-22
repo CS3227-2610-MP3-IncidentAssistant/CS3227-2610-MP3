@@ -610,9 +610,17 @@ The administrator slice is acceptable when:
   options, SLO overview, and stale-response protection.
 - [ ] Incident detail renders privacy-safe lifecycle, resolution, SLO, comment,
   and image-attachment data without exposing an anonymous identity.
+  Backend-only automated evidence is recorded in
+  [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md).
+  The criterion remains open pending the React page, interaction/accessibility,
+  browser end-to-end, and deployed verification.
 - [ ] Assign/reassign, unassign, resolve, and comment operations reauthorize at
   execution, reject stale or invalid state, prevent duplicate mutation, and
   commit required audit evidence atomically.
+  Backend-only automated evidence is recorded in
+  [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md).
+  The criterion remains open pending the React page, interaction/accessibility,
+  browser end-to-end, and deployed verification.
 - [ ] The account directory supports pending-promotion review, approval and
   rejection, Responder category replacement, one-time temporary-password
   reset, eligible account tombstoning, and controlled Administrator
