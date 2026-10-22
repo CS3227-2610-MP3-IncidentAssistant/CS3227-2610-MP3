@@ -45,7 +45,6 @@ function renderShell(onSelect: () => void) {
       navigationLabel="Responder navigation"
       onLogout={async () => {}}
       roleLabel="Responder"
-      serviceHealth="available"
     >
       <main>Queue content</main>
     </RoleShell>,

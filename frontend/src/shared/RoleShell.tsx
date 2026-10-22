@@ -1,5 +1,4 @@
 import { type ReactNode, useRef, useState, useSyncExternalStore } from 'react'
-import type { HealthState } from '../health/useServiceHealth'
 
 export type RoleNavigationItem = {
   label: string
