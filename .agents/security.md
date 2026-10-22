@@ -49,6 +49,10 @@
   ownership, assignment, category access, or account state could matter.
 - The AI gateway receives only already-authorized, allowlisted data and cannot
   call domain mutations.
+- An Administrator AI query plan is untrusted provider output. Validate it
+  against the closed schema in `workflow/admin-ai-insights.md`; dispatch only
+  typed read-only analytics handlers and never interpret it as SQL, code, a
+  URL, a repository method, an authorization decision, or a mutation.
 
 ## Configuration and logging
 

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IncidentCategory } from '../api'
-import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 import {
   AttachmentList,
@@ -62,12 +61,11 @@ const initialFilters: DraftFilters = {
   assignment: 'ALL',
 }
 
-export function ResponderPortal({ categories, loginName, onLogout, onUpdatePassword, serviceHealth }: {
+export function ResponderPortal({ categories, loginName, onLogout, onUpdatePassword }: {
   categories: IncidentCategory[]
   loginName: string
   onLogout: () => Promise<void>
   onUpdatePassword?: () => void
-  serviceHealth: HealthState
 }) {
   const [draft, setDraft] = useState<DraftFilters>(initialFilters)
   const [query, setQuery] = useState<ResponderQueueQuery>({ ...initialFilters, page: 0, size: PAGE_SIZE })
@@ -332,7 +330,6 @@ export function ResponderPortal({ categories, loginName, onLogout, onUpdatePassw
       onLogout={signOut}
       onUpdatePassword={onUpdatePassword}
       roleLabel="Responder"
-      serviceHealth={serviceHealth}
     >
       <main id="main-content" className="content">
         <header className="page-header">

@@ -8,18 +8,27 @@ Only these advisory features are in the MP3 scope:
    incident description.
 2. Responder: summarize one currently authorized incident and suggest
    investigation steps.
-3. Administrator: summarize privacy-safe aggregate operational trends.
+3. Administrator: summarize privacy-safe aggregate operational trends and ask
+   bounded operational-statistics questions through the closed, read-only query
+   plan defined in `workflow/admin-ai-insights.md`.
 
-Adding a chatbot, autonomous agent, retrieval over all incidents, attachment
-analysis, or an AI-triggered application action requires a new approved
-specification and threat review.
+Adding a general chatbot, autonomous agent, retrieval over incident rows,
+attachment analysis, provider-executed application tool, externally reachable
+MCP server, persistent conversation memory, or an AI-triggered application
+action requires a new approved specification and threat review. The bounded
+Administrator question interpreter is not a general chatbot: it produces one
+closed query plan for deterministic application execution and retains no
+conversation state.
 
 ## Trust and authority boundaries
 
 - The LLM is an untrusted text generator, not an authenticated application
   actor and not an authorization source.
-- The gateway exposes no tools that create, edit, claim, assign, reassign,
+- The provider receives no tools that create, edit, claim, assign, reassign,
   resolve, withdraw, reopen, delete, promote, reset, configure, or audit.
+- Administrator analytics capabilities are application-owned, read-only typed
+  handlers. The provider cannot invoke them directly, supply SQL, select an
+  arbitrary handler, or observe their results during query planning.
 - Provider output is never interpreted as a command, URL to fetch, template,
   HTML, or authorization decision.
 - A user reviews output before copying or applying it. Applying a reporter
@@ -37,9 +46,12 @@ specification and threat review.
 - Responder input is limited to the authorized incident's operational fields
   and comments explicitly approved by the feature specification. Anonymous
   identity and attachment content are excluded.
-- Administrator input contains aggregate counts, durations, rates, category
-  names, and time bounds only. It contains no raw incident or comment text and
-  no reporter identity.
+- Administrator trend-summary input contains aggregate counts, durations,
+  rates, category names, and time bounds only. Administrator insight-planning
+  input contains only the validated question, request instant, and fixed closed
+  query vocabulary. Neither form contains raw incident or comment text,
+  reporter identity, responder identity, account/incident identifier, or
+  structured responder/category selections.
 - Never send credentials, password material, session identifiers, API keys,
   reset secrets, anonymous identity, unrelated incidents, audit secrets,
   attachment bytes, client paths, or internal stack traces.

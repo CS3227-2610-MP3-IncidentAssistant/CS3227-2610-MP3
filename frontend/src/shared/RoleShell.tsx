@@ -19,13 +19,6 @@ type RoleShellProps = {
   onLogout: () => Promise<void>
   onUpdatePassword?: () => void
   roleLabel: string
-  serviceHealth: HealthState
-}
-
-const healthLabels: Record<HealthState, string> = {
-  checking: 'Checking service',
-  available: 'Service available',
-  unavailable: 'Service unavailable',
 }
 
 const narrowNavigationQuery = '(max-width: 720px)'
@@ -52,7 +45,6 @@ export function RoleShell({
   onLogout,
   onUpdatePassword,
   roleLabel,
-  serviceHealth,
 }: RoleShellProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const narrowNavigation = useSyncExternalStore(subscribeToNarrowNavigation, isNarrowNavigation, () => false)
@@ -122,13 +114,6 @@ export function RoleShell({
           </div>
           {onUpdatePassword && <button className="sidebar__account-action" type="button" onClick={onUpdatePassword}>Update password</button>}
           <button className="sidebar__sign-out" type="button" onClick={signOut}>Sign out</button>
-          <div className="sidebar__status">
-            <span className={`status-dot status-dot--${serviceHealth}`} aria-hidden="true" />
-            <span>
-              <strong>{healthLabels[serviceHealth]}</strong>
-              <small>Spring Boot health</small>
-            </span>
-          </div>
         </div>
       </aside>
 
