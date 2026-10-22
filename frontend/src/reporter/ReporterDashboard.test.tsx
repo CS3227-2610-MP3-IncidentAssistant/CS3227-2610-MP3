@@ -91,7 +91,7 @@ describe('Reporter walking slice', () => {
     fireEvent.click(screen.getByLabelText('Submit anonymously'))
     fireEvent.click(screen.getByRole('button', { name: 'Submit incident' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Incident submitted')
+    expect(await screen.findByText(/Incident submitted/)).toHaveAttribute('role', 'status')
     await waitFor(() => expect(listCalls).toBe(2))
     const submission = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/reporter/incidents')
     expect(new Headers(submission?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('reporter-csrf')
