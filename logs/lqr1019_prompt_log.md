@@ -5,6 +5,7 @@
 - User attribution: `lqr1019_prompt_log` (supplied by the user for conversation logging)
 - Coverage: 114 historical turns across four available project tasks, plus this logging request.
 - Repository reference: `a71e488`
+- MP3 update: the supplement below covers available October 2026 tasks.
 
 ## Scope and evidence
 
@@ -758,6 +759,75 @@ The following supplements the conversations with repository evidence. These rows
 - **Artifact:** `logs/DevelopmentAIInteractionSummary.md`.
 - **Verification:** Entry counts and source-turn coverage are checked against the retrieved records; whitespace and repository scope are checked after writing. Application tests are not rerun for this documentation-only change.
 - **Follow-up:** Missing teammate/other-tool conversations would need to be supplied to extend coverage. No commit or push was requested.
+
+## MP3 prompt summary supplement — 2026-10-23
+
+This supplement covers prompts available in three MP3 Codex tasks and this
+conversation. It summarizes the user's requests and the recorded outcomes; it
+does not reproduce prompts verbatim or infer prompts from Git commits. Repeated
+one-word instructions such as “continue” and “commit” are grouped with the
+feature step they controlled. The earlier MP2 source index and entries above
+remain a historical snapshot and are not retroactively reclassified as MP3 work.
+
+| Source | Task title | Prompt-bearing turns | Scope |
+| --- | --- | ---: | --- |
+| M1 | Plan responder features for MP3 | 110 | Responder planning, workflow setup, issues #5–#7, local verification and CI |
+| M2 | Plan incident resolution AI role | 9 | Responder AI issue #23, specification approval and implementation |
+| M3 | Verify workflow auto-loading | 2 | Personal workflow discovery and essential-feature inventory |
+| M4 | Add MP3 implementation reflections | 8 | Reflections, guide updates, Git operations and this log request |
+
+M1 source task: `01a1519c-d0b2-7b72-b189-94e4ba690d04` (19–23 October 2026,
+Asia/Singapore). M2 source task: `01a164c1-73b9-7930-9e44-a616641bd0df`.
+M3 source task: `01a151cd-4a81-7102-ada5-2965a31ca886`. M4 source task:
+`01a1652b-ffaf-7cd1-80c9-209b2126ecaf`. Source titles identify the tasks,
+not approvals or proof that every MP3 conversation is available here.
+
+### M1: Planning, workflow and responder implementation
+
+| Turn range | Prompt summary | Recorded interaction and outcome |
+| --- | --- | --- |
+| M1.01–15 | Compare MP2 with MP3 requirements; use the MP2 grade report; plan how the human developer should apply AI security, specification-driven development and multiple agents. Ask whether GitHub issues can hold feature plans, then request reusable analyst, developer and reviewer agents and a personal responder-only workflow. | The agent proposed a responder web slice and a human-led SDD process. After the user corrected the initial focus on application AI, the workflow was scoped to the developer's use of Codex. The personal entry point and three role profiles were kept outside shared team policy. |
+| M1.16–28 | Prioritize MP2 feedback as P0 MP3 issues and create them. Investigate GitHub issue-write failures, including several screenshot-guided permission checks, then retry after the connector was installed for the MP3 organization. | Initial issue creation failed with a 403. After the connection was corrected, issues #5 (administrator bootstrap), #6 (promotion journey) and #7 (responder core journey) were created. The failed attempts were not described as successful issue creation. |
+| M1.29–39 | Keep work within responder or shared responsibilities while asking to implement #5; clarify bootstrap documentation and audit-actor limits; approve a `SYSTEM` bootstrap actor; request isolated database verification, commit, push and closure. | The agent implemented bootstrap hardening, used a system audit actor rather than misattributing bootstrap to an administrator, recorded isolated PostgreSQL evidence, and reported pushing and closing #5. |
+| M1.40–63 | Plan and implement the cross-role Reporter-to-Responder promotion journey for #6. Ask for smaller reviewable commits, local setup and startup help, and fixes for CI failures. Later direct removal of an overly complicated failing journey test. | The agent built and committed promotion changes, diagnosed Spring wiring and test database issues, and reported local startup. The requested integration test removal left its end-to-end acceptance criterion open; later passing unit tests were not presented as proof of that missing journey. |
+| M1.64–70 | Ask whether #7 can start, review its acceptance criteria, explicitly record product approval and a scoped human security-review waiver, then commit those decisions. | The agent kept implementation behind the documented approval gates, recorded the user's decisions in the responder specification and review record, and committed the approved contract. |
+| M1.71–88 | Implement #7 in roughly eight small commits, stopping for review between steps. Repeated “continue” and “commit” prompts advanced the authorized queue API, search and filters, private query body, React queue, atomic claim, detail, resolution, attachments and history. Ask about remaining Reporter and browser-verification dependencies, then push and fix a CI migration-count failure. | The agent reported focused checks for each increment and later a passing isolated PostgreSQL suite. Earlier PostgreSQL tests had been skipped when no isolated database was configured. The user kept Reporter-owned operations and manual browser checks as separate remaining work. |
+| M1.89–99 | Diagnose local administrator sign-in and database/bootstrap configuration; ask how a user becomes a Responder and challenge the claim that no promotion form exists. | The agent guided local database and bootstrap troubleshooting without treating a bootstrap variable as a password reset. It initially misread an outdated guide and said the promotion UI was absent; after the user's screenshot, it corrected the answer and identified the existing Reporter request form. |
+| M1.100–110 | Pull new work, finish #7 where possible, commit responder timeline and mobile-navigation improvements, ask what remains, push, inspect a failing PR and commit/push the CI fix. | The agent reported more responder history, queue/session and mobile navigation checks. It kept #7 open while human browser/accessibility checks and Reporter dependencies remained unresolved. The last response reported the CI fix pushed to PR #27 while its new run was still in progress. |
+
+### M2: Responder AI assistance
+
+| Turn range | Prompt summary | Recorded interaction and outcome |
+| --- | --- | --- |
+| M2.01–03 | Request an LLM feature and GitHub issue for responder resolution help; choose a summary with suggested investigation steps rather than generated resolution remarks; ask what approval remains and accept stage-specific elapsed-time guidance. | The agent opened issue #23, refined the incident-data and SLO contract, and kept the feature advisory. |
+| M2.04–07 | Say the security and architecture review was approved, ask where to record it, request a draft for human review, then commit the approved specification. | The agent requested a verifiable approval location, prepared a dated review record, and committed the specification and approval record as `88ec5cd`. |
+| M2.08–09 | Authorize implementation, then approve the reviewer-recommended readability cleanup. | The agent reported implementing responder AI incident advice and opening PR #25. Its verification record reports fake-provider and isolated PostgreSQL tests; live-provider, narrow-layout and deployed manual checks remained open. |
+
+### M3: Workflow checks
+
+| Turn | Prompt summary | Recorded interaction and outcome |
+| --- | --- | --- |
+| M3.01 | Verify that the personal responder workflow loads automatically. | The agent reported that the personal entry point and three role profiles were visible, while shared and external guides still required explicit reads. No feature code changed. |
+| M3.02 | List the essential MP3 features. | The agent summarized shared, Reporter, Responder, Administrator, AI and delivery MVP requirements as a requirements checklist, not an implementation-status claim. |
+
+### M4: Documentation and repository follow-up
+
+| Turn | Prompt summary | Recorded interaction and outcome |
+| --- | --- | --- |
+| M4.01 | Add MP3 implementation reflections without editing existing reflections. | A new MP3 section was added to `docs/Reflections.md`; existing text was preserved. |
+| M4.02 | Move the new section before “Overall reflection.” | The section was moved and the diff showed eight added lines, no removed lines. |
+| M4.03 | Commit the reflection change. | Committed as `aea6781`; the unrelated staged `env.local` entry was excluded. |
+| M4.04 | Pull remote changes. | Fetched and merged `origin/main` into local `main` as `57b9ca2`, then restored the pre-existing staged `env.local` entry. |
+| M4.05 | Push local `main`. | Pushed through `57b9ca2`; `env.local` stayed local. |
+| M4.06 | Update the User and Developer Guides for responder AI assistance. | Documented the responder advice workflow, endpoint, authorization, provider data and test references. `git diff --check` passed; application tests were not rerun for this documentation-only change. |
+| M4.07 | Commit and push the guide updates. | Committed and pushed `550c4bf` to `origin/main`; the staged `env.local` entry remained outside the commit. |
+| M4.08 | Update this prompt log with the user's MP3 prompt summary. | Added this dated supplement from the available MP3 task records, separating user prompts and recorded agent outcomes from unverified or unavailable history. |
+
+The M1 and M2 outcomes above are summaries of task responses, not newly run
+checks or independent confirmation of GitHub issue, PR or deployment status.
+Screenshot contents and any private credentials are not reproduced. Other team
+members' chats, unavailable tasks, and work outside these MP3 conversations are
+outside this supplement's coverage.
 
 ## Maintaining this record
 
