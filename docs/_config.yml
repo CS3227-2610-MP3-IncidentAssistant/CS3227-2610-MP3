@@ -1,12 +1,12 @@
 title: Incident Desk
-description: A local desktop application for reporting and managing company incidents.
+description: A web application for reporting and managing company incidents.
 remote_theme: just-the-docs/just-the-docs@v0.12.0
 
 plugins:
   - jekyll-remote-theme
 
-url: https://cs3227-2610-mp2-incidentassistant.github.io
-baseurl: /CS3227-2610-MP2
+url: https://cs3227-2610-mp3-incidentassistant.github.io
+baseurl: /CS3227-2610-MP3
 
 search_enabled: true
 nav_enabled: true

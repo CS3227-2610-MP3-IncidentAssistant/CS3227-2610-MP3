@@ -1,9 +1,12 @@
-# CS3227 MP 2
+# CS3227 MP 3
 
-[Open the Incident Desk project website](https://cs3227-2610-mp2-incidentassistant.github.io/CS3227-2610-MP2/)
+- Live application: <https://incidentdesk.cloud.run>
+- Project website: <https://cs3227-2610-mp3-incidentassistant.github.io/CS3227-2610-MP3/>
 
-Incident Desk is a local JavaFX desktop application for company incident
-reporting. It targets Java 25 and is built with the checked-in Gradle Wrapper.
+Incident Desk is a concurrent web application for internal company incident
+reporting, with Reporter, Responder, and Administrator roles. It targets
+Java 25, is built with the checked-in Gradle Wrapper, and is deployed to
+Cloud Run against shared PostgreSQL persistence.
 
 See [the developer guide](docs/DeveloperGuide.md) for setup, build, test, and
 architecture details.
@@ -68,7 +71,8 @@ startup; local development remains available without provider credentials. See
 Vite proxies `/health` and future `/api` requests to Spring Boot. A normal
 Gradle build compiles the React production assets into the Spring Boot web JAR.
 Production deployment builds one container and deploys it to Cloud Run through
-the protected `production` GitHub environment. Configure that environment with
+the protected `production` GitHub environment. The deployed service is
+published at <https://incidentdesk.cloud.run>. Configure that environment with
 the `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`,
 `CLOUD_RUN_SERVICE`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
 `GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT` variables. The
