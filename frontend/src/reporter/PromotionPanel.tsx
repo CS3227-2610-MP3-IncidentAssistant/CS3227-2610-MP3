@@ -7,6 +7,7 @@ import {
   type PromotionRequestRecord,
   type SessionRefresher,
 } from '../api'
+import { Pagination } from '../shared/Pagination'
 
 const categories: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
 const categoryNames: Record<IncidentCategory, string> = {
@@ -17,19 +18,30 @@ const categoryNames: Record<IncidentCategory, string> = {
 
 export function PromotionPanel({ onRefreshSession }: { onRefreshSession: SessionRefresher }) {
   const [requests, setRequests] = useState<PromotionRequestRecord[]>([])
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [hasPendingRequest, setHasPendingRequest] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<IncidentCategory[]>([])
   const [comments, setComments] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  const [feedback, setFeedback] = useState('')
+  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [revision, setRevision] = useState(0)
-  const hasPendingRequest = requests.some((request) => request.status === 'PENDING')
 
   useEffect(() => {
     const controller = new AbortController()
-    loadPromotionHistory(controller.signal)
-      .then((history) => setRequests(history.requests))
+    loadPromotionHistory(page, controller.signal)
+      .then((history) => {
+        setRequests(history.requests)
+        setTotalPages(Math.max(1, history.totalPages))
+        setTotalElements(history.totalElements)
+        if (page === 0) {
+          setHasPendingRequest(history.requests.some((request) => request.status === 'PENDING'))
+        }
+        setLoadError(false)
+      })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) setLoadError(true)
       })
@@ -37,12 +49,18 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [revision])
+  }, [page, revision])
 
   function reload() {
     setLoading(true)
     setLoadError(false)
     setRevision((current) => current + 1)
+  }
+
+  function loadPage(nextPage: number) {
+    setLoading(true)
+    setLoadError(false)
+    setPage(nextPage)
   }
 
   function toggleCategory(category: IncidentCategory) {
@@ -53,9 +71,9 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setFeedback('')
+    setFeedback(null)
     if (selectedCategories.length === 0) {
-      setFeedback('Select at least one category.')
+      setFeedback({ message: 'Select at least one category.', error: true })
       return
     }
     setSubmitting(true)
@@ -63,15 +81,18 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
       await submitPromotionRequest(selectedCategories, comments, onRefreshSession)
       setSelectedCategories([])
       setComments('')
-      setFeedback('Your promotion request was submitted.')
+      setFeedback({ message: 'Your promotion request was submitted.', error: false })
+      setPage(0)
       reload()
     } catch (error) {
-      const message = error instanceof ApiError && error.status === 409
+      const message = error instanceof ApiError && (error.status === 401 || error.code === 'UNAUTHENTICATED')
+        ? 'Your session has expired. Sign in again before submitting a request.'
+        : error instanceof ApiError && error.status === 409
         ? 'A promotion request is already pending. Refresh to see its status.'
         : error instanceof Error
           ? error.message
           : 'The promotion request could not be submitted. Try again.'
-      setFeedback(message)
+      setFeedback({ message, error: true })
     } finally {
       setSubmitting(false)
     }
@@ -92,7 +113,11 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
           <h2 id="promotion-request-heading">Request Responder access</h2>
           <p>Select one or more categories. An Administrator may approve a subset.</p>
         </div>
-        {feedback && <p className="form-error" role="status">{feedback}</p>}
+        {feedback && (
+          <p className={feedback.error ? 'form-error' : 'form-success'} role={feedback.error ? 'alert' : 'status'}>
+            {feedback.message}
+          </p>
+        )}
         {loading ? (
           <p role="status">Checking for a pending request…</p>
         ) : loadError ? (
@@ -121,8 +146,11 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
               rows={4}
               value={comments}
               onChange={(event) => setComments(event.target.value)}
+              aria-describedby="promotion-comments-help"
             />
-            <p className="help-text">Up to 2,000 characters.</p>
+            <p className="help-text" id="promotion-comments-help">
+              {comments.length.toLocaleString()} of 2,000 characters.
+            </p>
             <button className="primary-button" type="submit" disabled={submitting}>
               {submitting ? 'Submitting…' : 'Submit request'}
             </button>
@@ -135,13 +163,10 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
             <p className="eyebrow">Your requests</p>
             <h2 id="promotion-history-heading">Request history</h2>
           </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={reload}
-          >
-            Refresh
-          </button>
+          <div className="section-heading__actions">
+            <span className="data-state">{totalElements} requests</span>
+            <button className="secondary-button" type="button" onClick={reload}>Refresh</button>
+          </div>
         </div>
         {loading && <p className="panel-state" role="status">Loading request history…</p>}
         {!loading && loadError && (
@@ -162,8 +187,10 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
                 <tr>
                   <th scope="col">Submitted</th>
                   <th scope="col">Requested</th>
+                  <th scope="col">Comments</th>
                   <th scope="col">Approved</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Decided</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,15 +198,26 @@ export function PromotionPanel({ onRefreshSession }: { onRefreshSession: Session
                   <tr key={request.requestId}>
                     <td>{new Date(request.requestedAt).toLocaleString()}</td>
                     <td>{request.requestedCategories.map((category) => categoryNames[category]).join(', ')}</td>
+                    <td className="promotion-comment">{request.comments ?? 'None'}</td>
                     <td>{request.approvedCategories === null
                       ? 'Pending decision'
                       : request.approvedCategories.map((category) => categoryNames[category]).join(', ') || 'None'}</td>
                     <td><span className="status-badge">{request.status}</span></td>
+                    <td>{request.decidedAt ? new Date(request.decidedAt).toLocaleString() : 'Pending'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+        {!loadError && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            ariaLabel="Promotion request history pages"
+            disabled={loading}
+            onPageChange={loadPage}
+          />
         )}
       </section>
     </>

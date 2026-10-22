@@ -35,8 +35,14 @@ describe('Administrator promotion review', () => {
 
     render(<PromotionRequests onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
     expect(await screen.findByRole('heading', { name: 'reporter-two' })).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('IT'))
+    expect(screen.getByLabelText('IT')).toBeChecked()
+    expect(screen.getByLabelText('Facilities')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('Facilities'))
     fireEvent.click(screen.getByRole('button', { name: 'Approve selected categories' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'Promote reporter-two and grant exactly IT access?',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm promotion' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/admin/promotion-requests/request-2/decision',
@@ -45,6 +51,7 @@ describe('Administrator promotion review', () => {
         body: JSON.stringify({ decision: 'APPROVE', approvedCategories: ['IT'] }),
       }),
     ))
+    expect(await screen.findByRole('status')).toHaveFocus()
   })
 
   it('requires a category selection before approving', async () => {
@@ -67,10 +74,48 @@ describe('Administrator promotion review', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<PromotionRequests onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+    fireEvent.click(await screen.findByLabelText('Facilities'))
     fireEvent.click(await screen.findByRole('button', { name: 'Approve selected categories' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Select at least one category')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('confirms rejection without offering a category grant', async () => {
+    document.cookie = 'XSRF-TOKEN=csrf-value; path=/'
+    const request = {
+      requestId: 'request-4',
+      requesterLabel: 'reporter-four',
+      requestedCategories: ['IT'],
+      approvedCategories: null,
+      comments: null,
+      requestedAt: '2026-10-19T08:00:00Z',
+      status: 'PENDING',
+      decidedAt: null,
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/decision') && init?.method === 'POST') {
+        return response({ ...request, approvedCategories: [], status: 'REJECTED' })
+      }
+      return response({ requests: [request], page: 0, size: 25, totalElements: 1, totalPages: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<PromotionRequests onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      "The request will close without changing their role or category access.",
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rejection' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/promotion-requests/request-4/decision',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ decision: 'REJECT' }),
+      }),
+    ))
   })
 })
 

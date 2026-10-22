@@ -29,8 +29,8 @@ export type PromotionRequestRecord = {
   decidedAt: string | null
 }
 
-export type PromotionRequestHistory = { requests: PromotionRequestRecord[] }
-export type PromotionRequestPage = PromotionRequestHistory & {
+export type PromotionRequestPage = {
+  requests: PromotionRequestRecord[]
   page: number
   size: number
   totalElements: number
@@ -159,8 +159,12 @@ export async function roleLogin(
   }, refreshSession, { fallbackMessage: 'Sign-in failed' })
 }
 
-export async function loadPromotionHistory(signal?: AbortSignal): Promise<PromotionRequestHistory> {
-  return requestJson<PromotionRequestHistory>('/api/v1/reporter/promotion-request', { signal })
+export async function loadPromotionHistory(
+  page: number,
+  signal?: AbortSignal,
+): Promise<PromotionRequestPage> {
+  const parameters = new URLSearchParams({ page: String(page), size: '25' })
+  return requestJson<PromotionRequestPage>(`/api/v1/reporter/promotion-request?${parameters}`, { signal })
 }
 
 export async function submitPromotionRequest(

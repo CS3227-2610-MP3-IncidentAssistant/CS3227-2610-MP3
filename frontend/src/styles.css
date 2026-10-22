@@ -79,6 +79,7 @@ button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2p
 .notice p { margin: 0; font-size: 14px; }
 .section-heading { align-items: end; margin-bottom: 16px; }
 .section-heading h2 { margin: 4px 0 0; font-size: 21px; }
+.section-heading__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
 .data-state { color: var(--color-text-muted); font-size: 12px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 36px; }
 .metric-card { padding: 20px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-card); }
@@ -197,6 +198,7 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .temporary-password-field { margin-top: 18px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .promotion-requests > .section-heading { align-items: flex-start; }
 .promotion-requests > .section-heading p:not(.eyebrow) { margin: 6px 0 0; color: var(--color-text-muted); }
+.promotion-comment { min-width: 220px; max-width: 420px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .slo-configuration-list { display: grid; gap: 24px; }
 .slo-category-selector { margin-bottom: 24px; }
 .slo-category-selector > label { display: block; padding: 18px 22px 7px; font-size: 13px; font-weight: 700; }

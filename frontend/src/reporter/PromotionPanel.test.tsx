@@ -25,9 +25,9 @@ describe('Reporter promotion requests', () => {
           decidedAt: null,
         }, 201)
       }
-      if (url === '/api/v1/reporter/promotion-request') {
+      if (url === '/api/v1/reporter/promotion-request?page=0&size=25') {
         historyRequests += 1
-        return response({ requests: historyRequests === 1 ? [] : [{
+        const requests = historyRequests === 1 ? [] : [{
           requestId: 'request-1',
           requestedCategories: ['IT'],
           approvedCategories: null,
@@ -35,7 +35,8 @@ describe('Reporter promotion requests', () => {
           requestedAt: '2026-10-19T08:00:00Z',
           status: 'PENDING',
           decidedAt: null,
-        }] })
+        }]
+        return response({ requests, page: 0, size: 25, totalElements: requests.length, totalPages: 1 })
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -61,7 +62,9 @@ describe('Reporter promotion requests', () => {
   })
 
   it('does not submit an empty category selection', async () => {
-    const fetchMock = vi.fn(async () => response({ requests: [] }))
+    const fetchMock = vi.fn(async () => response({
+      requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1,
+    }))
     vi.stubGlobal('fetch', fetchMock)
 
     render(<PromotionPanel onRefreshSession={async () => ({ authenticated: true, role: 'REPORTER' })} />)
@@ -69,6 +72,39 @@ describe('Reporter promotion requests', () => {
 
     expect(await screen.findByText('Select at least one category.')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('pages through retained history and renders comments as text', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const page = url.includes('page=1') ? 1 : 0
+      return response({
+        requests: [{
+          requestId: `request-${page}`,
+          requestedCategories: ['FACILITIES'],
+          approvedCategories: [],
+          comments: page === 0 ? 'First page' : '<img src=x onerror=alert(1)>',
+          requestedAt: '2026-10-19T08:00:00Z',
+          status: 'REJECTED',
+          decidedAt: '2026-10-20T08:00:00Z',
+        }],
+        page,
+        size: 25,
+        totalElements: 26,
+        totalPages: 2,
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<PromotionPanel onRefreshSession={async () => ({ authenticated: true, role: 'REPORTER' })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+
+    expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument()
+    expect(document.querySelector('img')).toBeNull()
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/reporter/promotion-request?page=1&size=25',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
   })
 })
 
