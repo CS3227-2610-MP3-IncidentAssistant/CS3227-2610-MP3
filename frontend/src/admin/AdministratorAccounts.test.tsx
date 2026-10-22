@@ -56,7 +56,7 @@ describe('Administrator account directory', () => {
     expect(deleteButton).toHaveClass('danger-outline-button')
     fireEvent.click(deleteButton)
     const confirmation = screen.getByRole('dialog', { name: 'This action cannot be undone' })
-    expect(within(confirmation).getByText(/incident and audit history is retained/i)).toBeInTheDocument()
+    expect(within(confirmation).getByText(/historical incident references are retained/i)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Delete account' }))

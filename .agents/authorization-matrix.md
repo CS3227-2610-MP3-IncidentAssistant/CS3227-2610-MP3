@@ -27,7 +27,7 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 | Change responder categories | No | No | Allowed |
 | Configure SLO | No | No | Allowed |
 | View own performance | No | Own statistics | All responder/statistical views |
-| View audit log | No | No | Allowed |
+| View internal audit records | No | No | No; the application exposes no audit-history endpoint or UI |
 | Delete/reset account | No | No | Allowed, subject to retention/security rules |
 | AI improve draft | Own current draft text only | No | No |
 | AI incident summary / suggested steps | No | An incident currently viewable under the detail rule | No |

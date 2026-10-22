@@ -35,8 +35,8 @@ migrations and shared sessions were left open.
 - Production cookies are Secure, HttpOnly, host-only, SameSite=Lax, and have a
   bounded lifetime. Authenticated and protected responses use private/no-store
   caching.
-- Incident-scoped audit UI is omitted; the global administrator audit UI is
-  retained.
+- Audit records remain internal backend integrity data; no incident-scoped or
+  global audit-history endpoint or UI is exposed.
 
 ## Consequences
 

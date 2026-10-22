@@ -3,7 +3,7 @@
 ## Meaning of anonymous
 
 An anonymous report hides the reporter's identity from responders and from
-normal administrator incident, statistics, export, and audit views. The
+normal administrator incident, statistics, and export views. The
 application retains an internal reporter link so the reporter can view the
 incident, receive its status, and post a follow-up.
 
@@ -16,7 +16,7 @@ anonymity than the implementation provides.
 
 - Return a neutral label such as `Anonymous reporter` in every incident-facing
   view and transfer object.
-- Do not reveal identity through comments, audit actor labels, filters,
+- Do not reveal identity through comments, filters,
   statistics, notifications, attachment paths/names, exports, error messages,
   logs, metrics, AI prompts, AI responses, provider errors, or workflow
   evidence.
@@ -48,6 +48,6 @@ confirmation, audit, and display rules before implementation.
 ## Testing expectations
 
 Test every representation of an anonymous incident, including HTTP responses,
-detail/list views, audit displays, statistics, filters, exports, comments,
+detail/list views, statistics, filters, exports, comments,
 attachments, notifications, serialized models, AI provider payloads,
 application/CI logs, metrics, and failure messages.

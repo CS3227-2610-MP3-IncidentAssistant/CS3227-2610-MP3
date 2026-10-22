@@ -134,7 +134,6 @@ An administrator can:
   high-entropy one-time temporary password, displays it only after durable commit, and expires it after
   24 hours. A user authenticated with it must replace it before accessing any role workflow.
 - Configure SLO targets for each incident category.
-- View incident and application audit records.
 - View operational statistics filtered by responder, reporter, category, and
   time period, subject to anonymous-report privacy rules.
 - Provision the first Administrator through the one-time controlled bootstrap
@@ -173,6 +172,9 @@ change accounts, access, incidents, SLOs, or audit records.
   integrity. Historical references become a non-login tombstoned identity.
 - Withdrawing an incident is a lifecycle state, not physical deletion.
 - Audit entries are append-only and retained with the application data.
+- Audit entries are an internal integrity control. The web application exposes
+  no audit-history endpoint, page, filter, detail view, or downloadable audit
+  representation to Reporters, Responders, or Administrators.
 - Attachments belonging only to drafts may be removed when the draft is deleted
   under a future explicit requirement; no such deletion feature is currently
   specified.

@@ -12,7 +12,6 @@ type AdminShellProps = {
 }
 
 const disabledNavigation: RoleNavigationItem[] = [
-  { label: 'Audit log', current: false, unavailableLabel: 'Soon' },
   { label: 'Statistics', current: false, unavailableLabel: 'Soon' },
 ]
 

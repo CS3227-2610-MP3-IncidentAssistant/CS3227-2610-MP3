@@ -310,7 +310,7 @@ function DeleteAccountDialog({ account, error, submitting, onCancel, onConfirm }
       <p className="eyebrow">Delete account</p>
       <h2 id="delete-account-title">This action cannot be undone</h2>
       <p id="delete-account-description">
-        Delete {account.loginName}? Their login will be disabled while incident and audit history is retained.
+        Delete {account.loginName}? Their login will be disabled while historical incident references are retained.
       </p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="confirmation-dialog__actions">
