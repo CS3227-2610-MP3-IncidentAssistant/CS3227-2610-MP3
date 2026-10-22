@@ -100,6 +100,7 @@ export function App() {
   if (session.authenticated && session.role === 'RESPONDER') {
     return (
       <><ResponderPortal
+        key={sessionState.revision}
         categories={session.responderCategories ?? []}
         loginName={session.loginName ?? 'Responder'}
         onLogout={signOut}
@@ -122,9 +123,11 @@ export function App() {
 
 function useSession() {
   const [session, setSession] = useState<SessionState | null>(null)
+  const [revision, setRevision] = useState(0)
   const [failed, setFailed] = useState(false)
   const receive = useCallback((next: SessionState) => {
     setSession(next)
+    setRevision((current) => current + 1)
     setFailed(false)
   }, [])
   const reload = useCallback(
@@ -148,6 +151,7 @@ function useSession() {
   }, [reload])
   return {
     session,
+    revision,
     failed,
     reload: () => reload(),
     refresh,

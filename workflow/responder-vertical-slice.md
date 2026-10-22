@@ -316,9 +316,13 @@ above, nor the implementation-verification requirements in `workflow/README.md`.
   `ReporterWebSecurityTest.roleSpecificLoginPathsAcceptOnlyTheirPersistedRole`,
   `ReporterWebSecurityTest.responderLoginChangesThePreAuthenticationSessionId`,
   and the Responder queue/detail/attachment role-denial tests.
-- [ ] RSP-QUEUE-01: only the authorized queue and stable ordering are returned;
+- [x] RSP-QUEUE-01: only the authorized queue and stable ordering are returned;
   empty, no-category, expired, denied, and failure states are distinct without
-  leaking protected categories or incident existence.
+  leaking protected categories or incident existence. Verified by
+  `ResponderIncidentPostgresTest` queue authorization/filter/paging tests,
+  `ResponderPortal.test.tsx` queue-state/stale-response tests, and
+  `ResponderSessionChange.test.tsx` session-refresh cache clearing; see
+  [`test-evidence/2026-10-23-issue-7-queue-completion.md`](test-evidence/2026-10-23-issue-7-queue-completion.md).
 - [ ] RSP-DETAIL-01: authorized detail and attachments work; forbidden/missing
   resources do not enumerate; each attachment read reauthorizes and has safe
   headers; anonymous identity is absent from all responder surfaces, including
