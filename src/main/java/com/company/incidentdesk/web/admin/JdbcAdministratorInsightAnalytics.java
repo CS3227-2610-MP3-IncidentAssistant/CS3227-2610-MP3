@@ -31,7 +31,6 @@ import com.company.incidentdesk.application.ai.insights.AdministratorInsightPeri
 @Repository
 @ConditionalOnBean(DataSource.class)
 class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics {
-    private static final int MINIMUM_RESPONDER_SAMPLE = 5;
     private static final int QUERY_TIMEOUT_SECONDS = 5;
     private static final Set<String> ALL_CATEGORIES = EnumSet.allOf(com.company.incidentdesk.domain.incident.IncidentCategory.class)
             .stream().map(Enum::name).collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -95,24 +94,48 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
 
     private Result responders(String actor, Query query, boolean selectedOnly, Instant snapshot) {
         var read = statistics(actor, query.categories(), query.periods().period());
-        List<ResponderRank> eligible = new ArrayList<>();
-        int excluded = 0;
-        for (var row : read.responders()) {
-            if (selectedOnly && !query.responderIds().contains(row.responderId())) continue;
-            if (row.resolvedCycleCount() < MINIMUM_RESPONDER_SAMPLE) { excluded++; continue; }
-            Double value = responderValue(query.plan().metric().orElseThrow(), row);
-            if (value != null) eligible.add(new ResponderRank(row.responderId(), new Value(row.displayName(),
-                    query.plan().metric().orElseThrow(), value, row.resolvedCycleCount())));
-        }
-        Comparator<ResponderRank> comparator = Comparator.comparing(rank -> rank.value().numericValue());
-        if (query.plan().direction().orElse(Direction.DESCENDING) == Direction.DESCENDING) {
-            comparator = comparator.reversed();
-        }
+        Metric metric = query.plan().metric().orElseThrow();
+        List<ResponderRank> responders = selectedOnly
+                ? selectedResponders(query.responderIds(), read, metric)
+                : rankedResponders(read, metric);
+        Comparator<Double> values = query.plan().direction().orElse(Direction.DESCENDING) == Direction.DESCENDING
+                ? Comparator.nullsLast(Comparator.reverseOrder())
+                : Comparator.nullsLast(Comparator.naturalOrder());
+        Comparator<ResponderRank> comparator = Comparator.comparing(rank -> rank.value().numericValue(), values);
         comparator = comparator.thenComparing(rank -> rank.value().label().toLowerCase(Locale.ROOT))
                 .thenComparing(ResponderRank::responderId);
-        List<Value> ranked = eligible.stream().sorted(comparator).limit(query.plan().limit().orElse(10))
+        List<Value> ranked = responders.stream().sorted(comparator).limit(query.plan().limit().orElse(10))
                 .map(ResponderRank::value).toList();
-        return new Result(ranked, ranked.size(), excluded, snapshot);
+        return new Result(ranked, snapshot);
+    }
+
+    private static List<ResponderRank> rankedResponders(AdministratorStatisticsStore.ReadResult read, Metric metric) {
+        return read.responders().stream()
+                .map(row -> new ResponderRank(row.responderId(), new Value(row.displayName(), metric,
+                        responderValue(metric, row), row.resolvedCycleCount())))
+                .toList();
+    }
+
+    private static List<ResponderRank> selectedResponders(Set<UUID> selectedIds,
+            AdministratorStatisticsStore.ReadResult read, Metric metric) {
+        Map<UUID, AdministratorStatisticsStore.ResponderBreakdown> statisticsByResponder = read.responders().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        AdministratorStatisticsStore.ResponderBreakdown::responderId, row -> row));
+        Map<UUID, String> namesByResponder = read.filterOptions().responders().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        AdministratorStatisticsStore.IdentityOption::id,
+                        AdministratorStatisticsStore.IdentityOption::displayName));
+        return selectedIds.stream().map(responderId -> {
+            var statistics = statisticsByResponder.get(responderId);
+            if (statistics != null) {
+                return new ResponderRank(responderId, new Value(statistics.displayName(), metric,
+                        responderValue(metric, statistics), statistics.resolvedCycleCount()));
+            }
+            String displayName = namesByResponder.get(responderId);
+            if (displayName == null) throw new AnalyticsUnavailableException();
+            Double value = metric == Metric.RESOLVED_CYCLE_COUNT ? 0d : null;
+            return new ResponderRank(responderId, new Value(displayName, metric, value, 0));
+        }).toList();
     }
 
     private Result categories(String actor, Query query, Instant snapshot) {
@@ -124,7 +147,7 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         }
         List<Value> ranked = ranked(values, query.plan().direction().orElse(Direction.DESCENDING),
                 query.plan().limit().orElse(10));
-        return new Result(ranked, ranked.size(), 0, snapshot);
+        return new Result(ranked, snapshot);
     }
 
     private Result trend(String actor, Query query, Instant snapshot) {
@@ -142,7 +165,7 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
             }
         }
         if (values.size() > 366) throw new AnalyticsUnavailableException();
-        return new Result(values, values.size(), 0, snapshot);
+        return new Result(values, snapshot);
     }
 
     private Result periodComparison(String actor, Query query, Instant snapshot) {
@@ -151,7 +174,7 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         List<Value> values = new ArrayList<>();
         add(values, companyValue(actor, "Selected period", metric, query.categories(), query.periods().period(), snapshot));
         add(values, companyValue(actor, "Comparison period", metric, query.categories(), comparison, snapshot));
-        return new Result(values, values.size(), 0, snapshot);
+        return new Result(values, snapshot);
     }
 
     private Result backlog(Query query, Instant snapshot) {
@@ -165,11 +188,11 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
               ORDER BY category
                 """, parameters(query.categories(), snapshot), (row, index) -> List.of(
                 new Value(categoryLabel(row.getString("category")) + " unassigned",
-                        Metric.UNASSIGNED_BACKLOG_COUNT, row.getLong("item_count"), row.getLong("item_count")),
+                        Metric.UNASSIGNED_BACKLOG_COUNT, row.getDouble("item_count"), row.getLong("item_count")),
                 new Value(categoryLabel(row.getString("category")) + " oldest",
                         Metric.OLDEST_UNASSIGNED_AGE, row.getDouble("oldest_millis"), row.getLong("item_count"))))
                 .stream().flatMap(List::stream).toList();
-        return new Result(values, values.size(), 0, snapshot);
+        return new Result(values, snapshot);
     }
 
     private Result sloComparison(String actor, Query query, Instant snapshot) {
@@ -180,7 +203,7 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         case AVERAGE_TIME_IN_PROGRESS, REOPEN_RATE -> resolutionSloValues(query, metric);
         default -> throw new IllegalArgumentException("Unsupported SLO metric");
         };
-        return new Result(values, values.size(), 0, snapshot);
+        return new Result(values, snapshot);
     }
 
     private List<Value> claimSloValues(Query query) {
@@ -249,25 +272,25 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         var summary = statistics(actor, query.categories(), query.periods().period()).summary();
         List<Value> values = new ArrayList<>();
         values.add(new Value("Resolved incidents", Metric.RESOLVED_CYCLE_COUNT,
-                summary.resolvedIncidentCount(), summary.completedCycleCount()));
+                (double) summary.resolvedIncidentCount(), summary.completedCycleCount()));
         add(values, summaryValue("Average time to claim", Metric.AVERAGE_TIME_TO_CLAIM, summary));
         add(values, summaryValue("Average time in progress", Metric.AVERAGE_TIME_IN_PROGRESS, summary));
         add(values, summaryValue("Reopen rate", Metric.REOPEN_RATE, summary));
         long unassignedCount = backlogCount(query.categories());
         values.add(new Value("Unassigned backlog", Metric.UNASSIGNED_BACKLOG_COUNT,
-                unassignedCount, unassignedCount));
+                (double) unassignedCount, unassignedCount));
         if (query.periods().comparisonPeriod().isPresent()) {
             Value comparison = companyValue(actor, "Comparison period", query.plan().metric().orElseThrow(),
                     query.categories(), query.periods().comparisonPeriod().orElseThrow(), snapshot);
             add(values, comparison);
         }
-        return new Result(values, values.size(), 0, snapshot);
+        return new Result(values, snapshot);
     }
 
     private Value categoryValue(String actor, String category, Metric metric, ResolvedPeriod period, Instant snapshot) {
         if (metric == Metric.INCIDENT_COUNT) {
             long count = incidentCount(Set.of(category), period);
-            return new Value(categoryLabel(category), metric, count, count);
+            return new Value(categoryLabel(category), metric, (double) count, count);
         }
         if (metric == Metric.UNASSIGNED_BACKLOG_COUNT || metric == Metric.OLDEST_UNASSIGNED_AGE) {
             return backlogValue(category, metric, snapshot);
@@ -281,11 +304,11 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
             ResolvedPeriod period, Instant snapshot) {
         if (metric == Metric.INCIDENT_COUNT) {
             long count = incidentCount(categories, period);
-            return new Value(label, metric, count, count);
+            return new Value(label, metric, (double) count, count);
         }
         if (metric == Metric.UNASSIGNED_BACKLOG_COUNT) {
             long count = backlogCount(categories);
-            return new Value(label, metric, count, count);
+            return new Value(label, metric, (double) count, count);
         }
         if (metric == Metric.OLDEST_UNASSIGNED_AGE) return oldestBacklog(label, categories, snapshot);
         var summary = statistics(actor, categories, period).summary();

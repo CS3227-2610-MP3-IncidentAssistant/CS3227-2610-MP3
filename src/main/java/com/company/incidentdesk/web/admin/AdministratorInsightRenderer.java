@@ -16,14 +16,13 @@ final class AdministratorInsightRenderer {
         String summary = rows.isEmpty() ? "No qualifying data was found." : summary(plan);
         return new Response("ANSWER", null, summary, plan.metric().orElseThrow().name(),
                 periods.period().startInclusive(), periods.period().endExclusive(), result.snapshotAt(), rows,
-                result.eligibleCount(), result.excludedCount(),
                 "AI interpreted the question; application code calculated every value.",
                 plan.effectiveGrouping().name());
     }
 
     Response clarification(ClarificationCode code, Instant at) {
         return new Response("NEEDS_CLARIFICATION", code.name(), clarificationText(code), null,
-                null, null, at, List.of(), 0, 0, "No analytics query was run.", null);
+                null, null, at, List.of(), "No analytics query was run.", null);
     }
 
     private Row row(AdministratorInsightAnalytics.Value value) {
@@ -42,7 +41,8 @@ final class AdministratorInsightRenderer {
         };
     }
 
-    private static String display(Metric metric, double value) {
+    private static String display(Metric metric, Double value) {
+        if (value == null) return "Not available";
         return switch (metric) {
         case AVERAGE_TIME_TO_CLAIM, AVERAGE_TIME_IN_PROGRESS, OLDEST_UNASSIGNED_AGE -> Math.round(value / 60000d) + " minutes";
         case REOPEN_RATE -> String.format(Locale.ROOT, "%.1f%%", value * 100d);
@@ -59,10 +59,10 @@ final class AdministratorInsightRenderer {
         };
     }
 
-    record Row(String label, double numericValue, String displayValue, long sampleSize) { }
+    record Row(String label, Double numericValue, String displayValue, long sampleSize) { }
     record Response(String outcome, String clarificationCode, String summary, String metric,
             Instant periodStart, Instant periodEndExclusive, Instant snapshotAt, List<Row> rows,
-            int eligibleCount, int excludedCount, String advisoryNotice, String grouping) {
+            String advisoryNotice, String grouping) {
         Response { rows = List.copyOf(rows); }
     }
 }

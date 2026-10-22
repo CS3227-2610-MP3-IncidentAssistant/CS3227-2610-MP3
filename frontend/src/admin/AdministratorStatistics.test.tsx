@@ -128,8 +128,10 @@ describe('AdministratorStatistics', () => {
       outcome: 'ANSWER', clarificationCode: null, summary: 'Responder operational indicator.',
       metric: 'AVERAGE_TIME_IN_PROGRESS', periodStart: '2026-09-23T00:00:00Z',
       periodEndExclusive: '2026-10-23T00:00:00Z', snapshotAt: '2026-10-23T00:00:00Z',
-      rows: [{ label: '<script>alert(1)</script>', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 5 }],
-      eligibleCount: 1, excludedCount: 2,
+      rows: [
+        { label: '<script>alert(1)</script>', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 1 },
+        { label: 'response-two', numericValue: null, displayValue: 'Not available', sampleSize: 0 },
+      ],
       advisoryNotice: 'AI interpreted the question; application code calculated every value.', grouping: 'RESPONDER',
     }
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -154,7 +156,11 @@ describe('AdministratorStatistics', () => {
     const region = await screen.findByRole('region', { name: 'AI insight result' })
     expect(within(region).getByText('<script>alert(1)</script>')).toBeInTheDocument()
     expect(region.querySelector('script')).toBeNull()
-    expect(screen.getByText(/2 responder samples were excluded/)).toBeInTheDocument()
+    expect(within(region).getByText('Not available')).toBeInTheDocument()
+    expect(within(region).getByRole('cell', { name: '0' })).toBeInTheDocument()
+    expect(within(region).getByRole('cell', { name: '1' })).toBeInTheDocument()
+    expect(screen.getByText(/Every responder result is shown regardless of sample size/)).toBeInTheDocument()
+    expect(screen.queryByText(/responder samples were excluded/)).not.toBeInTheDocument()
     const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/insights'))!
     expect(JSON.parse(String(init?.body))).toEqual({
       question: 'Who had the longest average time in progress during the past 30 days?',
@@ -167,7 +173,7 @@ describe('AdministratorStatistics', () => {
       outcome: 'NEEDS_CLARIFICATION', clarificationCode: 'MISSING_PERIOD',
       summary: 'Specify a reporting period.', metric: null, periodStart: null,
       periodEndExclusive: null, snapshotAt: '2026-10-23T00:00:00Z', rows: [],
-      eligibleCount: 0, excludedCount: 0, advisoryNotice: 'No analytics query was run.', grouping: null,
+      advisoryNotice: 'No analytics query was run.', grouping: null,
     }
     let insightCalls = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

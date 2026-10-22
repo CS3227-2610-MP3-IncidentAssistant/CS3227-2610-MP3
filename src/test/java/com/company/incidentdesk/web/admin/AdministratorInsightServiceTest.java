@@ -39,6 +39,26 @@ class AdministratorInsightServiceTest {
     }
 
     @Test
+    void rendersUnavailableValueForSelectedResponderWithoutQualifyingData() {
+        RecordingAnalytics analytics = new RecordingAnalytics();
+        analytics.values = List.of(new AdministratorInsightAnalytics.Value(
+                "responder-without-data", Metric.AVERAGE_TIME_IN_PROGRESS, null, 0));
+        AdministratorInsightService service = service(analytics, """
+                {"outcome":"QUERY","queryType":"COMPARE_SELECTED_RESPONDERS",
+                 "metric":"AVERAGE_TIME_IN_PROGRESS","period":"ROLLING_30_DAYS"}
+                """);
+
+        var answer = service.answer("admin", new AdministratorInsightService.Request(
+                "Compare the selected responders during the past 30 days", List.of(),
+                List.of(UUID.randomUUID(), UUID.randomUUID())));
+
+        assertEquals(1, answer.rows().size());
+        assertEquals("Not available", answer.rows().getFirst().displayValue());
+        assertNull(answer.rows().getFirst().numericValue());
+        assertEquals(0, answer.rows().getFirst().sampleSize());
+    }
+
+    @Test
     void clarificationRunsNoAnalyticsHandler() {
         RecordingAnalytics analytics = new RecordingAnalytics();
         AdministratorInsightService service = service(analytics,
@@ -104,12 +124,13 @@ class AdministratorInsightServiceTest {
     private static final class RecordingAnalytics implements AdministratorInsightAnalytics {
         Query query;
         List<String> logins = List.of();
+        List<Value> values = List.of(new Value(
+                "application-name", Metric.AVERAGE_TIME_IN_PROGRESS, 120_000d, 5));
 
         @Override public List<String> knownLoginNames(String actor) { return logins; }
         @Override public Result execute(String actor, Query next) {
             query = next;
-            return new Result(List.of(new Value("application-name", Metric.AVERAGE_TIME_IN_PROGRESS,
-                    120_000, 5)), 1, 0, next.periods().requestInstant());
+            return new Result(values, next.periods().requestInstant());
         }
     }
 }

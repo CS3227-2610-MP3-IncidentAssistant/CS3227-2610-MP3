@@ -114,9 +114,7 @@ export type AdministratorInsight = {
   periodStart: string | null
   periodEndExclusive: string | null
   snapshotAt: string
-  rows: Array<{ label: string, numericValue: number, displayValue: string, sampleSize: number }>
-  eligibleCount: number
-  excludedCount: number
+  rows: Array<{ label: string, numericValue: number | null, displayValue: string, sampleSize: number }>
   advisoryNotice: string
   grouping: string | null
 }

@@ -22,9 +22,9 @@ interface AdministratorInsightAnalytics {
         }
     }
 
-    record Result(List<Value> values, int eligibleCount, int excludedCount, Instant snapshotAt) {
+    record Result(List<Value> values, Instant snapshotAt) {
         public Result { values = List.copyOf(values); }
     }
 
-    record Value(String label, Metric metric, double numericValue, long sampleSize) { }
+    record Value(String label, Metric metric, Double numericValue, long sampleSize) { }
 }

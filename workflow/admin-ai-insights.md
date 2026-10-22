@@ -1,8 +1,8 @@
 # Administrator AI Insights Specification
 
-Status: **No-minimum-sample amendment approved for implementation on
-2026-10-23 — implementation, re-verification, and release approval remain
-pending.**
+Status: **No-minimum-sample amendment approved, implemented, and automatically
+verified on 2026-10-23 — independent, manual/deployed, and release approval
+remain pending.**
 
 This specification refines the Administrator AI capability in
 `.agents/ai-policy.md` and `ai-features.md`. It allows an authenticated
@@ -390,6 +390,12 @@ statistics-unavailable result and never retries the provider.
   -PfrontendSkipBuild=true` passed 63 isolated PostgreSQL tests with no skips or
   failures. Reproducible details are recorded in
   [`test-evidence/2026-10-23-administrator-ai-insights.md`](test-evidence/2026-10-23-administrator-ai-insights.md).
+- No-minimum-sample amendment evidence: focused service/controller, isolated
+  PostgreSQL, React interaction, and repository-wide checks prove that a
+  one-cycle responder is ranked, a valid selected zero-cycle responder remains
+  visible with an explicit `not available` value, obsolete exclusion fields and
+  messaging are removed, and the UI discloses the applicable constraints. See
+  [`test-evidence/2026-10-23-admin-insight-sample-threshold.md`](test-evidence/2026-10-23-admin-insight-sample-threshold.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
@@ -402,9 +408,7 @@ statistics-unavailable result and never retries the provider.
 
 Unchecked criteria remain pending for their complete role, metric, concurrency,
 privacy, audit-capture, resilience, load, manual, or deployed evidence. The
-existing implementation still enforces the superseded five-cycle responder
-threshold and is not evidence for the amended criteria. The historical
-approval record remains in
+historical approval record remains in
 `reviews/2026-10-23-ai-features-and-admin-insights-approval.md`; the amendment
 approval is recorded in
 `reviews/2026-10-23-admin-insights-sample-threshold-amendment.md`.

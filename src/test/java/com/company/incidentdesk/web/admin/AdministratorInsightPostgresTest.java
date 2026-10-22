@@ -36,6 +36,7 @@ class AdministratorInsightPostgresTest {
 
     private UUID administrator;
     private UUID responder;
+    private UUID responderWithoutData;
 
     @BeforeAll
     static void createSchema() {
@@ -63,23 +64,22 @@ class AdministratorInsightPostgresTest {
         jdbc.update("DELETE FROM accounts");
         administrator = account("admin", "ADMINISTRATOR");
         responder = account("responder", "RESPONDER");
+        responderWithoutData = account("responder-without-data", "RESPONDER");
         UUID reporter = account("reporter", "REPORTER");
         jdbc.update("""
                 INSERT INTO slo_target_versions(id,category,average_time_to_claim_minutes,
                     average_time_in_progress_minutes,average_reopen_rate_percent,effective_at,changed_by)
                 VALUES (?,'IT',30,60,20,?,?)
                 """, UUID.randomUUID(), Timestamp.from(NOW.minusSeconds(60L * 86400)), administrator);
-        for (int index = 0; index < 5; index++) {
-            Instant queued = NOW.minusSeconds((10L - index) * 86400);
-            UUID incident = incident(reporter, "IT", "RESOLVED", queued, null);
-            jdbc.update("""
-                    INSERT INTO incident_resolutions(id,request_id,incident_id,cycle_number,resolved_by,resolved_at,
-                        remarks,queue_entered_at,first_assigned_at,responder_at_resolution,reopened_at)
-                    VALUES (?,?,?,1,?,?,'done',?,?,?,?)
-                    """, UUID.randomUUID(), UUID.randomUUID(), incident, responder,
-                    Timestamp.from(queued.plusSeconds(7200)), Timestamp.from(queued), Timestamp.from(queued.plusSeconds(600)),
-                    responder, index == 0 ? Timestamp.from(queued.plusSeconds(10800)) : null);
-        }
+        Instant queued = NOW.minusSeconds(10L * 86400);
+        UUID incident = incident(reporter, "IT", "RESOLVED", queued, null);
+        jdbc.update("""
+                INSERT INTO incident_resolutions(id,request_id,incident_id,cycle_number,resolved_by,resolved_at,
+                    remarks,queue_entered_at,first_assigned_at,responder_at_resolution,reopened_at)
+                VALUES (?,?,?,1,?,?,'done',?,?,?,?)
+                """, UUID.randomUUID(), UUID.randomUUID(), incident, responder,
+                Timestamp.from(queued.plusSeconds(7200)), Timestamp.from(queued), Timestamp.from(queued.plusSeconds(600)),
+                responder, Timestamp.from(queued.plusSeconds(10800)));
         incident(reporter, "FACILITIES", "SUBMITTED", NOW.minusSeconds(3L * 86400), null);
     }
 
@@ -92,7 +92,7 @@ class AdministratorInsightPostgresTest {
                 """, Set.of("IT"), Set.of()));
         assertEquals(1, rank.values().size());
         assertEquals("responder", rank.values().getFirst().label());
-        assertEquals(5, rank.values().getFirst().sampleSize());
+        assertEquals(1, rank.values().getFirst().sampleSize());
 
         var backlog = analytics.execute("admin", query("""
                 {"outcome":"QUERY","queryType":"BACKLOG_SNAPSHOT","metric":"UNASSIGNED_BACKLOG_COUNT",
@@ -106,7 +106,7 @@ class AdministratorInsightPostgresTest {
                  "period":"ROLLING_30_DAYS"}
                 """, Set.of("IT"), Set.of()));
         assertEquals(30, trend.values().size());
-        assertEquals(5d, trend.values().stream().mapToDouble(AdministratorInsightAnalytics.Value::numericValue).sum());
+        assertEquals(1d, trend.values().stream().mapToDouble(AdministratorInsightAnalytics.Value::numericValue).sum());
 
         var slo = analytics.execute("admin", query("""
                 {"outcome":"QUERY","queryType":"SLO_TARGET_COMPARISON","metric":"AVERAGE_TIME_IN_PROGRESS",
@@ -114,6 +114,21 @@ class AdministratorInsightPostgresTest {
                 """, Set.of("IT"), Set.of()));
         assertEquals(1, slo.values().size());
         assertEquals(3_000_000d, slo.values().getFirst().numericValue());
+    }
+
+    @Test
+    void selectedComparisonRetainsRespondersWithoutQualifyingCycles() {
+        var comparison = analytics().execute("admin", query("""
+                {"outcome":"QUERY","queryType":"COMPARE_SELECTED_RESPONDERS",
+                 "metric":"AVERAGE_TIME_IN_PROGRESS","period":"ROLLING_30_DAYS"}
+                """, Set.of("IT"), Set.of(responder, responderWithoutData)));
+
+        assertEquals(2, comparison.values().size());
+        assertEquals("responder", comparison.values().getFirst().label());
+        assertEquals(1, comparison.values().getFirst().sampleSize());
+        assertEquals("responder-without-data", comparison.values().getLast().label());
+        assertEquals(0, comparison.values().getLast().sampleSize());
+        assertNull(comparison.values().getLast().numericValue());
     }
 
     @Test

@@ -182,7 +182,7 @@ export function AdministratorStatistics({ onRefreshSession }: { onRefreshSession
         <textarea id="statistics-insight-question" rows={3} maxLength={500} value={insightQuestion}
           onChange={(event) => { setInsightQuestion(event.target.value); setInsight(null); setInsightError('') }}
           aria-describedby="statistics-insight-help" />
-        <p id="statistics-insight-help" className="help-text">Include a period. Do not enter names, incident details, comments, reporter information, identifiers, or links. Current category and responder filters are applied separately and are not sent to the AI provider.</p>
+        <p id="statistics-insight-help" className="help-text">Include a period. Results are limited to 10 rows; responder comparisons require 2–5 selections. Every responder result is shown regardless of sample size, with zero-denominator values marked Not available. Do not enter names, incident details, comments, reporter information, identifiers, or links. Current category and responder filters are applied separately and are not sent to the AI provider.</p>
         <fieldset className="insight-responder-choice">
           <legend>Responders to compare (optional, select 2–5)</legend>
           {result?.filterOptions.responders.map((option) => <label key={option.id}>
@@ -227,7 +227,6 @@ function InsightResult({ insight }: { insight: AdministratorInsight }) {
           <th scope="row">{row.label}</th><td>{row.displayValue}</td><td>{row.sampleSize}</td>
         </tr>)}</tbody></table>
     </div>}
-    {insight.excludedCount > 0 && <p className="help-text">{insight.excludedCount} responder samples were excluded because they contained fewer than five completed cycles.</p>}
     <p className="statistics-table-note">{insight.advisoryNotice} Treat responder comparisons as operational indicators, not employee-performance or disciplinary judgments.</p>
   </div>
 }
