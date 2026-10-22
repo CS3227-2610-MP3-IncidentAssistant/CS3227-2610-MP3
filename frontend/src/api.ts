@@ -173,6 +173,7 @@ export type AdministratorAccount = {
   loginName: string
   role: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
   status: 'ENABLED' | 'DISABLED'
+  version: number
   categories: IncidentCategory[]
 }
 
@@ -202,6 +203,25 @@ export async function tombstoneAdministratorAccount(
   }, refreshSession, {
     authenticationRequired: true,
     fallbackMessage: 'The account could not be deleted. Refresh and try again.',
+  })
+}
+
+export async function replaceResponderCategories(
+  accountId: string,
+  expectedVersion: number,
+  categories: IncidentCategory[],
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/accounts/${encodeURIComponent(accountId)}/responder-categories`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ expectedVersion, categories }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'Responder categories could not be updated. Refresh and try again.',
   })
 }
 

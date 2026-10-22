@@ -173,11 +173,12 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .account-directory { margin-bottom: 32px; }
 .account-directory tbody th { min-width: 160px; }
 .account-feedback { margin: 0; padding: 14px 22px; border-bottom: 1px solid var(--color-border); color: var(--color-info); background: var(--color-info-soft); }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .confirmation-dialog { width: min(480px, calc(100% - 32px)); padding: 0; border: 1px solid var(--color-border); border-radius: 12px; color: var(--color-text); background: var(--color-surface); box-shadow: 0 24px 70px rgb(23 35 63 / 28%); }
 .confirmation-dialog::backdrop { background: rgb(23 35 63 / 55%); }
 .confirmation-dialog__content { padding: 24px; }
 .confirmation-dialog h2 { margin: 6px 0 10px; font-size: 21px; }
-.confirmation-dialog #delete-account-description { margin: 0; color: var(--color-text-muted); line-height: 1.55; }
+.confirmation-dialog #delete-account-description, .confirmation-dialog #configure-categories-description { margin: 0; color: var(--color-text-muted); line-height: 1.55; }
 .confirmation-dialog .form-error { margin-bottom: 0; }
 .confirmation-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .promotion-requests > .section-heading { align-items: flex-start; }
