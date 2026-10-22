@@ -23,7 +23,7 @@ Review these implemented workflows:
 - Administrator account management and Responder category access;
 - Responder queues, claiming, resolution, and handoff;
 - Administrator incident search, filters, sorting, assignment, reassignment, unassignment, and resolution;
-- SLO configuration, statistics, the audit log, and in-session notifications.
+- SLO configuration, statistics, and in-session notifications.
 
 Do not assess the following as working features because the User Guide identifies
 them as unavailable or incomplete:
@@ -34,7 +34,6 @@ them as unavailable or incomplete:
 - an **In Progress** action;
 - Responder personal statistics, search, filtering, or sorting;
 - notifications surviving an application restart;
-- the **Audit timeline** placeholder on an incident detail page;
 - the separate **Sample UI** preview.
 
 ## Test setup
@@ -111,7 +110,7 @@ its pixels or metadata may reveal private information.
 
 Also review that navigation matches the active role: Reporter and Responder see
 their dashboard, while an Admin also sees **Accounts**, **SLO configuration**,
-**Audit log**, and **Statistics**. No screen should expose password text, password
+and **Statistics**. No screen should expose password text, password
 hashes, session identifiers, or temporary reset credentials after its one-time
 display.
 
@@ -185,7 +184,7 @@ Sign in as `reviewer-admin` and open **Accounts**.
    after replacement.
 5. For `reviewer-delete`, select **Delete** and first cancel the confirmation.
    Verify that login still works. Delete it with confirmation and verify that
-   login is disabled. Historical audit records must not be removed.
+   login is disabled while historical incident references remain intact.
 6. Sign back in as `reviewer-admin` before continuing.
 
 Password reset and deletion are security-sensitive. Keep passwords and temporary
@@ -293,25 +292,7 @@ Select **Statistics** as Admin.
    reports no matching data instead of displaying invented values.
 5. Verify that anonymous reporter identity is not exposed in any result.
 
-### 10. Audit log
-
-Select **Audit log** as Admin.
-
-1. Locate entries produced by registration, password changes/reset, category
-   access changes, submission, edit, withdrawal, attachment, comments, claim,
-   handoff, assignment changes, resolution, reopen, SLO changes, and deletion
-   performed during this review.
-2. Verify that each row shows time, event ID, actor, description, and outcome.
-3. Double-click representative rows and verify action, target, outcome, and
-   recorded changes in **Audit event details**.
-4. Verify chronological consistency with the tested workflow and confirm that no
-   password, password hash, temporary credential, session identifier, or
-   anonymous reporter identity is exposed.
-
-Use this page—not the incident detail's non-functional **Audit timeline**
-placeholder—to review application activity.
-
-### 11. Notifications and session boundaries
+### 10. Notifications and session boundaries
 
 1. During the cross-role workflows above, inspect the bell after changes relevant
    to the signed-in account. Verify the unseen badge, readable notification text,
@@ -321,12 +302,12 @@ placeholder—to review application activity.
    notifications are not exposed.
 3. Do not expect notification history to survive restart; it is session-only.
 
-### 12. Persistence, restart, and single-process protection
+### 11. Persistence, restart, and single-process protection
 
 1. Close the app normally, launch it again with the same disposable data
    directory, and sign in.
 2. Verify that accounts, password changes, category access, incidents, comments,
-   assignments/statuses, resolution history, audit records, SLO versions, and
+   assignments/statuses, resolution history, SLO versions, and
    the image attachment remain available.
 3. While the app is running, start a second instance against the same data
    directory. Verify that the second instance is refused and that the first
@@ -345,9 +326,9 @@ While running the scenarios, also assess the following:
   does not create partial records. User input should remain available after a
   recoverable failure where the User Guide promises this behavior.
 - **Privacy:** anonymous identity and all credential material stay out of normal
-  views, notifications, statistics, audit details, filenames, and diagnostics.
-- **State consistency:** lists, details, notifications, statistics, SLO displays,
-  and audit entries agree after refresh, navigation, logout/login, and restart.
+  views, notifications, statistics, filenames, and diagnostics.
+- **State consistency:** lists, details, notifications, statistics, and SLO
+  displays agree after refresh, navigation, logout/login, and restart.
 - **Usability:** labels match the User Guide; confirmations protect destructive
   or state-changing actions; keyboard/double-click interactions work where
   documented; long pages remain scrollable; errors and empty states are legible.

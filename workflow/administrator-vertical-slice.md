@@ -1,6 +1,7 @@
 # Administrator React + Spring Boot Vertical Slice
 
-Status: **Product-owner approved on 2026-10-18; implementation and independent
+Status: **Product-owner approved on 2026-10-18 and amended on 2026-10-22 to
+keep audit records internal-only; implementation and independent
 security/architecture verification remain in progress.**
 
 This document specifies the administrator experience to be migrated from the
@@ -21,8 +22,7 @@ minimum administrator MVP. It therefore includes current desktop features that
 
 - administrator assignment, reassignment, unassignment, and resolution;
 - account deletion and temporary-password reset;
-- detailed operational statistics; and
-- the full application audit-log interface.
+- detailed operational statistics.
 
 Approval of this specification schedules those features earlier; it does not
 weaken any lifecycle, privacy, authorization, audit, or transaction rule. The
@@ -32,13 +32,13 @@ team must record product-owner approval before implementation starts.
 
 | Current JavaFX surface | Behavior found | Web disposition |
 | --- | --- | --- |
-| Authenticated shell | Dashboard, Accounts, SLO configuration, Audit log, Statistics, notification tray, own-password change, logout | Preserve as a responsive authenticated shell; notifications remain a decision |
+| Authenticated shell | Dashboard, Accounts, SLO configuration, Statistics, notification tray, own-password change, logout | Preserve as a responsive authenticated shell; notifications remain a decision |
 | Administrator dashboard | Per-category SLO target overview; company incident table; search, filters, sort, refresh, open detail | Preserve and make queries paged/server-side |
 | Incident detail | Lifecycle facts, resolution history, SLO, comments, image attachments, assign/reassign, unassign, resolve | Preserve with transaction-safe HTTP mutations; omit the non-functional audit placeholder |
 | Accounts | Directory, pending-only toggle, promotion request detail and decision, Responder category configuration, password reset, deletion | Preserve; add MP3-required controlled Administrator provisioning |
 | SLO configuration | Per-category current target, create new version, read-only history | Preserve with PostgreSQL version history and atomic audit |
 | Statistics | Category/date filters, company metrics, Responder breakdown | Preserve and add the required Responder/Reporter filters and AI trend summary |
-| Audit log | Newest-first activity table and event-detail dialog | Preserve and add policy-required time/actor/action/target filters |
+| Audit log | Newest-first activity table and event-detail dialog | Do not migrate; canonical audit writes remain an internal backend integrity control with no HTTP read endpoint or React surface |
 
 JavaFX controls, virtual-thread UI tasks, double-click-only shortcuts,
 process-global sessions, local aggregate files, and in-process event refreshes
@@ -51,7 +51,7 @@ shortcuts are also offered.
 The slice is complete when an authenticated Administrator can use a responsive
 React application to monitor all company incidents, perform authorized incident
 and account operations, govern responder access and SLO targets, inspect
-privacy-safe statistics and audit evidence, and request an advisory operational
+privacy-safe statistics, and request an advisory operational
 trend summary. Spring Boot is authoritative for identity, authorization,
 validation, transactions, timestamps, privacy-safe data selection, and audit
 creation. PostgreSQL is the shared source of truth.
@@ -84,7 +84,6 @@ The authenticated administrator shell provides these destinations:
 | Dashboard | SLO overview and company-wide incident list |
 | Accounts | Accounts, promotion decisions, category access, reset, deletion, and administrator provisioning |
 | SLO configuration | Current per-category targets and version history |
-| Audit log | Filterable application audit history and event details |
 | Statistics | Company and responder operational measures plus advisory AI trend summary |
 
 The shell also exposes the current login name and role, password change,
@@ -180,9 +179,8 @@ checked endpoint with safe content headers. Administrators may view but not add
 attachments.
 
 The current JavaFX `Audit timeline not available yet` placeholder is not a
-feature to reproduce. The React page either omits the section or, if incident-
-scoped audit is implemented in this slice, loads only privacy-safe events for
-that incident under ADM-AUD-01 rules.
+feature to reproduce. The React page omits the section. Canonical audit writes
+remain internal and are not exposed through an incident or global read API.
 
 An Administrator may add a non-blank comment. Server-configured text limits
 apply consistently in React, Spring validation, and the database. The UI keeps
@@ -503,45 +501,24 @@ or response text. Failure leaves normal statistics usable.
 Exact provider, model, and numeric limits remain blocked on the current course
 guide and `workflow/ai-features.md` approval.
 
-### ADM-AUD-01 — Audit history
+### ADM-AUD-INT-01 — Internal-only audit evidence
 
-The Audit log is append-only and Administrator-only. It lists newest events
-first with deterministic tie-breaking and supports server-side filters for
-inclusive time bounds, actor, action, target type, and target identifier.
-Opening an event shows:
+Canonical audit events remain append-only backend integrity records and retain
+the transaction, redaction, privacy, and retention rules in
+`.agents/audit-policy.md`. The web application exposes no audit-history HTTP
+endpoint, React route, navigation destination, filter, event-detail view, or
+download to any role. Ordinary feature tests may inspect persisted audit rows
+through isolated repository/test fixtures; that verification access is not a
+production application interface.
 
-- event identifier and application-generated UTC occurrence time;
-- privacy-safe actor label and role snapshot;
-- action, target type/identifier, and outcome; and
-- structured, redacted before/after changes or concise details.
+### ADM-AUD-INT-01 acceptance criteria
 
-It never exposes passwords, hashes, temporary/reset credentials, sessions,
-unnecessary incident content, raw AI prompts/responses, or anonymous reporter
-identity. Deleted actors render with a tombstoned label while retaining their
-stable identifier. No browser or application operation can edit or delete an
-audit event.
-
-The canonical audit record retains the truthful internal actor required by
-`.agents/audit-policy.md`, but the Administrator audit projection applies the
-anonymous-report policy before filtering, counting, paging, or serialization.
-When an event represents an anonymous Reporter's action on their anonymous
-incident, the UI and API use only `Anonymous reporter`; they expose no account
-identifier, login name, identity-bearing change value, or link to an account.
-Such Reporters do not appear as actor-filter options because of those events.
-An actor-specific query, including a direct forged request for that internal
-Reporter identifier, excludes the anonymous-incident association from rows,
-counts, page metadata, and empty/error distinctions. Events performed by an
-Administrator, Responder, or system actor on an anonymous incident may retain
-that non-reporter actor's privacy-safe label.
-
-### ADM-AUD-01 acceptance criteria — anonymous actor filtering
-
-- [ ] `ADM-AUD-01-A`: For every anonymous-incident audit event authored by the
-  Reporter, unfiltered lists and event detail use only `Anonymous reporter`,
-  actor-filter options contain no protected Reporter identity, and direct
-  actor-filter requests cannot reveal the association through rows, counts,
-  pagination metadata, or distinguishable empty/error behavior; the canonical
-  append-only record still retains its truthful protected actor reference.
+- [x] `ADM-AUD-INT-01-A`: The production web application has no audit-history
+  controller or route, and the Administrator shell and public documentation
+  expose no audit-history destination, while focused mutation tests continue to
+  prove required append-only audit writes and rollback atomicity. Evidence is
+  recorded in
+  [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
 
 ### ADM-SELF-01 — Own password, notifications, and logout
 
@@ -570,7 +547,6 @@ expose typed operations with these semantics:
 | Accounts | paged directory, pending requests, promotion decision, category replacement, reset, tombstone, privileged provisioning |
 | SLO | current targets, category history, create target version |
 | Statistics/AI | aggregate query, responder breakdown, trend-summary request |
-| Audit | paged filtered query and event detail |
 
 Responses use explicit DTOs rather than serialized domain entities. DTOs
 contain only fields authorized for this actor and representation. Mutation
@@ -595,8 +571,8 @@ or invalid CSRF tokens and unsupported content types.
   are not the source of business time.
 - An incident has at most one assignee, enforced in application logic and
   database constraints where appropriate.
-- SLO version history and audit history are append-only through ordinary
-  application APIs.
+- SLO version history is append-only through ordinary application APIs. Audit
+  events are append-only internal records with no ordinary read endpoint.
 - Tests use isolated PostgreSQL databases/schemas and never production data.
 
 ## 8. React interaction and accessibility contract
@@ -649,9 +625,9 @@ The administrator slice is acceptable when:
 - [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
   sends only allowlisted aggregate data, renders escaped advisory text, has no
   mutation path, and fails without blocking statistics.
-- [ ] The audit UI provides paged deterministic history and time, actor, action,
-  and target filters without secrets, unnecessary content, or anonymous
-  identity.
+- [x] Audit records remain internal-only with no HTTP read endpoint or React
+  destination, while required mutation-plus-audit atomicity remains verified by
+  [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
 - [ ] Password change and logout use server-side sessions, CSRF protection,
   request-time SPA tokens, bounded exact-error recovery, secret-free logging
   and auditing, session invalidation, and client cache clearing. Recovery does
@@ -755,8 +731,7 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-SLO-01-A/B/C/D | SLO, authorization matrix, persistence, audit, style guide | MVC security and validation tests, isolated PostgreSQL authorization/atomicity/concurrency tests, and React interaction/accessibility tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
-| ADM-AUD-01 | audit policy, anonymity | append-only/privacy/filter tests |
-| ADM-AUD-01-A | anonymity and audit policies | audit-projection and direct actor-filter tests covering rows, options, counts, pagination metadata, detail, and canonical-record retention |
+| ADM-AUD-INT-01 | requirements, audit policy, persistence | source-boundary inspection, React navigation test, and focused mutation/audit atomicity tests |
 | ADM-SELF-01 | requirements, security, audit | password/session/CSRF tests |
 
 ## 11. Decisions required before implementation
@@ -769,8 +744,9 @@ skipped checks, sanitized outputs, and remaining risks under
    recorded before the affected endpoint is enabled.
 4. Persistent notification history is deferred; transient notifications are
    permitted only where they meet ADM-SELF-01.
-5. Incident-scoped audit history is omitted from the incident page; the global
-   privacy-safe audit interface remains in scope.
+5. Audit events remain an internal backend integrity control. The web
+   application exposes no incident-scoped or global audit-history endpoint,
+   navigation destination, filter, detail view, or download.
 6. The SoCLaaS provider contract and published quota defaults are recorded in
    `workflow/ai-features.md`. ADM-AI-01 may be built and tested against the
    deterministic fake provider, but production model selection, the actual key

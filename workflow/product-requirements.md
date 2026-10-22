@@ -47,8 +47,7 @@ contracts. An authenticated Administrator can:
 - review promotion requests, update Responder category access, reset or
   tombstone eligible accounts, and use controlled Administrator provisioning;
 - configure prospective, versioned SLO targets by category;
-- view privacy-safe operational statistics and filterable append-only audit
-  history; and
+- view privacy-safe operational statistics; and
 - request an advisory AI summary built only from privacy-safe aggregate
   statistics, with no mutation authority.
 

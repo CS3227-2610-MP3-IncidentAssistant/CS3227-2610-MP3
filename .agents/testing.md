@@ -73,7 +73,7 @@
 ### Privacy and attachments
 
 - Anonymous identity is absent from responder and normal administrator views,
-  filters, statistics, exports, audit presentation, notifications, AI payloads,
+  filters, statistics, exports, notifications, AI payloads,
   provider errors, and logs.
 - The owning reporter can still access an anonymous incident.
 - The anonymous checkbox/switch value reaches persisted state; unchecked and
@@ -84,6 +84,8 @@
 
 ### Persistence and audit
 
+- No role can retrieve audit history through an application HTTP endpoint,
+  page, navigation item, filter, detail view, or download.
 - Apply all migrations to an empty PostgreSQL database.
 - Round-trip all retained entity and lifecycle variants.
 - Restart/redeploy persistence preserves data and relationships.

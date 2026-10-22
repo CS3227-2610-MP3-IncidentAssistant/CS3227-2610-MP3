@@ -451,16 +451,16 @@ Every successful transition produces one incident audit event:
   Pending-upload markers enable targeted restart cleanup. Failed validation or
   persistence leaves no committed metadata, success audit, or valid orphan.
 
-### Audit log
+### Internal audit records
 
 - **Record:** Audit events contain a generated ID, application UTC timestamp,
   actor ID and role, action, target, outcome where applicable, and structured
   change summary. They exclude credentials, sessions, unnecessary incident
   text, and anonymous Reporter identity.
-- **Access and history:** `AuditLogService` is Administrator-only and supports
-  deterministic filtering and ordering. Account deletion preserves a
-  tombstoned actor reference. Normal operations cannot update or delete audit
-  records.
+- **Access and history:** Account deletion preserves the actor reference and
+  normal operations cannot update or delete audit records. The web application
+  deliberately exposes no audit-history endpoint, navigation item, page, or
+  download; verification reads use repository and integration-test fixtures.
 - **Trust limit:** Recovery-safe local storage is not claimed to be
   tamper-proof against the machine owner.
 
@@ -626,11 +626,11 @@ reporter can track it, but normal incident views must not reveal that identity.
 3. Log out while viewing an image. Expected: the viewer clears and prior access
    cannot expose bytes in the new session.
 
-### Audit, SLO, and statistics
+### Internal audit verification, SLOs, and statistics
 
-1. Inspect audit entries for registration, access change, submission, claim,
-   handoff, and resolution. Expected: deterministic order, required changes,
-   and no secrets or anonymous identity.
+1. Run the audit persistence tests for registration, access change, submission,
+   claim, handoff, and resolution. Expected: deterministic records, required
+   changes, and no secrets or duplicated anonymous display identity.
 2. Configure SLOs, complete a cycle, change targets, and complete another.
    Expected: each cycle uses its applicable target version; display time zones
    do not alter elapsed durations.
@@ -691,7 +691,7 @@ privacy-aware, auditable desktop system that requires no server deployment.
 | Reporter | Withdraw an unassigned incident or reopen an inadequate resolution |
 | Responder | See and claim unassigned incidents only in permitted categories |
 | Responder | Resolve or hand off incidents assigned to them |
-| Administrator | Review incidents, accounts, audit evidence, SLOs, and statistics |
+| Administrator | Review incidents and accounts, and manage SLOs and statistics |
 | Administrator | Approve promotion and control Responder category access |
 
 ### Principal use cases

@@ -19,10 +19,9 @@ nav_order: 2
   - [Claim and resolve an incident](#claim-and-resolve-an-incident)
   - [Hand off an incident](#hand-off-an-incident)
 - **[Administrator: manage incidents](#administrator-manage-incidents)**
-- **[Administrator: SLOs, statistics, and audit log](#administrator-slos-statistics-and-audit-log)**
+- **[Administrator: SLOs and statistics](#administrator-slos-and-statistics)**
   - [Configure SLO targets](#configure-slo-targets)
   - [Review statistics](#review-statistics)
-  - [Review application activity](#review-application-activity)
 - **[Incident details, comments, and attachments](#incident-details-comments-and-attachments)**
 - **[Data storage and current limitations](#data-storage-and-current-limitations)**
 - **[Planned improvements](#planned-improvements)**
@@ -35,7 +34,7 @@ Incident Desk is a desktop app for reporting and handling company incidents. It 
 
 - **Reporters** submit incidents.
 - **Responders** handle incidents in categories assigned to them.
-- **Administrators** oversee incidents, accounts, service-level objectives (SLOs), statistics, and audit records.
+- **Administrators** oversee incidents, accounts, service-level objectives (SLOs), and statistics.
 
 Only one account can be signed in at a time. Use the section for your account type, or follow the guide from start to finish to see how an incident moves from submission to resolution.
 
@@ -73,7 +72,7 @@ On an Apple Silicon Mac, use the macOS ARM64 JAR supplied with the release. Keep
 
 There are no built-in production accounts. For the end-to-end test in this guide, register one account of each type. A newly registered Responder has no category access; an Administrator must grant it in **Accounts** before that Responder can see eligible incidents. Registering an Admin account is currently available from the same **Register** dialog.
 
-After signing in, use **Dashboard** to return to your role's main page. Administrators also see **Accounts**, **SLO configuration**, **Audit log**, and **Statistics** in the navigation.
+After signing in, use **Dashboard** to return to your role's main page. Administrators also see **Accounts**, **SLO configuration**, and **Statistics** in the navigation.
 
 ### Account controls and notifications
 
@@ -114,7 +113,7 @@ Sign in as an Admin and select **Accounts** to see login names, roles, responder
 Other account actions are:
 
 - **Reset password**: confirm the reset. A one-time temporary password is displayed once and expires after 24 hours. Pass it to the account holder securely; they must replace it after signing in. Do not include it in screenshots or bug reports.
-- **Delete**: confirm to disable that account's login. Its incident and audit history is retained. This cannot be undone in the current UI; use only a disposable test account when testing it.
+- **Delete**: confirm to disable that account's login. Its historical incident references are retained. This cannot be undone in the current UI; use only a disposable test account when testing it.
 
 ---
 
@@ -152,11 +151,9 @@ The detail view shows the incident description, category and status, reporter an
 - **Unassign** an assigned incident: confirm to return it to its category queue.
 - **Resolve** an assigned incident: enter non-blank **Resolution remarks** and select **Confirm resolution**. An Administrator can review the saved remarks in **Resolution history**.
 
-The incident detail has an **Audit timeline** placeholder, not a working per-incident audit timeline. Use the separate **Audit log** page for application activity.
-
 ---
 
-## Administrator: SLOs, statistics, and audit log
+## Administrator: SLOs and statistics
 
 ### Configure SLO targets
 
@@ -174,12 +171,6 @@ For a simple test, select **Facilities** and enter `60`, `240`, and `10`. A succ
 
 Select **Statistics** to see a company summary and a Responder breakdown. You can filter by category and **Period from**/**Period through** dates. The summary includes incidents resolved, average time to claim, average time in progress, reopen rate, and Administrator-resolved count. The Responder table shows resolution-related measures per Responder; time to claim is queue performance and is not assigned to a particular Responder. If no incidents match the filters, the summary says so instead of inventing results.
 
-### Review application activity
-
-Select **Audit log** to view recorded security-sensitive and incident-changing activity. Each row shows its time, event ID, actor, event description, and outcome. Double-click a row to open **Audit event details**, including the action, target, outcome, and recorded changes. This is an application-level audit log; the incident detail's **Audit timeline** placeholder does not display these entries.
-
----
-
 ## Incident details, comments, and attachments
 
 Reporters can open their own incidents from **My incidents**; Administrators can open incidents from their dashboard; Responders can open incidents from their eligible or assigned lists. The detail page displays the latest information their account is allowed to see. Select **Back to dashboard** to return to the list. If an incident or your access changes while the page is open, it may show **Incident unavailable**; return to the dashboard and refresh.
@@ -196,11 +187,11 @@ The **Attachments** panel can list and display authorized PNG and JPEG images at
 
 ## Data storage and current limitations
 
-Accounts, incidents, comments, audit entries, SLO targets, and supported attachments are saved in the selected local data directory and remain available after a normal restart. Keep that directory if you want to retain your test records. Do not manually edit its files. Only one Incident Desk process can use a data directory at a time; close the first window before launching another against the same directory. The app is local and does not synchronize data between computers.
+Accounts, incidents, comments, SLO targets, and supported attachments are saved in the selected local data directory and remain available after a normal restart. Keep that directory if you want to retain your test records. Do not manually edit its files. Only one Incident Desk process can use a data directory at a time; close the first window before launching another against the same directory. The app is local and does not synchronize data between computers.
 
 The notification bell shows in-session notifications, but its inbox does not persist across restarts. The current authenticated UI does not support Reporter drafts or a Reporter promotion-request form. Attachments are limited to PNG/JPEG images; video and audio uploads or playback are unsupported. The UI also lacks an **In Progress** action and Responder personal statistics. Some underlying services or the separate Sample UI preview contain other ideas; they are not end-to-end user workflows in this release.
 
-To explore the complete workflow, register one account of each type. Submit the Facilities example as a Reporter, grant Facilities access to the Responder from the Administrator's **Accounts** page, and then claim and resolve the incident as the Responder. Finally, sign in as the Administrator to review the incident in **Dashboard**, **Statistics**, and **Audit log**.
+To explore the complete workflow, register one account of each type. Submit the Facilities example as a Reporter, grant Facilities access to the Responder from the Administrator's **Accounts** page, and then claim and resolve the incident as the Responder. Finally, sign in as the Administrator to review the incident in **Dashboard** and **Statistics**.
 
 ---
 

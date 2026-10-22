@@ -9,9 +9,7 @@ nav_order: 1
 <b>Incident Desk is a desktop application for reporting and managing
 company incidents.</b> Reporters can submit and track incidents, responders can
 handle incidents in their assigned categories, and administrators can manage
-access, service-level objectives, statistics, and audit records.
-
-![Incident Desk administrator dashboard](Ui.png)
+access, service-level objectives, and statistics.
 
 ## Documentation
 
