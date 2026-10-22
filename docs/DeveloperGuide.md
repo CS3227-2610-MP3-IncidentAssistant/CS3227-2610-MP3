@@ -258,6 +258,10 @@ The implemented Responder endpoint is
 `POST /api/v1/responder/incidents/{incidentId}/ai/advice`. It returns advisory
 text for one currently viewable incident; claim and resolution remain separate
 operations.
+The implemented Administrator endpoint is
+`POST /api/v1/admin/statistics/insights`. It interprets one bounded
+natural-language question into a closed query plan and answers it with
+deterministically calculated statistics; no provider text reaches the answer.
 
 ### Reporter request and review flow
 
@@ -322,6 +326,96 @@ with 503 for provider or configuration failure. Invalid input returns
 `AI_REJECTED` with 400 for a query string or nonempty body. The frontend shows a
 safe generic failure message and allows an explicit retry; normal incident
 handling remains available.
+
+### Administrator statistics insights
+
+`workflow/admin-ai-insights.md` governs this feature. Unlike the Reporter and
+Responder flows, where bounded provider prose is displayed as an explicitly
+advisory suggestion, here the provider output is never shown. The model acts
+only as a parser from natural language into a closed enum vocabulary, and the
+answer is computed in Java. This keeps a non-deterministic component out of
+every number the Administrator reads.
+
+The request pipeline is:
+
+1. `AdministratorInsightController` accepts a CSRF-protected JSON POST with
+   `question` plus optional `categories` and `responderIds`. A query string,
+   missing or non-string `question`, or unknown body shape returns
+   `AI_REJECTED`. Actor, role, request instant, model, and capability catalog
+   come from trusted application state only.
+2. `AdministratorInsightQuestionValidator` enforces 1 to 500 Unicode code
+   points and rejects control characters, known login names, account and
+   incident identifiers, email addresses, and URLs *before* provider
+   disclosure. This is defence in depth, not the privacy mechanism: named
+   responder analysis uses the structured selector, which is excluded from the
+   provider payload.
+3. One non-streaming SoCLaaS request carries only the validated question, the
+   application-generated request instant, fixed instructions, and the closed
+   plan vocabulary. It carries no statistics, selections, identities, or
+   incident data.
+4. `AdministratorInsightPlanParser` validates the single returned JSON object
+   against the closed schema. Unknown query types, fields or enum values,
+   invalid bounds, oversized collections, and any prose outside the JSON object
+   raise `PlanRejectedException`; a rejected plan is never executed or shown.
+   No SQL, repository method, class name, expression, or tool argument is
+   accepted from the model.
+5. `AdministratorInsightPeriodResolver` turns the named period enum or explicit
+   `fromDate`/`throughDate` pair into exact UTC bounds, applying the rolling
+   versus UTC-calendar rules and the 366-day ceiling, and rejecting future
+   intervals.
+6. The service reauthorizes the Administrator immediately before execution and
+   resolves categories and responders from canonical data, so a stale role or
+   selection fails closed.
+7. `JdbcAdministratorInsightAnalytics` executes exactly one allowlisted handler
+   against a read-consistent snapshot under a bounded query deadline.
+   `AdministratorInsightAnalytics` is the typed, MCP-shaped registry; it has no
+   generic invocation, reflection, SQL, URL fetch, file access, audit access,
+   incident-detail lookup, or mutation path.
+8. `AdministratorInsightRenderer` produces the summary, interpreted query
+   details, and rows. Responder display names are joined locally only after the
+   provider interaction.
+
+The plan model in `application/ai/insights/AdministratorInsightPlan.java` is a
+closed vocabulary: `Outcome` (`QUERY` or `NEEDS_CLARIFICATION`), `QueryType`,
+`Metric`, `Period` (named or `Explicit`), `Direction`, `Grouping`, `limit` 1–10,
+and `ClarificationCode`. Query types map one-to-one onto handlers:
+`RANK_RESPONDERS`, `COMPARE_SELECTED_RESPONDERS` (2–5 validated selections),
+`RANK_CATEGORIES`, `CATEGORY_TREND`, `PERIOD_COMPARISON`, `BACKLOG_SNAPSHOT`,
+`SLO_TARGET_COMPARISON`, and the fixed `OPERATIONAL_OVERVIEW` composition.
+Metrics derive from persisted lifecycle timestamps per `.agents/slo.md`.
+
+Fairness and small-sample behaviour is deliberate. Responder rankings include
+every responder with at least one qualifying completed cycle, with no
+minimum-sample threshold and no hidden suppression; each row carries its exact
+sample size. A structured comparison returns a row for every valid selection,
+using a zero count and `not available` for a zero denominator rather than
+omitting the responder. Ties for first place are preserved together, subject to
+the ten-row ceiling, with stable secondary ordering by display name then
+account identifier; the identifier is neither displayed nor sent to the
+provider.
+
+Clarification is application-owned. `NEEDS_CLARIFICATION` carries one of
+`MISSING_PERIOD`, `AMBIGUOUS_METRIC`, `UNSUPPORTED_QUESTION`, or
+`CONFLICTING_PERIODS`; the renderer owns the display text and any
+provider-authored clarification prose is ignored. Individual-incident questions
+are `UNSUPPORTED_QUESTION` and must not be broadened into an operational
+overview.
+
+Failures map to the shared AI codes: `AI_REJECTED` with HTTP 400 for invalid
+input, `UNAVAILABLE` with 404 for denied or missing resources,
+`AI_RATE_LIMITED` with 429 for admission limits and budget exhaustion,
+`AI_TIMEOUT` with 504, `AI_INVALID_RESPONSE` or `AI_OUTPUT_TOO_LARGE` with 502
+including an unparsable plan, and `AI_UNAVAILABLE` with 503. No failure path
+executes an analytics handler, and AI failure never blocks the ordinary
+non-AI statistics view.
+
+Audit records are content-free: feature identifier `ADMIN_AI_INSIGHTS`, the
+validated query type, an outcome category, and a correlation identifier. The
+question, plan body, provider response, selections, and result values are never
+written to audit rows, logs, traces, metrics, or the usage ledger. The React
+view renders all text through normal escaping, with no raw provider text,
+Markdown, HTML, or executable link, and retains exact UTC bounds while
+presenting them in Singapore time with the exclusive end visible.
 
 ### Shared gateway and provider safeguards
 
