@@ -53,7 +53,9 @@ controls, automated verification, and reproducible CI/CD.
 - Complete one-time first-Administrator bootstrap and authorized subsequent
   Administrator provisioning without public privileged registration.
 - Configure SLOs.
-- Use an advisory AI summary of privacy-safe aggregate operational trends.
+- Use an advisory AI summary of privacy-safe aggregate operational trends and
+  the bounded, read-only Administrator insight query defined in
+  `workflow/admin-ai-insights.md`.
 
 ## Post-MVP unless scheduled earlier
 

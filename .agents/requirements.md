@@ -151,6 +151,15 @@ privacy-safe aggregate statistics. The feature must not send raw incident text,
 comments, credentials, or reporter identities to the provider and cannot
 change accounts, access, incidents, SLOs, or audit records.
 
+An administrator can ask one bounded natural-language operational-statistics
+question as specified by `workflow/admin-ai-insights.md`. The provider may
+translate the question only into a closed query plan. Deterministic application
+code authorizes and executes one read-only analytics capability and renders the
+factual answer. Responder names may appear in the local Administrator answer but
+must not be sent to the provider; named comparisons use structured selections.
+The feature has no general chat memory, SQL, row-level incident retrieval,
+provider-executed application tools, or mutation path.
+
 ## AI-wide requirements
 
 - Authorization is checked immediately before selecting any data for an AI

@@ -539,6 +539,17 @@ or response text. Failure leaves normal statistics usable.
 Exact provider, model, and numeric limits remain blocked on the current course
 guide and `workflow/ai-features.md` approval.
 
+### ADM-AI-02 — Bounded operational-statistics insights
+
+An Administrator may submit one bounded natural-language question for the
+closed read-only query-plan workflow in `admin-ai-insights.md`. The provider
+interprets the question but receives no statistics, selections, responder or
+reporter identity, or incident data. Java validates the plan, executes one
+allowlisted typed analytics handler, and renders the factual answer from
+canonical statistics. Responder names, where permitted, are joined only after
+the provider call. The feature has no chat memory, provider-executed tool,
+external MCP server, arbitrary query, incident-row retrieval, or mutation path.
+
 ### ADM-AUD-INT-01 — Internal-only audit evidence
 
 Canonical audit events remain append-only backend integrity records and retain
@@ -679,6 +690,10 @@ The administrator slice is acceptable when:
 - [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
   sends only allowlisted aggregate data, renders escaped advisory text, has no
   mutation path, and fails without blocking statistics.
+- [ ] The bounded Administrator insight request satisfies every `AI-ADM-*`
+  criterion in `admin-ai-insights.md`; provider interpretation is limited to a
+  closed plan and every factual value is computed and rendered by the
+  application without exposing identities or statistics to the provider.
 - [x] Audit records remain internal-only with no HTTP read endpoint or React
   destination, while required mutation-plus-audit atomicity remains verified by
   [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
@@ -789,6 +804,7 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-SLO-01-A/B/C/D | SLO, authorization matrix, persistence, audit, style guide | MVC security and validation tests, isolated PostgreSQL authorization/atomicity/concurrency tests, and React interaction/accessibility tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
+| ADM-AI-02 | AI policy, anonymity, SLO, `admin-ai-insights.md` | closed-plan, deterministic analytics, privacy, concurrency, and fake-provider tests |
 | ADM-AUD-INT-01 | requirements, audit policy, persistence | source-boundary inspection, React navigation test, and focused mutation/audit atomicity tests |
 | ADM-SELF-01 | requirements, security, audit | password/session/CSRF tests |
 
@@ -811,6 +827,8 @@ skipped checks, sanitized outputs, and remaining risks under
    budget, application limits, and the undocumented provider-retention risk
    require human security/architecture approval before production integration;
    its acceptance criterion remains unticked until verified.
+   ADM-AI-02 additionally requires product and security/architecture approval
+   of `workflow/admin-ai-insights.md` before implementation.
 7. The single-origin React/Spring Boot topology and Neon storage direction are
    approved in `.agents/deployment_strategy.md`; remaining implementation
    choices are recorded in the architecture ADRs.
