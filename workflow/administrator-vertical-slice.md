@@ -698,6 +698,12 @@ The administrator slice is acceptable when:
   criterion in `admin-ai-insights.md`; provider interpretation is limited to a
   closed plan and every factual value is computed and rendered by the
   application without exposing identities or statistics to the provider.
+  Sixteen of the eighteen `AI-ADM-*` criteria are now ticked; `AI-ADM-SAFE-06`
+  (load/concurrency) and `AI-ADM-SAFE-07` (complete constraint disclosure)
+  remain open. The
+  latest automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+  This criterion remains open until every `AI-ADM-*` criterion is satisfied.
 - [x] Audit records remain internal-only with no HTTP read endpoint or React
   destination, while required mutation-plus-audit atomicity remains verified by
   [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).

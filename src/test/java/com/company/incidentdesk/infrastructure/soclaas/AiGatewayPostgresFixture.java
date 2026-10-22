@@ -51,10 +51,28 @@ abstract class AiGatewayPostgresFixture {
         source.setMinimumIdle(0);
         source.setMaximumPoolSize(3);
         source.setConnectionTimeout(3000);
+        // A currentSchema= URL parameter alone can be ignored, which silently drops these tests onto
+        // the shared public schema. Pin the schema on every pooled connection and prove it took
+        // effect, so an isolation failure stops the run instead of mutating shared tables.
+        source.setSchema(SCHEMA);
+        verifyIsolatedSchema();
         Flyway.configure().dataSource(source).locations("classpath:db/migration")
                 .schemas(SCHEMA).defaultSchema(SCHEMA).load().migrate();
         jdbc = new JdbcTemplate(source);
         manager = new DataSourceTransactionManager(source);
+    }
+
+    private static void verifyIsolatedSchema() {
+        try (var connection = source.getConnection()) {
+            String selected = new JdbcTemplate(source).queryForObject("SELECT current_schema()", String.class);
+            if (!SCHEMA.equals(selected)) {
+                throw new IllegalStateException(
+                        "AI gateway test connection selected schema " + selected + " instead of " + SCHEMA);
+            }
+            connection.getSchema();
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Could not verify the AI gateway test schema", exception);
+        }
     }
 
     @AfterAll
@@ -76,7 +94,9 @@ abstract class AiGatewayPostgresFixture {
         jdbc.update("DELETE FROM ai_usage_requests");
         jdbc.update("DELETE FROM audit_events");
         jdbc.update("DELETE FROM account_credentials");
-        jdbc.update("DELETE FROM accounts");
+        // TRUNCATE ... CASCADE so that every table a later migration pointed at accounts is cleared
+        // too. Listing dependants by hand silently rots each time a migration adds a foreign key.
+        jdbc.execute("TRUNCATE TABLE accounts CASCADE");
         jdbc.update("DELETE FROM ai_usage_control");
         jdbc.update("INSERT INTO ai_usage_control (id) VALUES (1)");
         clock.now = NOW;

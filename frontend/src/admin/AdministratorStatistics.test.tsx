@@ -180,6 +180,59 @@ describe('AdministratorStatistics', () => {
     })
   })
 
+  // AI-ADM-SAFE-02: comparative responder output states the metric and exact period, reports every
+  // sample size including zero, displays tied results together, applies no hidden minimum-sample
+  // threshold, and carries the operational-indicator notice.
+  it('discloses sample sizes, ties, metric, period, and the operational-indicator notice', async () => {
+    const insight = {
+      outcome: 'ANSWER', clarificationCode: null, summary: 'Responder operational indicator.',
+      metric: 'RESOLVED_CYCLE_COUNT', periodStart: '2026-10-01T00:00:00.000Z',
+      periodEndExclusive: '2026-10-23T00:00:00.000Z', snapshotAt: '2026-10-23T00:00:00Z',
+      rows: [
+        { label: 'tied-first-a', numericValue: 4, displayValue: '4', sampleSize: 4 },
+        { label: 'tied-first-b', numericValue: 4, displayValue: '4', sampleSize: 4 },
+        { label: 'single-cycle', numericValue: 1, displayValue: '1', sampleSize: 1 },
+        { label: 'no-cycle', numericValue: null, displayValue: 'Not available', sampleSize: 0 },
+      ],
+      advisoryNotice: 'AI interpreted the question; application code calculated every value.',
+      grouping: 'RESPONDER', rankingDirection: 'DESCENDING', limit: 1,
+      categoryFilters: [], responderFilters: ['no-cycle', 'single-cycle', 'tied-first-a', 'tied-first-b'],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes('/insights') ? jsonResponse(insight) : jsonResponse(statistics)))
+    render(<AdministratorStatistics onRefreshSession={refreshSession} />)
+    await screen.findByRole('heading', { name: 'Incident outcomes' })
+
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Compare the selected responders for resolved cycles this month' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Get insight' }))
+
+    const region = await screen.findByRole('region', { name: 'AI insight result' })
+
+    // Both first-place ties are displayed together even though one result was requested.
+    expect(within(region).getByText('tied-first-a')).toBeInTheDocument()
+    expect(within(region).getByText('tied-first-b')).toBeInTheDocument()
+
+    // Every result reports its own sample size, including a one-cycle and a zero-cycle responder.
+    expect(within(region).getAllByRole('cell', { name: '4' })).toHaveLength(4)
+    expect(within(region).getByText('single-cycle')).toBeInTheDocument()
+    expect(within(region).getByText('no-cycle')).toBeInTheDocument()
+    expect(within(region).getByText('Not available')).toBeInTheDocument()
+    expect(within(region).getByRole('cell', { name: '0' })).toBeInTheDocument()
+
+    // The metric and the exact inclusive/exclusive period are stated.
+    expect(within(region).getByText('Resolved cycle count')).toBeInTheDocument()
+    expect(within(region).getByText(
+      '1 Oct 2026, 8 am to 23 Oct 2026, 8 am (Singapore time; end exclusive)')).toBeInTheDocument()
+
+    // The operational-indicator notice is present and no exclusion message is shown.
+    expect(within(region).getByText(/operational indicators, not employee-performance/))
+      .toBeInTheDocument()
+    expect(screen.queryByText(/responder samples were excluded/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/minimum sample/i)).not.toBeInTheDocument()
+  })
+
   it('refreshes a stale session once before retrying the insight request', async () => {
     const answer = {
       outcome: 'NEEDS_CLARIFICATION', clarificationCode: 'MISSING_PERIOD',
