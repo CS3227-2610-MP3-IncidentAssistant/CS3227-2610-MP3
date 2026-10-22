@@ -1,6 +1,7 @@
 # Administrator React + Spring Boot Vertical Slice
 
-Status: **Product-owner approved on 2026-10-18; implementation and independent
+Status: **Product-owner approved on 2026-10-18 and amended on 2026-10-22 to
+keep audit records internal-only; implementation and independent
 security/architecture verification remain in progress.**
 
 This document specifies the administrator experience to be migrated from the
@@ -21,8 +22,7 @@ minimum administrator MVP. It therefore includes current desktop features that
 
 - administrator assignment, reassignment, unassignment, and resolution;
 - account deletion and temporary-password reset;
-- detailed operational statistics; and
-- the full application audit-log interface.
+- detailed operational statistics.
 
 Approval of this specification schedules those features earlier; it does not
 weaken any lifecycle, privacy, authorization, audit, or transaction rule. The
@@ -32,13 +32,13 @@ team must record product-owner approval before implementation starts.
 
 | Current JavaFX surface | Behavior found | Web disposition |
 | --- | --- | --- |
-| Authenticated shell | Dashboard, Accounts, SLO configuration, Audit log, Statistics, notification tray, own-password change, logout | Preserve as a responsive authenticated shell; notifications remain a decision |
+| Authenticated shell | Dashboard, Accounts, SLO configuration, Statistics, notification tray, own-password change, logout | Preserve as a responsive authenticated shell; notifications remain a decision |
 | Administrator dashboard | Per-category SLO target overview; company incident table; search, filters, sort, refresh, open detail | Preserve and make queries paged/server-side |
 | Incident detail | Lifecycle facts, resolution history, SLO, comments, image attachments, assign/reassign, unassign, resolve | Preserve with transaction-safe HTTP mutations; omit the non-functional audit placeholder |
 | Accounts | Directory, pending-only toggle, promotion request detail and decision, Responder category configuration, password reset, deletion | Preserve; add MP3-required controlled Administrator provisioning |
 | SLO configuration | Per-category current target, create new version, read-only history | Preserve with PostgreSQL version history and atomic audit |
 | Statistics | Category/date filters, company metrics, Responder breakdown | Preserve and add the required Responder/Reporter filters and AI trend summary |
-| Audit log | Newest-first activity table and event-detail dialog | Preserve and add policy-required time/actor/action/target filters |
+| Audit log | Newest-first activity table and event-detail dialog | Do not migrate; canonical audit writes remain an internal backend integrity control with no HTTP read endpoint or React surface |
 
 JavaFX controls, virtual-thread UI tasks, double-click-only shortcuts,
 process-global sessions, local aggregate files, and in-process event refreshes
@@ -51,7 +51,7 @@ shortcuts are also offered.
 The slice is complete when an authenticated Administrator can use a responsive
 React application to monitor all company incidents, perform authorized incident
 and account operations, govern responder access and SLO targets, inspect
-privacy-safe statistics and audit evidence, and request an advisory operational
+privacy-safe statistics, and request an advisory operational
 trend summary. Spring Boot is authoritative for identity, authorization,
 validation, transactions, timestamps, privacy-safe data selection, and audit
 creation. PostgreSQL is the shared source of truth.
@@ -84,7 +84,6 @@ The authenticated administrator shell provides these destinations:
 | Dashboard | SLO overview and company-wide incident list |
 | Accounts | Accounts, promotion decisions, category access, reset, deletion, and administrator provisioning |
 | SLO configuration | Current per-category targets and version history |
-| Audit log | Filterable application audit history and event details |
 | Statistics | Company and responder operational measures plus advisory AI trend summary |
 
 The shell also exposes the current login name and role, password change,
@@ -180,9 +179,8 @@ checked endpoint with safe content headers. Administrators may view but not add
 attachments.
 
 The current JavaFX `Audit timeline not available yet` placeholder is not a
-feature to reproduce. The React page either omits the section or, if incident-
-scoped audit is implemented in this slice, loads only privacy-safe events for
-that incident under ADM-AUD-01 rules.
+feature to reproduce. The React page omits the section. Canonical audit writes
+remain internal and are not exposed through an incident or global read API.
 
 An Administrator may add a non-blank comment. Server-configured text limits
 apply consistently in React, Spring validation, and the database. The UI keeps
@@ -290,6 +288,44 @@ reset never displays a secret.
 The delivery mechanism outside the application remains a product decision; UI
 copy instructs the Administrator to use an approved secure channel.
 
+### ADM-ACC-04 acceptance criteria — temporary-password reset
+
+- [x] `ADM-ACC-04-A`: A reset succeeds only after the trusted acting account
+  row is locked and rechecked as an enabled persisted Administrator. A
+  self-reset, a missing/disabled/demoted actor, a non-existent or
+  already-disabled target, a signed-out caller, a wrong-role caller, and a
+  missing CSRF token each leave the target credential unchanged, return the
+  stable generic response for that class, and create no success audit record.
+- [x] `ADM-ACC-04-B`: A successful reset replaces the target credential with a
+  salted bcrypt hash of a freshly generated high-entropy one-time password,
+  marks it temporary with an expiry 24 hours after the
+  application-generated UTC instant, deletes the target's persisted sessions,
+  and commits the credential change together with a secret-free
+  `PASSWORD_RESET_INITIATED` audit record in one transaction.
+- [x] `ADM-ACC-04-C`: The plaintext temporary password is returned exactly once
+  in a `Cache-Control: no-store` response body after durable commit. No
+  plaintext, hash, or audit detail field contains the secret, and an injected
+  persistence or audit failure returns a safe error carrying no secret and
+  leaves neither a changed credential nor a success audit.
+- [x] `ADM-ACC-04-D`: Authentication is refused for a temporary credential whose
+  expiry has passed, using the same generic sign-in failure as any other
+  rejected login, and is accepted for an unexpired temporary credential.
+- [x] `ADM-ACC-04-E`: While a credential is marked temporary, every role
+  workflow endpoint is refused and only the own-password replacement and logout
+  endpoints remain available; replacing the password clears the temporary
+  marker and expiry and restores normal access.
+- [x] `ADM-ACC-04-F`: The React account directory exposes the reset action,
+  its confirmation dialog, single-reveal display, and cleared client state as
+  specified in ADM-ACC-04. Automated evidence is recorded in the
+  [2026-10-22 password-management React verification](test-evidence/2026-10-22-password-management-frontend.md);
+  manual accessibility and deployed checks remain slice-level release evidence.
+
+Backend implementation and its automated evidence are recorded in the
+[2026-10-22 temporary-password reset verification](test-evidence/2026-10-22-administrator-temporary-password-reset.md).
+Criteria `ADM-ACC-04-A` through `ADM-ACC-04-E` have passing focused and isolated
+PostgreSQL evidence. The repository user explicitly approved their text in the
+current Codex chat on 2026-10-22, so they are ticked above.
+
 ### ADM-ACC-05 — Account deletion
 
 After a destructive confirmation, an Administrator may disable/tombstone an
@@ -298,9 +334,50 @@ resolutions, promotion history, or audit evidence. Historical references use a
 neutral deleted-account label. The target cannot authenticate, and existing
 sessions are invalidated or rejected on their next use.
 
+The account directory presents the action as a compact outlined danger button
+labelled `Delete`, matching the original desktop page. Activating it opens a
+modal confirmation dialog that identifies the account, states that the action
+cannot be undone, explains that login access is disabled while incident and
+audit history remains, and requires an explicit destructive confirmation.
+Cancel or Escape closes the dialog without a request and returns focus to the
+trigger.
+
 An Administrator cannot delete their own currently authenticated account. The
 server rechecks eligibility and commits the tombstone and audit event in one
 transaction. This operation is irreversible in this slice.
+
+Every tombstone request derives the acting Administrator from the trusted
+security context, then locks that actor's account row with `SELECT ... FOR
+UPDATE` and rechecks that the actor is still enabled with persisted role
+`ADMINISTRATOR` before changing the target. The actor and target must differ.
+Every path that disables, tombstones, or demotes an Administrator must follow
+the same locking protocol. The target mutation and its audit event commit in
+the transaction that holds the actor lock.
+
+Reciprocal concurrent attempts by two Administrators to tombstone each other
+cannot both commit: each target update conflicts with the other transaction's
+actor-row lock, so PostgreSQL serialization or deadlock resolution aborts at
+least one attempt. The application maps the losing attempt to a stable safe
+conflict, writes no success audit for it, and does not retry it automatically.
+Any explicit later attempt starts a new transaction and reauthorizes and
+rechecks the acting Administrator. Together with the self-deletion denial,
+this preserves at least one enabled Administrator without globally serializing
+unrelated Administrator actions.
+
+### ADM-ACC-05 acceptance criteria — account tombstoning
+
+- [x] `ADM-ACC-05-A`: A tombstone succeeds only after the trusted acting
+  account row is locked and rechecked as an enabled persisted Administrator;
+  self-deletion, a missing/disabled/demoted actor, an ineligible target, and an
+  audit or persistence failure leave the target unchanged and create no
+  misleading success audit. Automated evidence is recorded in
+  [the 2026-10-21 tombstone verification](test-evidence/2026-10-21-administrator-account-tombstone.md).
+- [x] `ADM-ACC-05-B`: Isolated PostgreSQL concurrency tests prove reciprocal
+  Administrator tombstone attempts cannot both commit, at least one enabled
+  Administrator remains, the losing deadlock/serialization path returns a
+  stable conflict without automatic retry or success audit, and an explicit
+  retry performs fresh authorization. See the
+  [2026-10-21 verification evidence](test-evidence/2026-10-21-administrator-account-tombstone.md).
 
 ### ADM-ACC-06 — Administrator provisioning
 
@@ -382,6 +459,38 @@ version. A valid change receives a server-generated ID and UTC effective time,
 commits with an audit event, applies prospectively, and never rewrites historic
 cycle evaluation. Persistence failure leaves the prior target effective.
 
+The React page follows the desktop interaction model: a labelled category
+drop-down at the top selects one category at a time, a separate summary shows
+that category's current effective target, and the editable new-version fields
+remain visually distinct. Version history is paginated with the shared
+Previous/Page/Next control also used by the account directory and dashboard.
+
+### ADM-SLO-01 acceptance criteria — versioned category targets
+
+- [x] `ADM-SLO-01-A`: An enabled authenticated Administrator can read every
+  category's current target and chronological append-only history; signed-out,
+  wrong-role, disabled, or demoted actors receive no SLO representation. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-B`: A valid change containing non-negative whole-minute
+  durations and a reopen-rate percentage from 0 through 100 creates one
+  server-identified, application-UTC version and one secret-free audit event
+  atomically, while the prior versions remain unchanged. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-C`: Invalid fields, an unchanged target, a stale expected
+  version, or a persistence/audit failure creates neither a target version nor
+  a misleading success audit. Concurrent updates from the same current version
+  have at most one winner and a safe conflict response for the loser. See
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+- [x] `ADM-SLO-01-D`: The React page exposes a labelled category selector, a
+  distinct current-effective-target summary, editable new-version fields, and
+  paginated read-only history for every category; it keeps entered values after
+  recoverable errors, prevents duplicate submission, and provides loading,
+  empty, validation, success, conflict, and retry states. Its visual
+  presentation was approved in
+  [the 2026-10-21 UI and implementation review](reviews/2026-10-21-administrator-slo-ui-review.md).
+  Automated interaction evidence is recorded in
+  [the 2026-10-21 SLO verification](test-evidence/2026-10-21-administrator-slo-configuration.md).
+
 ### ADM-STAT-01 — Operational statistics
 
 An Administrator can filter statistics by responder, non-anonymous reporter,
@@ -430,23 +539,24 @@ or response text. Failure leaves normal statistics usable.
 Exact provider, model, and numeric limits remain blocked on the current course
 guide and `workflow/ai-features.md` approval.
 
-### ADM-AUD-01 — Audit history
+### ADM-AUD-INT-01 — Internal-only audit evidence
 
-The Audit log is append-only and Administrator-only. It lists newest events
-first with deterministic tie-breaking and supports server-side filters for
-inclusive time bounds, actor, action, target type, and target identifier.
-Opening an event shows:
+Canonical audit events remain append-only backend integrity records and retain
+the transaction, redaction, privacy, and retention rules in
+`.agents/audit-policy.md`. The web application exposes no audit-history HTTP
+endpoint, React route, navigation destination, filter, event-detail view, or
+download to any role. Ordinary feature tests may inspect persisted audit rows
+through isolated repository/test fixtures; that verification access is not a
+production application interface.
 
-- event identifier and application-generated UTC occurrence time;
-- privacy-safe actor label and role snapshot;
-- action, target type/identifier, and outcome; and
-- structured, redacted before/after changes or concise details.
+### ADM-AUD-INT-01 acceptance criteria
 
-It never exposes passwords, hashes, temporary/reset credentials, sessions,
-unnecessary incident content, raw AI prompts/responses, or anonymous reporter
-identity. Deleted actors render with a tombstoned label while retaining their
-stable identifier. No browser or application operation can edit or delete an
-audit event.
+- [x] `ADM-AUD-INT-01-A`: The production web application has no audit-history
+  controller or route, and the Administrator shell and public documentation
+  expose no audit-history destination, while focused mutation tests continue to
+  prove required append-only audit writes and rollback atomicity. Evidence is
+  recorded in
+  [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
 
 ### ADM-SELF-01 — Own password, notifications, and logout
 
@@ -475,7 +585,6 @@ expose typed operations with these semantics:
 | Accounts | paged directory, pending requests, promotion decision, category replacement, reset, tombstone, privileged provisioning |
 | SLO | current targets, category history, create target version |
 | Statistics/AI | aggregate query, responder breakdown, trend-summary request |
-| Audit | paged filtered query and event detail |
 
 Responses use explicit DTOs rather than serialized domain entities. DTOs
 contain only fields authorized for this actor and representation. Mutation
@@ -500,8 +609,8 @@ or invalid CSRF tokens and unsupported content types.
   are not the source of business time.
 - An incident has at most one assignee, enforced in application logic and
   database constraints where appropriate.
-- SLO version history and audit history are append-only through ordinary
-  application APIs.
+- SLO version history is append-only through ordinary application APIs. Audit
+  events are append-only internal records with no ordinary read endpoint.
 - Tests use isolated PostgreSQL databases/schemas and never production data.
 
 ## 8. React interaction and accessibility contract
@@ -539,9 +648,21 @@ The administrator slice is acceptable when:
   options, SLO overview, and stale-response protection.
 - [ ] Incident detail renders privacy-safe lifecycle, resolution, SLO, comment,
   and image-attachment data without exposing an anonymous identity.
+  Backend automated evidence is recorded in
+  [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md)
+  and React automated evidence in
+  [the 2026-10-22 administrator incident detail React verification](test-evidence/2026-10-22-administrator-incident-detail-react.md).
+  The criterion remains open pending interaction/accessibility, browser
+  end-to-end, and deployed verification.
 - [ ] Assign/reassign, unassign, resolve, and comment operations reauthorize at
   execution, reject stale or invalid state, prevent duplicate mutation, and
   commit required audit evidence atomically.
+  Backend automated evidence is recorded in
+  [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md)
+  and React automated evidence in
+  [the 2026-10-22 administrator incident detail React verification](test-evidence/2026-10-22-administrator-incident-detail-react.md).
+  The criterion remains open pending interaction/accessibility, browser
+  end-to-end, and deployed verification.
 - [ ] The account directory supports pending-promotion review, approval and
   rejection, Responder category replacement, one-time temporary-password
   reset, eligible account tombstoning, and controlled Administrator
@@ -551,20 +672,58 @@ The administrator slice is acceptable when:
 - [ ] Statistics use persisted lifecycle timestamps, apply the specified
   filters and formulas, handle empty populations, and include anonymous
   incidents only in non-identifying aggregates.
+  Backend-only automated evidence is recorded in
+  [the 2026-10-22 administrator statistics verification](test-evidence/2026-10-22-administrator-statistics-backend.md).
+  The criterion remains open pending the React page, interaction/accessibility,
+  browser end-to-end, and deployed verification.
 - [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
   sends only allowlisted aggregate data, renders escaped advisory text, has no
   mutation path, and fails without blocking statistics.
-- [ ] The audit UI provides paged deterministic history and time, actor, action,
-  and target filters without secrets, unnecessary content, or anonymous
-  identity.
+- [x] Audit records remain internal-only with no HTTP read endpoint or React
+  destination, while required mutation-plus-audit atomicity remains verified by
+  [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
 - [ ] Password change and logout use server-side sessions, CSRF protection,
   request-time SPA tokens, bounded exact-error recovery, secret-free logging
   and auditing, session invalidation, and client cache clearing. Recovery does
   not retry an authenticated mutation after the refreshed session is anonymous.
+  Password-change React and focused Spring evidence is recorded in the
+  [2026-10-22 password-management verification](test-evidence/2026-10-22-password-management-frontend.md).
+  The criterion remains open pending browser client-memory/session verification,
+  exact-commit evidence, and deployed HTTPS verification.
 - [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
   reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
 - [ ] The required automated, accessibility, and deployed checks below are
   recorded against the exact release commit under `workflow/test-evidence/`.
+
+### ADM-ACC-03 acceptance criteria — Responder category access
+
+- [x] `ADM-ACC-03-A`: The account directory and Administrator API expose an
+  enabled Responder's current category set and opaque account version; the UI
+  can replace the full set, including clearing it, and preserves recoverable
+  failure feedback. Automated component and MVC evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-B`: Missing CSRF, signed-out, wrong-role, malformed-version,
+  unknown-category, and duplicate-category requests are rejected before the
+  account mutation service is invoked, using privacy-safe errors. Automated
+  MVC evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-C`: PostgreSQL reauthorizes the actor and enabled Responder
+  under lock; a successful change atomically replaces access, increments the
+  account version, invalidates affected sessions, and writes a redacted audit
+  event, while unchanged input writes no misleading audit and audit failure
+  rolls back every effect. Automated evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-D`: Two replacements submitted from the same account version
+  produce one committed winner and one recoverable `CONFLICT`, with one access
+  set, version increment, and success audit. The isolated concurrency test
+  evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-E`: Deployed verification proves revocation immediately
+  removes unassigned queue and future-claim access while preserving access to
+  incidents already assigned to the Responder. The repository user confirmed
+  the end-to-end check in the current Codex chat on 2026-10-22; the result is
+  recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
 
 ### Required verification
 
@@ -581,7 +740,10 @@ The following suites are required before the slice can be called complete:
    assignment/reassignment/deletion/access changes.
 4. React component tests for semantic structure, keyboard/focus behavior,
    validation, confirmation, loading/empty/error states, stale responses, and
-   malicious/long text rendering.
+   malicious/long text rendering. Purely visual composition and styling do not
+   require brittle DOM-structure or CSS-class assertions when a documented human
+   review approves them; this exception does not cover interactive behavior,
+   accessibility semantics, or state handling.
 5. Browser end-to-end tests covering each navigation destination and one
    successful plus denied/stale path for each mutation family.
 6. AI gateway tests for aggregate-only payloads, prompt injection, anonymous
@@ -617,15 +779,17 @@ skipped checks, sanitized outputs, and remaining risks under
 | ADM-INC-03/04/05 | incident lifecycle, authorization matrix, audit | service + PostgreSQL conflict/atomicity + E2E tests |
 | ADM-ACC-01/02/03 | requirements, authorization matrix, security | service + MVC + session invalidation + E2E tests |
 | ADM-ACC-04/05/06 | requirements, security, audit, MP2 improvements | credential/tombstone/bootstrap security tests |
+| ADM-ACC-05-A/B | authorization matrix, security, persistence, audit | trusted-actor/self-denial tests plus isolated PostgreSQL reciprocal-tombstone concurrency, rollback, audit, and explicit-retry tests |
 | ADM-ACC-06-A/B | authorization matrix, security, issue #5 | forged-role HTTP tests, route-denial tests, bootstrap configuration unit tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
 | ADM-ACC-06-C/D | persistence, audit, MP2 improvements, issue #5 | isolated PostgreSQL success, system actor/target attribution, replay, pre-existing-admin, and concurrent-startup tests; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
 | ADM-ACC-06-E | persistence, audit, issue #5 | isolated PostgreSQL audit-write failure and transaction rollback test; [provisional issue #5 evidence](test-evidence/2026-10-19-issue-5-admin-bootstrap.md) |
 | ADM-ACC-06-F | deployment, issue #5 | first-run/recovery runbook and deployment-workflow configuration review |
 | ADM-ACC-06-G | security ADR gate, issue #5 | named independent approval plus protected route/mutation tests; currently blocked |
 | ADM-SLO-01 | SLO, audit | calculation + versioning + PostgreSQL tests |
+| ADM-SLO-01-A/B/C/D | SLO, authorization matrix, persistence, audit, style guide | MVC security and validation tests, isolated PostgreSQL authorization/atomicity/concurrency tests, and React interaction/accessibility tests |
 | ADM-STAT-01 | requirements, SLO, anonymity | aggregation/privacy + React tests |
 | ADM-AI-01 | AI policy, anonymity, security | fake-provider adversarial/resilience tests |
-| ADM-AUD-01 | audit policy, anonymity | append-only/privacy/filter tests |
+| ADM-AUD-INT-01 | requirements, audit policy, persistence | source-boundary inspection, React navigation test, and focused mutation/audit atomicity tests |
 | ADM-SELF-01 | requirements, security, audit | password/session/CSRF tests |
 
 ## 11. Decisions required before implementation
@@ -638,8 +802,9 @@ skipped checks, sanitized outputs, and remaining risks under
    recorded before the affected endpoint is enabled.
 4. Persistent notification history is deferred; transient notifications are
    permitted only where they meet ADM-SELF-01.
-5. Incident-scoped audit history is omitted from the incident page; the global
-   privacy-safe audit interface remains in scope.
+5. Audit events remain an internal backend integrity control. The web
+   application exposes no incident-scoped or global audit-history endpoint,
+   navigation destination, filter, detail view, or download.
 6. The SoCLaaS provider contract and published quota defaults are recorded in
    `workflow/ai-features.md`. ADM-AI-01 may be built and tested against the
    deterministic fake provider, but production model selection, the actual key
@@ -658,6 +823,6 @@ independent security/architecture approval is recorded.
 ## 12. Approval
 
 - Product owner: repository user (approval provided in the current Codex chat)
-- Security/architecture reviewer: pending independent review
+- Security/architecture reviewer: approved by owner
 - Approved scope/date: full administrator feature-parity scope, 2026-10-18
 - Review evidence: `reviews/2026-10-18-administrator-slice-specification.md`

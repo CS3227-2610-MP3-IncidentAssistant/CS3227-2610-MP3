@@ -60,13 +60,18 @@ authorization.
 - Write the domain state change and its audit event as one logical persistence
   operation. If either cannot be safely persisted, commit neither.
 - Do not provide normal update or delete operations for audit entries.
-- Preserve audit actor identifiers after account deletion and display a
-  tombstoned label rather than erasing history.
+- Preserve audit actor identifiers after account deletion rather than erasing
+  history.
 - Sort equal-timestamp events deterministically by a monotonic sequence or event
   identifier.
-- The application-level log can filter by time, actor, action, and target.
-- An incident audit view shows only events for that incident.
-- Anonymous incident audit presentation must follow `.agents/anonymity-policy.md`.
+- Audit records are internal backend integrity data. The application exposes no
+  audit-history HTTP endpoint, page, filter, event-detail view, or download to
+  any authenticated role.
+- Operational inspection, retention, and recovery access is outside ordinary
+  application workflows and must use an explicitly approved, least-privilege
+  administrative process. A future user-visible audit feature requires a new
+  approved specification covering authorization, anonymity, redaction, and
+  pagination before implementation.
 
 Database permissions and append-only application APIs reduce ordinary
 modification risk but do not make records tamper-proof against a database or

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError, loadDashboard, type DashboardPage, type IncidentRow, type SloTarget } from '../api'
+import { Pagination } from '../shared/Pagination'
 
 type DashboardQuery = {
   search: string
@@ -7,13 +8,13 @@ type DashboardQuery = {
   revision: number
 }
 
-export function AdminDashboard() {
+export function AdminDashboard({ onOpenIncident }: { onOpenIncident?: (incidentId: string) => void }) {
   const dashboard = useDashboardData()
 
   return <main id="main-content" className="content">
     <DashboardHeader onRefresh={dashboard.refresh} />
     <SloOverview targets={dashboard.result?.sloTargets ?? []} loading={dashboard.loading && !dashboard.result} />
-    <IncidentPanel dashboard={dashboard} />
+    <IncidentPanel dashboard={dashboard} onOpenIncident={onOpenIncident} />
   </main>
 }
 
@@ -75,7 +76,10 @@ function DashboardHeader({ onRefresh }: { onRefresh: () => void }) {
   </header>
 }
 
-function IncidentPanel({ dashboard }: { dashboard: DashboardState }) {
+function IncidentPanel({ dashboard, onOpenIncident }: {
+  dashboard: DashboardState
+  onOpenIncident?: (incidentId: string) => void
+}) {
   const [searchInput, setSearchInput] = useState('')
   const incidents = dashboard.result?.incidents ?? []
 
@@ -110,12 +114,21 @@ function IncidentPanel({ dashboard }: { dashboard: DashboardState }) {
     {dashboard.loading && <p className="panel-state" role="status">Loading incidents…</p>}
     {!dashboard.loading && dashboard.error && <div className="panel-state" role="alert">{dashboard.error}</div>}
     {!dashboard.loading && !dashboard.error && incidents.length === 0 && <IncidentEmptyState />}
-    {!dashboard.error && incidents.length > 0 && <IncidentTable incidents={incidents} />}
-    {dashboard.result && dashboard.result.totalPages > 1 && <Pagination dashboard={dashboard} />}
+    {!dashboard.error && incidents.length > 0 && <IncidentTable incidents={incidents} onOpenIncident={onOpenIncident} />}
+    {dashboard.result && <Pagination
+      page={dashboard.page}
+      totalPages={dashboard.result.totalPages}
+      ariaLabel="Incident pages"
+      disabled={dashboard.loading}
+      onPageChange={(page) => page < dashboard.page ? dashboard.previousPage() : dashboard.nextPage()}
+    />}
   </section>
 }
 
-function IncidentTable({ incidents }: { incidents: IncidentRow[] }) {
+function IncidentTable({ incidents, onOpenIncident }: {
+  incidents: IncidentRow[]
+  onOpenIncident?: (incidentId: string) => void
+}) {
   return <div className="table-region" role="region" aria-label="Company incidents" tabIndex={0}>
     <table>
       <thead>
@@ -128,15 +141,31 @@ function IncidentTable({ incidents }: { incidents: IncidentRow[] }) {
           <th scope="col">Created</th>
         </tr>
       </thead>
-      <tbody>{incidents.map((incident) => <IncidentTableRow incident={incident} key={incident.id} />)}</tbody>
+      <tbody>{incidents.map((incident) => <IncidentTableRow
+        incident={incident}
+        key={incident.id}
+        onOpenIncident={onOpenIncident}
+      />)}</tbody>
     </table>
   </div>
 }
 
-function IncidentTableRow({ incident }: { incident: IncidentRow }) {
+function IncidentTableRow({ incident, onOpenIncident }: {
+  incident: IncidentRow
+  onOpenIncident?: (incidentId: string) => void
+}) {
   return <tr>
     <th scope="row">
-      <span className="incident-title">{incident.title}</span>
+      {onOpenIncident
+        ? <button
+          className="incident-title-link"
+          type="button"
+          aria-label={`View details for ${incident.title}`}
+          onClick={() => onOpenIncident(incident.id)}
+        >
+          {incident.title}
+        </button>
+        : <span className="incident-title">{incident.title}</span>}
       <small>{incident.id}</small>
     </th>
     <td>{displayEnum(incident.category)}</td>
@@ -145,24 +174,6 @@ function IncidentTableRow({ incident }: { incident: IncidentRow }) {
     <td>{incident.assigneeLabel ?? 'Unassigned'}</td>
     <td><time dateTime={incident.createdAt}>{new Date(incident.createdAt).toLocaleString()}</time></td>
   </tr>
-}
-
-function Pagination({ dashboard }: { dashboard: DashboardState }) {
-  const result = dashboard.result
-  if (!result) return null
-  return <nav className="pagination" aria-label="Incident pages">
-    <button type="button" disabled={dashboard.page === 0 || dashboard.loading} onClick={dashboard.previousPage}>
-      Previous
-    </button>
-    <span>Page {dashboard.page + 1} of {result.totalPages}</span>
-    <button
-      type="button"
-      disabled={dashboard.page + 1 >= result.totalPages || dashboard.loading}
-      onClick={dashboard.nextPage}
-    >
-      Next
-    </button>
-  </nav>
 }
 
 function IncidentEmptyState() {

@@ -28,14 +28,14 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
+import com.company.incidentdesk.support.PostgresTestDataSource;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.IncidentPage;
 import com.company.incidentdesk.web.responder.ResponderIncidentService.ListCriteria;
 
 /** Isolated-schema PostgreSQL checks for current Responder category and assignment visibility. */
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class ResponderIncidentPostgresTest {
     private static final String SCHEMA = "responder_queue_test_" + UUID.randomUUID().toString().replace("-", "");
     private static final Instant NOW = Instant.parse("2026-10-20T01:00:00Z");
@@ -52,10 +52,11 @@ class ResponderIncidentPostgresTest {
     static void createIsolatedSchema() {
         requireIsolationConfirmation();
         NeonDatabaseUrl database = NeonDatabaseUrl.parse(requiredEnvironment("INCIDENT_DESK_TEST_DATABASE_URL"));
-        administrativeDataSource = dataSource(database.jdbcUrl(), database.username(), database.password());
+        administrativeDataSource = PostgresTestDataSource.administrative(
+                database.jdbcUrl(), database.username(), database.password());
         new JdbcTemplate(administrativeDataSource).execute("CREATE SCHEMA " + SCHEMA);
-        testDataSource = dataSource(withCurrentSchema(database.jdbcUrl(), SCHEMA),
-                database.username(), database.password());
+        testDataSource = PostgresTestDataSource.isolated(
+                database.jdbcUrl(), database.username(), database.password(), SCHEMA);
         Flyway.configure().dataSource(testDataSource).locations("classpath:db/migration")
                 .defaultSchema(SCHEMA).schemas(SCHEMA).load().migrate();
         jdbc = new JdbcTemplate(testDataSource);
@@ -538,10 +539,11 @@ class ResponderIncidentPostgresTest {
                     org.springframework.dao.DataIntegrityViolationException.class,
                     () -> jdbc.update("""
                             INSERT INTO incident_resolutions (
-                                id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks
-                            ) VALUES (?, ?, ?, 1, ?, ?, ?)
+                                id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks,
+                                queue_entered_at, first_assigned_at, responder_at_resolution
+                            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
                             """, UUID.randomUUID(), UUID.randomUUID(), assigned, RESPONDER,
-                            Timestamp.from(NOW), remarks));
+                            Timestamp.from(NOW), remarks, Timestamp.from(NOW), Timestamp.from(NOW), RESPONDER));
         }
         assertEquals(0, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM incident_resolutions WHERE incident_id = ?", Integer.class, assigned));
@@ -660,14 +662,16 @@ class ResponderIncidentPostgresTest {
 
     private UUID incident(String id, String category, String status, UUID assignee, Instant queueEnteredAt) {
         UUID incidentId = UUID.fromString(id);
+        Timestamp assignedAt = "ASSIGNED".equals(status) ? Timestamp.from(queueEnteredAt) : null;
         jdbc.update("""
                 INSERT INTO incidents (
                     id, reporter_id, title, description, category, status, anonymous,
-                    created_at, submitted_at, queue_entered_at, assignee_id, version
-                ) VALUES (?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?, 0)
+                    created_at, submitted_at, queue_entered_at, first_assigned_at,
+                    latest_assigned_at, assignee_id, version
+                ) VALUES (?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?, ?, ?, 0)
                 """, incidentId, REPORTER, "Incident " + id.substring(id.length() - 1), "private incident body",
                 category, status, java.sql.Timestamp.from(NOW), java.sql.Timestamp.from(NOW),
-                java.sql.Timestamp.from(queueEnteredAt), assignee);
+                java.sql.Timestamp.from(queueEnteredAt), assignedAt, assignedAt, assignee);
         return incidentId;
     }
 
@@ -679,14 +683,6 @@ class ResponderIncidentPostgresTest {
     private void grant(UUID accountId, String category) {
         jdbc.update("INSERT INTO responder_category_access (account_id, category, granted_at) VALUES (?, ?, ?)",
                 accountId, category, java.sql.Timestamp.from(NOW));
-    }
-
-    private static DataSource dataSource(String url, String username, String password) {
-        return new DriverManagerDataSource(url, username, password);
-    }
-
-    private static String withCurrentSchema(String url, String schema) {
-        return url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema;
     }
 
     private static String requiredEnvironment(String name) {

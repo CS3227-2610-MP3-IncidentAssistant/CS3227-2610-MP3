@@ -104,6 +104,12 @@ architecture.
 - Use server-independent, application-generated timestamps and store them in
   UTC. Convert them only for display.
 - Keep domain logic separate from web UI and concrete persistence code.
+- Do not declare a Spring-proxied bean class `final`. Spring proxies with
+  CGLIB subclassing, so a `final` class fails at startup with
+  "Cannot subclass final class". This applies to every `@Repository` (proxied
+  for persistence exception translation) and to any class carrying
+  `@Transactional`, `@Async`, `@Cacheable`, or `@Validated`. Plain `@Service`
+  and `@RestController` classes without those annotations may stay `final`.
 - Treat the packaged application and container image as read-only. Runtime data
   belongs in PostgreSQL or an explicitly approved object store.
 - Apply database schema changes only through versioned migrations.

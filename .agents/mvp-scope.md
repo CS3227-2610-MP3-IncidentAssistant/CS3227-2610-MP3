@@ -52,7 +52,7 @@ controls, automated verification, and reproducible CI/CD.
 - Update responder category access.
 - Complete one-time first-Administrator bootstrap and authorized subsequent
   Administrator provisioning without public privileged registration.
-- Configure SLOs and view required audit records.
+- Configure SLOs.
 - Use an advisory AI summary of privacy-safe aggregate operational trends.
 
 ## Post-MVP unless scheduled earlier
@@ -65,7 +65,6 @@ controls, automated verification, and reproducible CI/CD.
 - Account deletion and password-reset workflow.
 - Detailed statistics beyond those required for the administrator AI input.
 - Personal responder statistics.
-- Full audit-log user interface.
 - Advanced searching, filtering, and sorting.
 - Persistent notification history.
 - Advanced visual polish and non-essential charts.
@@ -89,3 +88,7 @@ controls, automated verification, and reproducible CI/CD.
 This file sets delivery priority, not permission to violate future-facing domain
 invariants. Post-MVP data structures should not be prematurely implemented, but
 MVP choices should avoid making the documented lifecycle impossible.
+
+Audit persistence remains an internal backend integrity requirement. An audit
+history endpoint or user interface is intentionally excluded rather than
+deferred.

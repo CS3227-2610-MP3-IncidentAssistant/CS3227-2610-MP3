@@ -1,10 +1,17 @@
 import { readCsrfToken } from './shared/csrf'
+import type {
+  IncidentAttachmentEntry,
+  IncidentCommentEntry,
+  IncidentResolutionEntry,
+  IncidentSloProgress,
+} from './shared/incident/incidentDetail'
 
 export type SessionState = {
   authenticated: boolean
   loginName?: string
   role?: string
   responderCategories?: IncidentCategory[]
+  credentialTemporary?: boolean
 }
 
 export type SessionRefresher = () => Promise<SessionState>
@@ -22,8 +29,8 @@ export type PromotionRequestRecord = {
   decidedAt: string | null
 }
 
-export type PromotionRequestHistory = { requests: PromotionRequestRecord[] }
-export type PromotionRequestPage = PromotionRequestHistory & {
+export type PromotionRequestPage = {
+  requests: PromotionRequestRecord[]
   page: number
   size: number
   totalElements: number
@@ -36,6 +43,67 @@ export type SloTarget = {
   timeInProgressMinutes: number | null
   reopenRatePercent: number | null
   effectiveAt: string | null
+}
+
+export type SloTargetVersion = {
+  id: string
+  category: IncidentCategory
+  timeToClaimMinutes: number
+  timeInProgressMinutes: number
+  reopenRatePercent: number
+  effectiveAt: string
+}
+
+export type SloCategoryConfiguration = {
+  category: IncidentCategory
+  current: SloTargetVersion | null
+  history: SloTargetVersion[]
+}
+
+export type SloConfiguration = {
+  outcome: 'AVAILABLE'
+  categories: SloCategoryConfiguration[]
+}
+
+export type StatisticsIdentityOption = {
+  id: string
+  displayName: string
+}
+
+export type AdministratorStatistics = {
+  outcome: 'AVAILABLE'
+  summary: {
+    resolvedIncidentCount: number
+    averageTimeToClaimMillis: number | null
+    claimedCycleCount: number
+    averageTimeInProgressMillis: number | null
+    completedCycleCount: number
+    reopenedIncidentCount: number
+    reopenRate: number | null
+    reopenEventCount: number
+    administratorResolvedCount: number
+  }
+  responders: Array<{
+    responderId: string
+    displayName: string
+    resolvedCycleCount: number
+    averageTimeInProgressMillis: number | null
+    reopenedCycleCount: number
+    reopenRate: number | null
+    administratorResolvedCount: number
+  }>
+  filterOptions: {
+    responders: StatisticsIdentityOption[]
+    reporters: StatisticsIdentityOption[]
+  }
+}
+
+export type AdministratorStatisticsFilters = {
+  categories: IncidentCategory[]
+  responderId: string
+  reporterId: string
+  periodFrom: string
+  periodThrough: string
 }
 
 export type IncidentRow = {
@@ -91,8 +159,12 @@ export async function roleLogin(
   }, refreshSession, { fallbackMessage: 'Sign-in failed' })
 }
 
-export async function loadPromotionHistory(signal?: AbortSignal): Promise<PromotionRequestHistory> {
-  return requestJson<PromotionRequestHistory>('/api/v1/reporter/promotion-request', { signal })
+export async function loadPromotionHistory(
+  page: number,
+  signal?: AbortSignal,
+): Promise<PromotionRequestPage> {
+  const parameters = new URLSearchParams({ page: String(page), size: '25' })
+  return requestJson<PromotionRequestPage>(`/api/v1/reporter/promotion-request?${parameters}`, { signal })
 }
 
 export async function submitPromotionRequest(
@@ -148,6 +220,101 @@ export async function decidePromotionRequest(
   return response.json() as Promise<PromotionRequestRecord>
 }
 
+export type AdministratorAccount = {
+  id: string
+  loginName: string
+  role: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
+  status: 'ENABLED' | 'DISABLED'
+  version: number
+  categories: IncidentCategory[]
+}
+
+export type AdministratorAccountPage = {
+  accounts: AdministratorAccount[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export async function loadAdministratorAccounts(
+  page: number,
+  signal?: AbortSignal,
+): Promise<AdministratorAccountPage> {
+  const parameters = new URLSearchParams({ page: String(page), size: '25' })
+  return requestJson<AdministratorAccountPage>(`/api/v1/admin/accounts?${parameters}`, { signal })
+}
+
+export async function tombstoneAdministratorAccount(
+  accountId: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/accounts/${encodeURIComponent(accountId)}/tombstone`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The account could not be deleted. Refresh and try again.',
+  })
+}
+
+export async function replaceResponderCategories(
+  accountId: string,
+  expectedVersion: number,
+  categories: IncidentCategory[],
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/accounts/${encodeURIComponent(accountId)}/responder-categories`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ expectedVersion, categories }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'Responder categories could not be updated. Refresh and try again.',
+  })
+}
+
+export type TemporaryPasswordResponse = {
+  temporaryPassword: string
+  expiresInHours: number
+}
+
+export async function resetAdministratorAccountPassword(
+  accountId: string,
+  refreshSession: SessionRefresher,
+): Promise<TemporaryPasswordResponse> {
+  const response = await csrfRequest(
+    `/api/v1/admin/accounts/${encodeURIComponent(accountId)}/temporary-password`,
+    { method: 'POST', credentials: 'same-origin' },
+    refreshSession,
+    {
+      authenticationRequired: true,
+      fallbackMessage: 'The temporary password could not be generated. Try again.',
+    },
+  )
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<TemporaryPasswordResponse>
+}
+
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest('/api/v1/auth/password', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The password could not be updated. Try again.',
+  })
+}
+
 export async function registerAccount(
   loginName: string,
   password: string,
@@ -176,6 +343,158 @@ export async function logout(refreshSession: SessionRefresher): Promise<void> {
 export async function loadDashboard(search: string, page: number, signal: AbortSignal): Promise<DashboardPage> {
   const parameters = new URLSearchParams({ search: search.trim(), page: String(page), size: '25' })
   return requestJson<DashboardPage>(`/api/v1/admin/dashboard?${parameters}`, { signal })
+}
+
+export async function loadSloConfiguration(signal?: AbortSignal): Promise<SloConfiguration> {
+  return requestJson<SloConfiguration>('/api/v1/admin/slo', { signal })
+}
+
+export type AdministratorIncidentDetail = {
+  id: string
+  version: number
+  title: string
+  description: string
+  category: IncidentCategory
+  status: string
+  anonymous: boolean
+  reporterLabel: string
+  assigneeLabel: string | null
+  createdAt: string | null
+  submittedAt: string | null
+  withdrawnAt: string | null
+  queueEnteredAt: string | null
+  firstAssignedAt: string | null
+  latestAssignedAt: string | null
+  slo: IncidentSloProgress | null
+  resolutionHistory: IncidentResolutionEntry[]
+  comments: IncidentCommentEntry[]
+  attachments: IncidentAttachmentEntry[]
+  eligibleResponders: EligibleResponder[]
+}
+
+export type EligibleResponder = {
+  id: string
+  loginName: string
+}
+
+export async function loadAdministratorIncidentDetail(
+  incidentId: string,
+  signal?: AbortSignal,
+): Promise<AdministratorIncidentDetail> {
+  return requestJson<AdministratorIncidentDetail>(
+    `/api/v1/admin/incidents/${encodeURIComponent(incidentId)}`,
+    { signal, cache: 'no-store' },
+  )
+}
+
+/**
+ * The mutation helpers below send an `expectedVersion` the server rechecks
+ * under lock, plus a caller-generated `requestId` the server uses as an
+ * idempotency key. A repeated request with the same id adds no second record.
+ */
+export async function addAdministratorIncidentComment(
+  incidentId: string,
+  requestId: string,
+  text: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/comments`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId, text }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The comment could not be added. Refresh and try again.',
+  })
+}
+
+export async function assignAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  responderId: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/assignment`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion, responderId }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The assignment could not be saved. Refresh and try again.',
+  })
+}
+
+export async function unassignAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/unassign`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The incident could not be unassigned. Refresh and try again.',
+  })
+}
+
+export async function resolveAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  requestId: string,
+  remarks: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion, requestId, remarks }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The incident could not be resolved. Refresh and try again.',
+  })
+}
+
+export async function loadAdministratorStatistics(
+  filters: AdministratorStatisticsFilters,
+  signal?: AbortSignal,
+): Promise<AdministratorStatistics> {
+  const parameters = new URLSearchParams()
+  filters.categories.forEach((category) => parameters.append('category', category))
+  if (filters.responderId) parameters.set('responderId', filters.responderId)
+  if (filters.reporterId) parameters.set('reporterId', filters.reporterId)
+  if (filters.periodFrom) parameters.set('periodFrom', `${filters.periodFrom}T00:00:00.000Z`)
+  if (filters.periodThrough) parameters.set('periodThrough', `${filters.periodThrough}T23:59:59.999Z`)
+  const query = parameters.size > 0 ? `?${parameters}` : ''
+  return requestJson<AdministratorStatistics>(`/api/v1/admin/statistics${query}`, { signal })
+}
+
+export async function saveSloTarget(
+  category: IncidentCategory,
+  target: {
+    timeToClaimMinutes: number
+    timeInProgressMinutes: number
+    reopenRatePercent: number
+    expectedVersionId: string | null
+  },
+  refreshSession: SessionRefresher,
+): Promise<{ changed: boolean }> {
+  const response = await csrfRequest(`/api/v1/admin/slo/${encodeURIComponent(category)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(target),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The SLO target could not be saved. Refresh and try again.',
+  })
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<{ changed: boolean }>
 }
 
 export type ReporterIncident = {

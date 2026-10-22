@@ -6,7 +6,6 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
-import com.company.incidentdesk.IncidentDeskWebApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -20,7 +19,7 @@ public final class NeonServiceSmoke {
     private NeonServiceSmoke() {}
 
     public static void main(String[] arguments) {
-        try (var context = new SpringApplicationBuilder(IncidentDeskWebApplication.class)
+        try (var context = new SpringApplicationBuilder(NeonConfiguration.class)
                 .web(WebApplicationType.NONE)
                 .run(arguments)) {
             verifyPostgres(context.getBean(DataSource.class));

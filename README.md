@@ -69,10 +69,15 @@ Vite proxies `/health` and future `/api` requests to Spring Boot. A normal
 Gradle build compiles the React production assets into the Spring Boot web JAR.
 Production deployment builds one container and deploys it to Cloud Run through
 the protected `production` GitHub environment. Configure that environment with
-the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets, plus
-`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`, and
-`CLOUD_RUN_SERVICE` variables. Only the assessed `master` branch can reach the
+the `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`,
+`CLOUD_RUN_SERVICE`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
+`GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT` variables. The
+workflow uses GitHub OIDC and Google Workload Identity Federation; no Google
+service-account key is stored in GitHub. Only `main` can reach the routine
 deployment job; a manual run from another branch performs verification only.
+`master` remains reserved for the separately approved assignment-submission
+snapshot. Follow [the Cloud Run deployment runbook](docs/CloudRunDeployment.md)
+for the one-time Google Cloud and GitHub environment setup.
 
 ## Testing the entire application
 
@@ -102,25 +107,34 @@ The normal build skips registration tests that require PostgreSQL when no test
 database is configured. To run them locally against a dedicated empty Neon
 test project or another isolated PostgreSQL database:
 
-1. Copy `.env.test.example` to the git-ignored `.env.test.local`.
-2. Paste the complete direct PostgreSQL URL for the test-only database into
-   `INCIDENT_DESK_TEST_DATABASE_URL`, using the same credential-bearing format
-   as `DATABASE_URL` in `.env.local`. A Neon direct endpoint does not contain
-   `-pooler` in its hostname.
+1. Copy `.env.test.example` to the git-ignored `.env.test.local`, or pull a
+   dedicated Neon test project directly into that file:
+
+```powershell
+neon env pull --project-id <test-project-id> --branch <test-branch> --file .env.test.local --services postgres --services object-storage
+```
+
+2. Confirm `DATABASE_URL_UNPOOLED` is the complete direct URL for a test-only
+   database. A Neon direct endpoint does not contain `-pooler` in its hostname.
+   `registrationDatabaseTest` also accepts the legacy
+   `INCIDENT_DESK_TEST_DATABASE_URL` override when testing non-Neon PostgreSQL.
 3. Keep `INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED=true` only after
    confirming that the database contains no production or personal data.
 4. Run:
 
 ```powershell
 .\gradlew.bat registrationDatabaseTest
+.\gradlew.bat neonTestServiceSmoke
 ```
 
 The task refuses pooled Neon endpoints and any URL equal to the process's
 `DATABASE_URL` or `DATABASE_URL_UNPOOLED`. Each test run creates a random
 schema, applies the real Flyway migrations, runs the registration tests, and
 drops that schema. Environment variables already defined by the operating
-system take precedence over `.env.test.local`. Never commit the local file or
-use production credentials.
+system take precedence over `.env.test.local`. `neonTestServiceSmoke` performs
+`SELECT 1` plus one random Object Storage put/get/delete round trip and refuses
+to run when `.env.test.local` targets the `.env.local` database. Never commit
+the local file or use production credentials.
 
 For a production-style web smoke test, first complete the full build, then start
 the packaged application:

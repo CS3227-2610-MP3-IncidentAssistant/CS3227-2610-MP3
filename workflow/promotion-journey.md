@@ -1,192 +1,312 @@
 # Reporter-to-Responder Promotion Journey
 
-Status: **Draft — implementation is gated on product-owner confirmation of
-this revised cross-role contract and independent security/architecture
-approval.**
+Status: **Product-owner and security/architecture approval recorded on
+2026-10-22. Automated implementation evidence now satisfies `PROM-AC-01`
+through `PROM-AC-08`; browser, manual accessibility, deployed verification,
+and independent review of the subsequent transaction fix remain pending.**
 
-This specification governs issue #6 across Reporter request and history,
-Administrator review and decision, and fresh Responder authentication. It
-connects the role-specific specifications; it does not replace the canonical
-policies in `.agents/`.
+This specification governs the complete Reporter-to-Responder promotion
+journey across Reporter request and history, Administrator review and decision,
+session invalidation, and fresh Responder authentication. It connects the
+role-specific specifications and supersedes no canonical policy in `.agents/`.
 
-## 1. Actors and boundaries
+## 1. Scope, actors, and boundaries
 
-- An enabled Reporter may request promotion for their own account only.
-- An enabled Administrator may decide a still-pending request.
-- A Responder account is created by changing the existing account's role;
-  promotion never creates another account or changes its identifier.
-- The server derives each actor from the authenticated request. Browser fields
-  cannot set an actor, role, request status, audit identity, or timestamp.
-- The promotion request and decision are not AI-assisted. AI policy is not
-  applicable to this feature.
+- An enabled authenticated Reporter may request promotion for their own account
+  only.
+- An enabled authenticated Administrator may read and decide a still-pending
+  request.
+- Promotion changes the existing account from `REPORTER` to `RESPONDER`; it
+  never creates another account or changes the account identifier.
+- The server derives every actor, role, account state, request state, audit
+  identity, and timestamp from trusted application state. Browser input cannot
+  supply or override them.
+- The workflow does not allow a Reporter to edit, withdraw, approve, or reject
+  a submitted request. Cancellation is not part of this version.
+- Promotion is not AI-assisted. No promotion data reaches the SoC LLM, and no
+  generated output or AI-specific human approval point exists for this feature.
+- No new production dependency or external service is required.
 
-## 2. Request and history behavior
+## 2. Reporter request and history behavior
 
-A Reporter may request one or more distinct, valid incident categories and
-optional comments up to the centrally approved 2,000-character limit. At most
-one request may be pending for that account. Once a request is decided, the
-Reporter may submit another; prior request and decision history remains
-available and is not overwritten. Request creation and its audit record are
-one transaction.
+An enabled Reporter with no pending request may select one or more distinct,
+valid incident categories and enter optional comments of at most 2,000
+characters. Whitespace-only comments are normalized to absent; otherwise the
+trimmed comment is retained as untrusted text. The server rejects an empty
+category set, unknown or duplicate categories, an over-limit comment, a stale
+or disabled actor, and a second pending request without creating another
+request or success audit.
 
-While the account remains a Reporter, the Reporter can read only their own
-request history. Each record shows its requested categories, submission time,
-status, and privacy-safe outcome. An approved record identifies the categories
-granted. A Reporter cannot alter, approve, or reject a submitted request. After
-approval the account is no longer eligible for the Reporter history endpoint;
-the retained decision remains available to authorized Administrators, and the
-fresh Responder session is authorized only for the currently granted
-categories.
+Request submission creates a server-generated opaque request identifier and an
+application-generated UTC submission time. The request begins in `PENDING`.
+The request and its redacted audit event commit in one database transaction.
+Concurrent duplicate submissions for the same Reporter have at most one
+winner.
 
-## 3. Administrator decision behavior
+The Reporter can read only their own retained request history. History is
+ordered by submission time descending and then request identifier ascending,
+and is returned through bounded server-side pagination. Each record exposes
+only:
 
-An Administrator can review a pending request's requester, requested
-categories, request time, and optional comments. Approval requires selecting a
-non-empty subset of the categories requested. The server rejects an empty set,
-unknown or duplicate categories, and any category not in the original request.
-The decision uses the current persisted request, not a browser-supplied copy of
-its requested categories.
+- request identifier;
+- requested categories;
+- optional comments;
+- submission time;
+- `PENDING`, `APPROVED`, or `REJECTED` status;
+- decision time when decided; and
+- the exact approved category subset for an approved request, an empty set for
+  a rejected request, or no approved-category value while pending.
 
-Approval changes that same account to `RESPONDER`, grants exactly the selected
-categories, preserves its identifier and historical references, records the
-selected categories in request history and audit evidence, and commits the
-role, access, request decision, and audit changes atomically. Rejection changes
-neither role nor category access and retains the decision and required audit
-record. Only an enabled Reporter with a pending request is eligible. A stale,
-duplicate, or concurrent losing decision makes no second change or success
-audit.
+Once a request is decided, an account that remains a Reporter may submit a new
+request. Earlier requests and decisions are never overwritten. After approval,
+the account is no longer eligible for the Reporter history endpoint; retained
+history remains available to authorized Administrators.
+
+## 3. Administrator review and decision behavior
+
+The Administrator can page through pending requests in oldest-first order,
+with request identifier ascending as the stable tie-breaker, and can open an
+authorized request detail. The representation contains the requester login
+label, requested categories, optional comments, submission time, status,
+decision time, and approved categories where applicable. Tombstoned or
+otherwise unavailable historical requesters use a neutral label and remain
+non-actionable.
+
+Approval requires an explicit non-empty subset of the request's persisted
+requested categories. The server rejects an empty set, duplicate or unknown
+categories, and any category not present in the persisted request. It does not
+trust a browser-supplied copy of the requested categories. Approval:
+
+1. preserves the existing account identifier and historical references;
+2. changes the enabled requester from `REPORTER` to `RESPONDER`;
+3. replaces category access with exactly the selected subset;
+4. records the approved subset and decision time on the request;
+5. invalidates every existing session for the promoted account; and
+6. writes one redacted approval audit event.
+
+Those effects commit atomically. A persistence, audit, or session-invalidation
+failure leaves the request pending, the account a Reporter, category access
+unchanged, existing sessions unaffected by a partial role change, and no
+success audit.
+
+Rejection records `REJECTED`, an empty approved-category set, decision time,
+and one redacted rejection audit event atomically. It changes neither the
+requester's role nor category access and does not invalidate the requester's
+sessions.
+
+Only a pending request whose requester is still an enabled Reporter can be
+decided. A stale, duplicate, or concurrent losing decision returns a stable
+conflict/unavailable result and produces no second mutation or success audit.
 
 ## 4. Authentication and session behavior
 
-Approval invalidates every existing session for the promoted account through
-the shared Spring Session JDBC store. The promoted user must sign in again
-through the Responder portal. The Reporter portal and any mismatched role
-portal must not issue a usable session. A fresh Responder session reflects
-only the categories selected in the approved decision. Authentication and
-authorization are checked on the server; hiding routes or controls is not a
-security boundary.
+Approval invalidates all existing sessions for the promoted account through
+the shared Spring Session JDBC store in the promotion transaction. Every
+protected request also reloads or rechecks current persisted account authority,
+so an old session fails closed if revocation cannot be observed immediately.
 
-## 5. HTTP contract
+The promoted user must authenticate again through the Responder portal. The
+Reporter portal and any other mismatched portal return the same generic
+authentication failure used for invalid credentials. A fresh Responder session
+contains only the currently persisted approved categories. Session identifiers
+are never returned in promotion DTOs, stored in audit details, or written to
+logs or browser persistence.
 
-The Reporter endpoints follow the paths already listed in
-`workflow/reporter-vertical-slice.md`:
+Rejection does not change authentication authority. Administrator sessions are
+not rotated or invalidated by deciding another account's request.
+
+## 5. HTTP and representation contract
+
+The same-origin API is:
 
 ```text
-GET  /api/v1/reporter/promotion-request
+GET  /api/v1/reporter/promotion-request?page=0&size=25
 POST /api/v1/reporter/promotion-request
-```
 
-The Administrator API provides a bounded pending-request list, an
-Administrator-authorized detail endpoint for pending or decided requests, and
-a CSRF-protected decision operation under `/api/v1/admin/promotion-requests`:
-
-```text
 GET  /api/v1/admin/promotion-requests?page=0&size=25
 GET  /api/v1/admin/promotion-requests/{requestId}
 POST /api/v1/admin/promotion-requests/{requestId}/decision
 ```
 
-The pending list defaults to 25 rows and caps `size` at 100. Results sort by
-request time ascending, then request identifier ascending, so paging is
-deterministic. Approval submits only the selected category identifiers;
-rejection submits no category grant. Request and response DTOs omit
-caller-supplied actor, role, audit fields, and timestamps. Responses use the
-established stable validation, denial, stale/conflict, and persistence-failure
-error contract and do not reveal another Reporter's request.
+List endpoints default to 25 rows and cap `size` at 100. `page` must be zero or
+greater and `size` must be positive when supplied; malformed or out-of-range
+values return the stable validation response. A page beyond the end returns an
+empty list rather than falling back to another page. Reporter history uses the
+newest-first ordering in section 2. The Administrator pending queue uses the
+oldest-first ordering in section 3.
 
-The fresh Responder session also needs an observable incident-access check. A
-Responder may retrieve a bounded queue from
-`GET /api/v1/responder/incidents?page=0&size=25`. The server derives the
-enabled Responder account and its currently persisted categories from the
-authenticated principal; category or account identifiers are not accepted as
-authorization input. The result contains unassigned submitted incidents only
-from those categories, plus incidents currently assigned to that Responder
-regardless of current category access. It excludes incidents assigned to
-another account and all other unassigned categories. Rows omit anonymous
-reporter identity. Results use queue-entry time ascending and incident ID as a
-stable tie-breaker. Queue-entry time follows `.agents/incident-lifecycle.md`:
-handoff preserves the original submission queue position, while reopening uses
-the current reopen-cycle timestamp. The endpoint returns `{ incidents,
-page, size, hasMore }`; each row contains only `incidentId`, `title`,
-`category`, `status`, and `queueEnteredAt`. It returns no identity, comments,
-description, attachment, or total-count field. `size` defaults to 25 when
-omitted, must be positive when supplied, and is capped at 100; negative `page`
-values are rejected, and a page beyond the end returns an empty list with
-`hasMore: false`. Every request rechecks the account role, enabled state,
-category grants, and assignment against current persisted state. This read-only
-queue contract does not add claim, detail, or lifecycle mutation endpoints;
-those remain governed by their own approved feature specification.
+Reporter submission accepts only `requestedCategories` and `comments`.
+Administrator decisions accept only `decision` (`APPROVE` or `REJECT`) and
+`approvedCategories`; rejection must submit no category grant. DTOs contain no
+caller-supplied actor, role, status, audit fields, account authority, or trusted
+timestamps. Opaque identifiers are validated before repository access.
 
-## 6. Persistence, audit, and concurrency
+Every response containing promotion data uses `Cache-Control: no-store`.
+State-changing requests require JSON and a valid CSRF token. Missing or stale
+CSRF, signed-out, wrong-role, disabled/demoted actor, missing resource, invalid
+input, conflict, and persistence failure use stable privacy-safe error codes.
+Missing and denied protected resources are indistinguishable where a
+distinction could reveal another account or request. The client may perform the
+shared bounded stale-CSRF recovery, but it never automatically retries a
+promotion submission or decision after the refreshed session is anonymous.
 
-- Add schema only through forward Flyway migrations; never edit an applied
-  migration.
-- Preserve every request and decision as history. Enforce at most one pending
-  request per Reporter.
-- Persist `approvedCategories` separately from `requestedCategories`: it is
-  absent while pending, empty after rejection, and the exact non-empty subset
-  after approval. Preserve this outcome after later requests are submitted.
-- Commit request/decision state and its required audit event in one database
-  transaction. A failed write leaves neither a partial role/access change nor
-  a success audit.
-- Protect decision races with a database transaction and conditional pending
-  state transition or equivalent row lock. Exactly one concurrent decision can
-  win.
-- Persist application-generated UTC times. The browser cannot supply them.
-- Audit the acting Administrator, decision, target request/account, and exact
-  category access change. Do not record credentials, session identifiers, or
-  unnecessary request comment text.
-- Invalidate sessions across application instances using the shared session
-  store. Failure to invalidate must not leave a promoted account with a usable
-  old session.
+The fresh Responder result is observed through the approved Responder queue and
+incident-access contracts, not through browser-supplied category or account
+identifiers. Promotion does not add or weaken Responder claim, detail, comment,
+attachment, handoff, or resolution behavior.
 
-## 7. Traceability and acceptance criteria
+## 6. React interaction and accessibility contract
 
-| Requirement | Governing source | Primary implementation | Evidence |
+The Reporter surface provides labelled category checkboxes, a labelled
+optional-comments field with the 2,000-character limit, submission status, and
+a paginated semantic history table or equivalent accessible list. It prevents
+duplicate UI submission, preserves entered values after recoverable failure,
+and distinguishes loading, empty, pending-request, validation, session-expired,
+conflict, and server-failure states. Client-side checks improve feedback but do
+not replace server validation.
+
+The Administrator surface provides a paginated pending queue and an explicit
+review surface showing the request details and only the requested category
+choices. Approve and reject controls are keyboard operable, prevent duplicate
+UI submission, preserve selected categories after recoverable failure, and
+surface stale/conflict results with a refresh action. An approval confirmation
+identifies the requester and exact categories to grant; a rejection
+confirmation states that the request will close without changing role or
+access.
+
+Both surfaces use semantic headings, labelled controls, visible focus, status
+or alert live regions as appropriate, safe text rendering, keyboard-only
+operation, 200% zoom, and narrow-screen reflow. Request comments and labels are
+rendered as text, never through `dangerouslySetInnerHTML`. Promotion data,
+comments, and protected identifiers are not written to `localStorage`, URLs,
+analytics, or client logs. Role-specific state is cleared on logout or session
+change.
+
+## 7. Persistence, audit, concurrency, and recovery
+
+- Schema changes use new forward-only Flyway migrations; an applied migration
+  is never edited.
+- Every request and decision is retained. A database constraint enforces at
+  most one pending request per account.
+- Requested and approved category sets are persisted separately. Approved
+  categories are absent while pending, empty after rejection, and the exact
+  non-empty requested subset after approval.
+- Request creation and each decision commit their domain/account/session
+  effects and required audit event in one transaction.
+- Decision races use a locked or conditional transition from `PENDING`, with
+  transaction-time reauthorization of the Administrator and requester. Exactly
+  one concurrent decision can win.
+- Audit events identify the trusted actor, request/account target, action,
+  outcome, status change, and exact category grant where applicable. They omit
+  comments, credentials, session identifiers, and other unnecessary content.
+- Application-generated timestamps are UTC. Browser and database-server clocks
+  are not business-time authorities.
+- Restart or redeploy preserves request history, decisions, account identity,
+  category grants, audit records, and shared-session invalidation state.
+- The feature has no external provider, rate limit, timeout, or retry contract.
+  Ordinary request-size, authentication, CSRF, database availability, and
+  bounded client-recovery policies still apply.
+
+## 8. Traceability and acceptance criteria
+
+| Requirement | Governing source | Primary implementation area | Planned evidence |
 | --- | --- | --- | --- |
-| `PROM-REQ-01` | `.agents/requirements.md`, `authorization-matrix.md`, `audit-policy.md`, REP-PRO-01 | Reporter request/history API and UI; promotion persistence | allowed, validation, duplicate, owner-denial, and atomic-audit tests |
-| `PROM-DEC-01` | `.agents/requirements.md`, `authorization-matrix.md`, `audit-policy.md`, ADM-ACC-02 | Administrator pending review and decision API/UI | subset, unrequested-category denial, stale/concurrent, rejection, and rollback tests |
-| `PROM-SESSION-01` | `.agents/security.md`, ADR-001 | Spring Session JDBC invalidation and role-specific login | multiple-session and wrong-portal integration tests |
-| `PROM-E2E-01` | `.agents/mp2-grade-improvements.md`, `.agents/testing.md` | Reporter → Administrator → Responder journey | isolated PostgreSQL and browser evidence |
+| `PROM-REQ-01` | requirements, MVP scope, authorization matrix, audit policy, `REP-PRO-01` | Reporter API/UI and promotion persistence | validation, denied, uniqueness, ownership, pagination, and audit-atomicity tests |
+| `PROM-DEC-01` | requirements, authorization matrix, audit policy, `ADM-ACC-02` | Administrator API/UI and locked decision transaction | subset, tampering, rejection, stale/concurrent, rollback, and reauthorization tests |
+| `PROM-SESSION-01` | security policy, persistence policy, ADR-003 | shared session invalidation and role-specific authentication | multi-session, cross-instance, old-session, fresh-login, and wrong-portal tests |
+| `PROM-UX-01` | React style guide | Reporter and Administrator promotion surfaces | interaction, focus, semantic, malicious-text, error-state, reflow, and accessibility evidence |
+| `PROM-E2E-01` | MP2 improvements and testing policy | deployed Reporter → Administrator → Responder journey | isolated PostgreSQL, browser, restart, and HTTPS smoke evidence |
 
-- [ ] `PROM-AC-01` — An enabled Reporter creates one pending request for a
-  non-empty set of distinct valid categories and optional comments within the
-  2,000-character limit; actor and time are server-derived, and request plus
-  audit persist atomically. Concurrent duplicate submissions leave exactly one
-  pending request and one success audit.
-- [ ] `PROM-AC-02` — A Reporter sees only their own request history, including
-  approved categories, and cannot alter or decide a request; direct cross-user
-  reads do not disclose whether another request exists. After promotion, the
-  Reporter history endpoint denies the Responder role while the decision
-  remains available to authorized Administrators and the Responder session is
-  restricted to the currently granted categories.
-- [ ] `PROM-AC-03` — Only an enabled Administrator can decide a pending request;
-  approval grants exactly a non-empty selected subset of requested categories,
-  while an empty, duplicate, unknown, tampered, or unrequested category
-  selection is denied without mutation or success audit.
-- [ ] `PROM-AC-04` — Rejection leaves the account role and category access
-  unchanged, retains request history, and records one decision audit event.
-- [ ] `PROM-AC-05` — Approval atomically preserves the account ID/history,
-  changes role, persists exactly the selected category subset, records the
-  decision and audit, and leaves no partial mutation or success audit after an
-  injected persistence failure.
-- [ ] `PROM-AC-06` — Stale, duplicate, and concurrent decisions have at most
-  one winner; losing decisions create no second mutation or success audit.
-- [ ] `PROM-AC-07` — Approval invalidates all existing account sessions across
-  application instances; the old Reporter session cannot access protected
-  routes, and fresh Responder-portal authentication receives only approved
-  categories. Wrong-role portals fail generically.
-- [ ] `PROM-AC-08` — An isolated end-to-end test completes Reporter request,
-  Administrator partial approval, old-session denial, fresh Responder login,
-  and a category-scoped Responder queue read. It verifies that only unassigned
-  incidents in approved categories plus incidents assigned to that Responder
-  are returned, anonymous identity is absent, and persisted promotion, access,
-  session, and audit state match the outcome.
+- [x] `PROM-AC-01` — An enabled Reporter can create one pending request with a
+  non-empty set of distinct valid categories and an optional comment within
+  2,000 characters; actor, identifier, and UTC time are server-derived, and the
+  request plus redacted audit event commit atomically.
+- [x] `PROM-AC-02` — Empty, duplicate, unknown, or tampered categories,
+  over-limit comments, signed-out/wrong-role/disabled actors, persistence or
+  audit failure, and concurrent duplicate submissions create neither a second
+  pending request nor a misleading success audit.
+- [x] `PROM-AC-03` — Bounded history returns only the authenticated Reporter's
+  retained requests in deterministic order with the specified pending,
+  approved, and rejected outcomes; cross-user reads and missing resources do
+  not disclose whether another request exists.
+- [x] `PROM-AC-04` — Only an enabled Administrator can page through pending
+  requests or open request detail, and representations are bounded,
+  non-cacheable, safely rendered, and neutral for unavailable historical
+  requesters.
+- [x] `PROM-AC-05` — Approval accepts exactly a non-empty subset of the
+  persisted requested categories; empty, duplicate, unknown, browser-tampered,
+  or unrequested grants are rejected without mutation or success audit.
+- [x] `PROM-AC-06` — Rejection leaves role, category access, and sessions
+  unchanged while atomically retaining the rejected decision and one redacted
+  rejection audit event.
+- [x] `PROM-AC-07` — Approval atomically preserves account identity/history,
+  changes the requester to `RESPONDER`, replaces access with exactly the
+  approved subset, records the decision, invalidates all existing requester
+  sessions, and writes one redacted approval audit; an injected failure leaves
+  every effect uncommitted.
+- [x] `PROM-AC-08` — A stale, duplicate, or concurrent decision has at most one
+  winner. Transaction-time loss of Administrator authority or requester
+  eligibility prevents the decision, and every loser creates no second
+  mutation or success audit.
+- [ ] `PROM-AC-09` — Old Reporter sessions fail across application instances;
+  wrong-role portals fail generically; fresh Responder authentication exposes
+  only current approved categories and authorizes only the corresponding
+  Responder queue and assigned-incident access.
+- [ ] `PROM-AC-10` — React tests and accessibility evidence cover Reporter and
+  Administrator loading, empty, validation, pending, success, conflict,
+  session-expired, and retry states; confirmations, duplicate-submit
+  prevention, focus return, malicious/long text, keyboard operation, 200% zoom,
+  narrow reflow, and absence of promotion data from browser persistence/logs.
+- [ ] `PROM-AC-11` — An isolated browser end-to-end test completes Reporter
+  request, Administrator partial approval, old-session denial, fresh Responder
+  login, and category-scoped queue access, then verifies persisted request,
+  account, category, session, and audit state. Restart/redeploy and deployed
+  HTTPS smoke evidence use the exact release commit and non-production data.
 
-## 8. Verification and approval record
+Automated evidence for `PROM-AC-01` through `PROM-AC-08`, and partial evidence
+for `PROM-AC-09` and `PROM-AC-10`, is recorded in the
+[2026-10-22 promotion journey verification](test-evidence/2026-10-22-promotion-journey.md).
+`PROM-AC-09` remains open pending a fresh-login, category-scoped browser check.
+`PROM-AC-10` remains open pending manual keyboard, 200% zoom, and narrow-reflow
+evidence. `PROM-AC-11` remains open pending browser, restart/redeploy, and
+deployed HTTPS evidence against an exact committed release revision.
 
-- Automated evidence: pending.
-- Manual/deployed evidence: pending.
-- Product-owner approval of this revised contract: pending review of this
-  specification revision.
-- Independent security/architecture review: pending.
+## 9. Verification and approval record
+
+Required automated evidence:
+
+1. Domain/application tests for request and decision validation,
+   authorization, state transitions, and redacted audit contents.
+2. Spring MVC/security tests for route roles, CSRF, content type, request
+   limits, stable safe errors, no-store responses, pagination, and denied versus
+   missing behavior.
+3. Isolated PostgreSQL tests for empty migration, retained history,
+   uniqueness, transaction rollback, transaction-time reauthorization,
+   concurrent submissions/decisions, audit atomicity, and shared-session
+   invalidation.
+4. React component tests for the interaction and accessibility states in
+   `PROM-AC-10`.
+5. Browser end-to-end and deployed HTTPS tests for `PROM-AC-11`, including
+   restart/redeploy persistence.
+
+Current record:
+
+- Existing implementation: merged on `main` through issue #6; treated as
+  provisional and not as specification approval or completion evidence.
+- Automated evidence: `PROM-AC-01` through `PROM-AC-08` verified in the
+  [2026-10-22 promotion journey record](test-evidence/2026-10-22-promotion-journey.md).
+- Manual/accessibility/deployed evidence: pending.
+- Product-owner approval of this revision: repository user, confirmed in the
+  current Codex chat on 2026-10-22 and recorded in
+  [`reviews/2026-10-22-promotion-journey-specification.md`](reviews/2026-10-22-promotion-journey-specification.md).
+- Independent security/architecture approval of this revision and ADR-003:
+  repository user, approved in the current Codex chat on 2026-10-22 and
+  recorded in
+  [`reviews/2026-10-22-promotion-journey-specification.md`](reviews/2026-10-22-promotion-journey-specification.md).
+- Independent implementation review of commit `c146284`: repository user,
+  approved in the current Codex chat on 2026-10-22 and recorded in the same
+  review record.
+
+No acceptance criterion is checked until reproducible evidence is recorded and
+linked here. Agent-authored specification text does not satisfy a human
+approval gate.

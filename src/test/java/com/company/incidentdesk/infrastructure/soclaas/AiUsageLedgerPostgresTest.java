@@ -36,7 +36,7 @@ import com.company.incidentdesk.infrastructure.soclaas.AiUsagePolicy.Limits;
 import com.company.incidentdesk.infrastructure.soclaas.AiUsagePolicy.Price;
 import com.company.incidentdesk.infrastructure.soclaas.AiUsagePolicy.Snapshot;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class AiUsageLedgerPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-19T09:00:00Z");
     private static final String SCHEMA = "ai_usage_test_" + UUID.randomUUID().toString().replace("-", "");

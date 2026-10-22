@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
+import { AdministratorIncidentDetail } from './admin/AdministratorIncidentDetail'
 import { AdminShell } from './admin/AdminShell'
-import { PromotionRequests } from './admin/PromotionRequests'
+import { AdministratorAccounts } from './admin/AdministratorAccounts'
+import { AdministratorSloConfiguration } from './admin/AdministratorSloConfiguration'
+import { AdministratorStatistics } from './admin/AdministratorStatistics'
 import {
   loadSession,
   logout,
   registerAccount,
   roleLogin,
+  type SessionRefresher,
   type SessionState,
 } from './api'
 import { useServiceHealth } from './health/useServiceHealth'
@@ -14,6 +18,7 @@ import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
 import { PromotionPanel } from './reporter/PromotionPanel'
 import { ResponderPortal } from './responder/ResponderPortal'
+import { PasswordChangeDialog } from './shared/PasswordChangeDialog'
 
 type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
@@ -21,6 +26,7 @@ export function App() {
   const serviceHealth = useServiceHealth()
   const sessionState = useSession()
   const [portal, setPortal] = useState<Portal | null>(null)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
 
   if (sessionState.failed) {
     return <SessionFailure onRetry={sessionState.reload} />
@@ -39,38 +45,67 @@ export function App() {
     sessionState.clear()
     setPortal(null)
   }
+  if (session.authenticated && session.credentialTemporary) {
+    return <PasswordChangeDialog
+      open
+      required
+      onCancel={() => undefined}
+      onChanged={sessionState.refresh}
+      onRequiredDismiss={() => void signOut()}
+      refreshSession={sessionState.refresh}
+    />
+  }
+  const passwordDialog = <PasswordChangeDialog
+    open={passwordDialogOpen}
+    required={false}
+    onCancel={() => setPasswordDialogOpen(false)}
+    onChanged={async () => {
+      await sessionState.refresh()
+      setPasswordDialogOpen(false)
+    }}
+    onRequiredDismiss={() => undefined}
+    refreshSession={sessionState.refresh}
+  />
   if (session.authenticated && session.role === 'ADMINISTRATOR') {
     return (
-      <AdminShell
-        accountsContent={<PromotionRequests onRefreshSession={sessionState.refresh} />}
+      <><AdminShell
+        accountsContent={<AdministratorAccounts
+          currentLoginName={session.loginName ?? ''}
+          onRefreshSession={sessionState.refresh}
+        />}
+        sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
+        statisticsContent={<AdministratorStatistics />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
       >
-        <AdminDashboard />
-      </AdminShell>
+        <AdministratorIncidentWorkspace refreshSession={sessionState.refresh} />
+      </AdminShell>{passwordDialog}</>
     )
   }
   if (session.authenticated && session.role === 'REPORTER') {
     return (
-      <ReporterShell
+      <><ReporterShell
         promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
       >
         <ReporterDashboard key={session.loginName} onRefreshSession={sessionState.refresh} />
-      </ReporterShell>
+      </ReporterShell>{passwordDialog}</>
     )
   }
   if (session.authenticated && session.role === 'RESPONDER') {
     return (
-      <ResponderPortal
+      <><ResponderPortal
         categories={session.responderCategories ?? []}
         loginName={session.loginName ?? 'Responder'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
         serviceHealth={serviceHealth}
-      />
+      />{passwordDialog}</>
     )
   }
   if (!portal) {
@@ -325,6 +360,28 @@ function SessionFailure({ onRetry }: { onRetry: () => void }) {
         <p>The service could not check your session. No protected data was loaded.</p>
         <button className="primary-button" type="button" onClick={onRetry}>Try again</button>
       </section>
+    </main>
+  )
+}
+
+/**
+ * Switches the Administrator workspace between the incident list and one
+ * incident's detail. Selecting an incident carries only its identifier; the
+ * detail view loads its own authorized representation from the server.
+ */
+function AdministratorIncidentWorkspace({ refreshSession }: { refreshSession: SessionRefresher }) {
+  const [openIncidentId, setOpenIncidentId] = useState<string | null>(null)
+
+  if (openIncidentId === null) {
+    return <AdminDashboard onOpenIncident={setOpenIncidentId} />
+  }
+  return (
+    <main id="main-content" className="content">
+      <AdministratorIncidentDetail
+        incidentId={openIncidentId}
+        onBack={() => setOpenIncidentId(null)}
+        refreshSession={refreshSession}
+      />
     </main>
   )
 }

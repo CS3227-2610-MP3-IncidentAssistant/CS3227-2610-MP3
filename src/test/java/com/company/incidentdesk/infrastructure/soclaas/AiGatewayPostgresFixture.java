@@ -1,6 +1,6 @@
 package com.company.incidentdesk.infrastructure.soclaas;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -24,7 +23,6 @@ import org.springframework.security.core.userdetails.User;
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
 import com.zaxxer.hikari.HikariDataSource;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
 abstract class AiGatewayPostgresFixture {
     protected static final Instant NOW = Instant.parse("2026-10-19T09:00:00Z");
     private static final String SCHEMA = "gateway_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -37,7 +35,7 @@ abstract class AiGatewayPostgresFixture {
 
     @BeforeAll
     static void migrateIsolatedSchema() {
-        assertEquals("true", System.getenv("INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED"),
+        assumeTrue("true".equalsIgnoreCase(System.getenv("INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED")),
                 "Explicit isolated database confirmation is required");
         var database = NeonDatabaseUrl.parse(System.getenv("INCIDENT_DESK_TEST_DATABASE_URL"));
         var adminSource = new DriverManagerDataSource(database.jdbcUrl(), database.username(), database.password());

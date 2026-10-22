@@ -33,14 +33,14 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.company.incidentdesk.infrastructure.neon.NeonDatabaseUrl;
+import com.company.incidentdesk.support.PostgresTestDataSource;
 
-@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 @ExtendWith(OutputCaptureExtension.class)
 class AdministratorBootstrapPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-19T00:00:00Z");
@@ -56,14 +56,12 @@ class AdministratorBootstrapPostgresTest {
         requireIsolationConfirmation();
         NeonDatabaseUrl database = NeonDatabaseUrl.parse(
                 requiredEnvironment("INCIDENT_DESK_TEST_DATABASE_URL"));
-        administrativeDataSource = dataSource(
+        administrativeDataSource = PostgresTestDataSource.administrative(
                 database.jdbcUrl(), database.username(), database.password());
         new JdbcTemplate(administrativeDataSource).execute("CREATE SCHEMA " + SCHEMA);
 
-        testDataSource = dataSource(
-                withCurrentSchema(database.jdbcUrl(), SCHEMA),
-                database.username(),
-                database.password());
+        testDataSource = PostgresTestDataSource.isolated(
+                database.jdbcUrl(), database.username(), database.password(), SCHEMA);
         Flyway.configure()
                 .dataSource(testDataSource)
                 .locations("classpath:db/migration")
@@ -280,14 +278,6 @@ class AdministratorBootstrapPostgresTest {
 
     private static DefaultApplicationArguments arguments() {
         return new DefaultApplicationArguments(new String[0]);
-    }
-
-    private static DataSource dataSource(String url, String username, String password) {
-        return new DriverManagerDataSource(url, username, password);
-    }
-
-    private static String withCurrentSchema(String url, String schema) {
-        return url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema;
     }
 
     private static String requiredEnvironment(String name) {

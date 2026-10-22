@@ -10,10 +10,11 @@ is the central index: it links to those criteria but does not duplicate them.
 - [Superseded account-registration migration criteria](../.agents/springboot_migration/account-registration.md#historical-acceptance-criteria)
 - [Administrator vertical-slice acceptance criteria and evidence](administrator-vertical-slice.md#9-acceptance-criteria-and-evidence)
 - [Reporter vertical-slice acceptance criteria and evidence](reporter-vertical-slice.md#9-acceptance-criteria-and-evidence)
-- [Reporter-to-Responder promotion journey acceptance criteria](promotion-journey.md#7-traceability-and-acceptance-criteria)
+- [Reporter-to-Responder promotion journey acceptance criteria](promotion-journey.md#8-traceability-and-acceptance-criteria)
 - [Responder vertical-slice acceptance criteria and evidence](responder-vertical-slice.md#acceptance-criteria)
 - [SoCLaaS AI feature and gateway acceptance criteria](ai-features.md#7-acceptance-criteria)
 - [Neon PostgreSQL and Object Storage acceptance criteria](neon-services.md#acceptance-criteria)
+- [Cloud Run CI/CD acceptance criteria](cloud-run-deployment.md#acceptance-criteria)
 
 ## Index and completion rules
 

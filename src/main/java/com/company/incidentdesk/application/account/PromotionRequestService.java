@@ -204,6 +204,21 @@ public final class PromotionRequestService {
                 : store.findPromotionRequestsByRequester(current.id());
     }
 
+    /** Returns one bounded history page for an enabled Reporter. */
+    public List<ResponderPromotionRequest> reporterHistoryAs(Account actor, long offset, int limit) {
+        if (offset < 0 || limit < 1) return List.of();
+        Optional<Account> reporter = currentAccount(actor, Role.REPORTER);
+        return reporter.map(account -> store.findPromotionRequestsByRequester(account.id(), offset, limit))
+                .orElseGet(List::of);
+    }
+
+    /** Returns the retained history count for an enabled Reporter. */
+    public long countReporterHistoryAs(Account actor) {
+        return currentAccount(actor, Role.REPORTER)
+                .map(account -> store.countPromotionRequestsByRequester(account.id()))
+                .orElse(0L);
+    }
+
     /** Returns one bounded page of pending requests only to an enabled Administrator. */
     public List<ResponderPromotionRequest> pendingRequestsAs(Account actor, long offset, int limit) {
         if (offset < 0 || limit < 1 || currentAccount(actor, Role.ADMINISTRATOR).isEmpty()) {

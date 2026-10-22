@@ -18,7 +18,7 @@ These experiences taught us to state the required domain outcome in prompts and 
 
 ## Combining automated checks with manual workflow testing
 
-Agents were effective at generating focused tests for the behaviour they implemented, but those tests did not always expose interactions with other parts of the application. The audit log, for example, cached its page contents and did not refresh after an Administrator changed an SLO during the same session. The feature's tests passed because they covered the intended audit behaviour in isolation; manual use exposed that the displayed data had become stale.
+Agents were effective at generating focused tests for the behaviour they implemented, but those tests did not always expose interactions with other parts of the application. One Administrator page, for example, cached its contents and did not refresh after an SLO changed during the same session. The feature's tests passed in isolation; manual use exposed that the displayed data had become stale.
 
 Manual testing also caught layout and navigation problems. The combined Reporter form and incident list extended below the application window without a page scrollbar, so part of the workflow was unreachable despite the underlying services working correctly. Similarly, placeholders in the first **My incidents** table conversion concealed the fact that the shared row mapping was not being used. Running the application, following the complete Reporter route, and inspecting the rendered result identified issues that service-level tests alone could not show.
 
@@ -32,7 +32,7 @@ We applied the same reasoning to editing and withdrawal. Hiding a button was not
 
 ## Reviewing architecture and maintainability
 
-An agent's first correct fix was not always the best long-term design. To address the stale audit log, the initial solution added a special `ADMIN_AUDIT_LOG` condition to the generic navigator so that one page would be recreated on every visit. Although this fixed the immediate bug, it coupled shared navigation code to a specific page and would not scale as other views gained refresh requirements. We instead introduced `NavigableView.onShown()`, allowing each page to refresh itself when displayed.
+An agent's first correct fix was not always the best long-term design. To address a stale Administrator page, the initial solution added a page-specific condition to the generic navigator so that the page would be recreated on every visit. Although this fixed the immediate bug, it coupled shared navigation code to one page and would not scale as other views gained refresh requirements. We instead introduced `NavigableView.onShown()`, allowing each page to refresh itself when displayed.
 
 Code review also caught smaller maintainability problems, such as generated Java code using fully qualified class names like `java.util.List` inline instead of normal imports. The code compiled, but repeated fully qualified names reduced readability and did not match the project's conventions. We added this concern to our code-quality checks so future reviews would catch it consistently.
 

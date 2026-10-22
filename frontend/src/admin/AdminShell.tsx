@@ -5,23 +5,21 @@ import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 type AdminShellProps = {
   children: ReactNode
   accountsContent: ReactNode
+  sloContent: ReactNode
+  statisticsContent: ReactNode
   serviceHealth: HealthState
   loginName: string
   onLogout: () => Promise<void>
+  onUpdatePassword?: () => void
 }
 
-const disabledNavigation: RoleNavigationItem[] = [
-  { label: 'SLO configuration', current: false, unavailableLabel: 'Soon' },
-  { label: 'Audit log', current: false, unavailableLabel: 'Soon' },
-  { label: 'Statistics', current: false, unavailableLabel: 'Soon' },
-]
-
-export function AdminShell({ children, accountsContent, serviceHealth, loginName, onLogout }: AdminShellProps) {
-  const [activePage, setActivePage] = useState<'dashboard' | 'accounts'>('dashboard')
+export function AdminShell({ children, accountsContent, sloContent, statisticsContent, serviceHealth, loginName, onLogout, onUpdatePassword }: AdminShellProps) {
+  const [activePage, setActivePage] = useState<'dashboard' | 'accounts' | 'slo' | 'statistics'>('dashboard')
   const navigation: RoleNavigationItem[] = [
     { label: 'Dashboard', current: activePage === 'dashboard', onSelect: () => setActivePage('dashboard') },
     { label: 'Accounts', current: activePage === 'accounts', onSelect: () => setActivePage('accounts') },
-    ...disabledNavigation,
+    { label: 'SLO configuration', current: activePage === 'slo', onSelect: () => setActivePage('slo') },
+    { label: 'Statistics', current: activePage === 'statistics', onSelect: () => setActivePage('statistics') },
   ]
   return (
     <RoleShell
@@ -32,10 +30,13 @@ export function AdminShell({ children, accountsContent, serviceHealth, loginName
       navigationItems={navigation}
       navigationLabel="Administrator navigation"
       onLogout={onLogout}
+      onUpdatePassword={onUpdatePassword}
       roleLabel="Administrator"
       serviceHealth={serviceHealth}
     >
-      {activePage === 'dashboard' ? children : accountsContent}
+      {activePage === 'dashboard' ? children
+        : activePage === 'accounts' ? accountsContent
+          : activePage === 'slo' ? sloContent : statisticsContent}
     </RoleShell>
   )
 }

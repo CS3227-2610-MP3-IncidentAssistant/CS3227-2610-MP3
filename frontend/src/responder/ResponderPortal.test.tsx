@@ -22,6 +22,112 @@ afterEach(() => {
 })
 
 describe('Responder incident queue', () => {
+  it.each(['SUBMITTED', 'ASSIGNED'] as const)('reviews %s AI advice without changing remarks', async (status) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ai/advice')) return response({ advice: '<script>literal</script>\nInvestigate logs' })
+      if (init?.method === 'GET') return response(detailRecord(status))
+      return response({ ...basePage, incidents: [row('Responder detail', status)], totalElements: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
+    expect(await screen.findByRole('button', { name: 'Request AI advice' })).toBeInTheDocument()
+    const requestButton = screen.getByRole('button', { name: 'Request AI advice' })
+    requestButton.focus()
+    fireEvent.click(requestButton)
+    expect(await screen.findByText('<script>literal</script> Investigate logs')).toBeInTheDocument()
+    expect(requestButton).toHaveFocus()
+    expect(document.querySelector('script')).toBeNull()
+    const call = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/ai/advice'))
+    expect(call?.[1]?.method).toBe('POST')
+    expect(new Headers(call?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('responder-csrf')
+    expect(call?.[1]?.body).toBeUndefined()
+    if (status === 'ASSIGNED') expect(screen.getByLabelText('Resolution remarks')).toHaveValue('')
+  })
+
+  it('discards AI advice that arrives after navigation', async () => {
+    let finishAdvice: ((result: Response) => void) | undefined
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ai/advice')) {
+        return new Promise<Response>((resolve) => { finishAdvice = resolve })
+      }
+      if (init?.method === 'GET') return Promise.resolve(response(detailRecord('SUBMITTED')))
+      return Promise.resolve(response({ ...basePage, incidents: [row('Responder detail')], totalElements: 1 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Request AI advice' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to queue' }))
+    await act(async () => { finishAdvice?.(response({ advice: 'Late private advice' })) })
+    expect(screen.queryByText('Late private advice')).not.toBeInTheDocument()
+  })
+
+  it('lets the responder cancel pending advice without applying a late result', async () => {
+    let finishAdvice: ((result: Response) => void) | undefined
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ai/advice')) {
+        return new Promise<Response>((resolve) => { finishAdvice = resolve })
+      }
+      if (init?.method === 'GET') return Promise.resolve(response(detailRecord('ASSIGNED')))
+      return Promise.resolve(response({ ...basePage, incidents: [row('Responder detail', 'ASSIGNED')], totalElements: 1 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
+    const button = await screen.findByRole('button', { name: 'Request AI advice' })
+    button.focus()
+    fireEvent.click(button)
+    expect(screen.getByRole('button', { name: 'Preparing advice…' })).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel request' }))
+    await act(async () => { finishAdvice?.(response({ advice: 'Cancelled advice' })) })
+    expect(screen.queryByText('Cancelled advice')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Resolution remarks')).toHaveValue('')
+  })
+
+  it('discards pending AI advice when the signed-in actor changes', async () => {
+    let finishAdvice: ((result: Response) => void) | undefined
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ai/advice')) {
+        return new Promise<Response>((resolve) => { finishAdvice = resolve })
+      }
+      if (init?.method === 'GET') return Promise.resolve(response(detailRecord('SUBMITTED')))
+      return Promise.resolve(response({ ...basePage, incidents: [row('Responder detail')], totalElements: 1 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const view = render(portal())
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Request AI advice' }))
+    view.rerender(<ResponderPortal categories={['IT']} loginName="second-responder"
+      onLogout={async () => {}} serviceHealth="available" />)
+    await act(async () => { finishAdvice?.(response({ advice: 'Previous actor advice' })) })
+    expect(screen.queryByText('Previous actor advice')).not.toBeInTheDocument()
+  })
+
+  it('discards pending AI advice after detail access is denied on refresh', async () => {
+    let finishAdvice: ((result: Response) => void) | undefined
+    let detailReads = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ai/advice')) {
+        return new Promise<Response>((resolve) => { finishAdvice = resolve })
+      }
+      if (init?.method === 'GET') {
+        detailReads++
+        return Promise.resolve(detailReads === 1 ? response(detailRecord('SUBMITTED'))
+          : response({ code: 'UNAVAILABLE' }, 404))
+      }
+      return Promise.resolve(response({ ...basePage, incidents: [row('Responder detail')], totalElements: 1 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(portal())
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Request AI advice' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Claim incident' }))
+    expect(await screen.findByRole('heading', { name: 'Incident unavailable' })).toBeInTheDocument()
+    await act(async () => { finishAdvice?.(response({ advice: 'Late restricted advice' })) })
+    expect(screen.queryByText('Late restricted advice')).not.toBeInTheDocument()
+  })
+
   it('loads server rows and posts bounded filters without putting search text in the URL', async () => {
     let requestCount = 0
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -198,7 +304,7 @@ describe('Responder incident queue', () => {
     expect(screen.getByRole('link', { name: 'Attachment 1 (PNG)' })).toHaveAttribute(
       'href', `/api/v1/responder/incidents/${detail.id}/attachments/60000000-0000-0000-0000-000000000002`,
     )
-    expect(screen.getByRole('heading', { name: 'Previous resolutions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Resolution history' })).toBeInTheDocument()
     expect(screen.getByText('Previous resolution text is rendered as text.')).toBeInTheDocument()
     expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/v1/responder/incidents/${detail.id}`)
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' })

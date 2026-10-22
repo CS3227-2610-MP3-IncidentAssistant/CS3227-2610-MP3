@@ -10,6 +10,11 @@
 - Test successful, denied, stale, concurrent, malformed, and unavailable paths.
 - Verify persisted state and audit evidence rather than trusting HTTP status or
   visible text alone.
+- Purely visual presentation changes may be accepted through documented human
+  review instead of dedicated DOM-structure or CSS-class assertions. Interactive
+  behavior, state transitions, validation, accessibility semantics, data flow,
+  authorization, and security controls still require the applicable automated
+  verification below.
 
 ## Required suites
 
@@ -68,7 +73,7 @@
 ### Privacy and attachments
 
 - Anonymous identity is absent from responder and normal administrator views,
-  filters, statistics, exports, audit presentation, notifications, AI payloads,
+  filters, statistics, exports, notifications, AI payloads,
   provider errors, and logs.
 - The owning reporter can still access an anonymous incident.
 - The anonymous checkbox/switch value reaches persisted state; unchecked and
@@ -79,6 +84,8 @@
 
 ### Persistence and audit
 
+- No role can retrieve audit history through an application HTTP endpoint,
+  page, navigation item, filter, detail view, or download.
 - Apply all migrations to an empty PostgreSQL database.
 - Round-trip all retained entity and lifecycle variants.
 - Restart/redeploy persistence preserves data and relationships.

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
@@ -30,6 +30,23 @@ afterEach(() => {
 })
 
 describe('web authentication and administrator slice', () => {
+  it('blocks role workflows behind the required password dialog for a temporary credential', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') return response({ ...administratorSession, credentialTemporary: true })
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Replace your temporary password to continue' })
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    fireEvent(dialog, new Event('cancel', { cancelable: true }))
+    expect(screen.getByRole('dialog', { name: 'Replace your temporary password to continue' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/admin/'))).toBe(false)
+  })
+
   it('shows role entry before the role-specific login without loading protected data', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -104,6 +121,65 @@ describe('web authentication and administrator slice', () => {
     expect(screen.getByText('operations-admin')).toBeInTheDocument()
     expect(await screen.findByText('30 min')).toBeInTheDocument()
     expect(await screen.findByText('No incidents match')).toBeInTheDocument()
+  })
+
+  it('opens an incident detail from the administrator dashboard and returns to the list', async () => {
+    const incidentId = '30000000-0000-0000-0000-000000000009'
+    const populatedDashboard = {
+      ...emptyDashboard,
+      incidents: [{
+        id: incidentId,
+        title: 'Lift stuck between floors',
+        category: 'FACILITIES',
+        status: 'SUBMITTED',
+        reporterLabel: 'Anonymous reporter',
+        assigneeLabel: null,
+        createdAt: '2026-10-20T08:00:00Z',
+      }],
+      totalElements: 1,
+    }
+    const detail = {
+      id: incidentId,
+      version: 3,
+      title: 'Lift stuck between floors',
+      description: 'Trapped between two and three.',
+      category: 'FACILITIES',
+      status: 'SUBMITTED',
+      anonymous: true,
+      reporterLabel: 'Anonymous reporter',
+      assigneeLabel: null,
+      createdAt: '2026-10-20T08:00:00Z',
+      submittedAt: '2026-10-20T08:01:00Z',
+      withdrawnAt: null,
+      queueEnteredAt: '2026-10-20T08:01:00Z',
+      firstAssignedAt: null,
+      latestAssignedAt: null,
+      slo: null,
+      resolutionHistory: [],
+      comments: [],
+      attachments: [],
+      eligibleResponders: [],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') return response(administratorSession)
+      if (url.startsWith('/api/v1/admin/dashboard')) return response(populatedDashboard)
+      if (url === `/api/v1/admin/incidents/${incidentId}`) return response(detail)
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Lift stuck between floors' }))
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Lift stuck between floors' })).toBeInTheDocument()
+    expect(screen.getByText('Trapped between two and three.')).toBeInTheDocument()
+    // The anonymous reporter is never deanonymized in the detail view.
+    expect(screen.getAllByText('Anonymous reporter').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Company incident overview' })).toBeInTheDocument()
   })
 
   it('uses a generic message when administrator authentication is rejected', async () => {
