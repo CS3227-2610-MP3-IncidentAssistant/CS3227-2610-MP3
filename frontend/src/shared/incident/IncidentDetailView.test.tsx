@@ -113,7 +113,7 @@ describe('IncidentDetailView', () => {
       capabilities={{}}
     />)
 
-    expect(screen.getByText(/No service-level objective is configured/)).toBeInTheDocument()
+    expect(screen.getByText(/No service-level objective applies to this incident/)).toBeInTheDocument()
   })
 
   it('keeps untrusted comment and resolution text as text', () => {

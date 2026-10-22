@@ -120,7 +120,11 @@ export function SloProgressSection({ slo, prefix }: {
   return <section className="incident-detail__slo" aria-labelledby={`${prefix}-slo-heading`}>
     <h3 id={`${prefix}-slo-heading`}>Service-level objective</h3>
     {slo.claimState === 'NOT_CONFIGURED' && slo.progressState === 'NOT_CONFIGURED'
-      ? <p className="help-text">No service-level objective is configured for this category.</p>
+      ? <p className="help-text">
+        No service-level objective applies to this incident. Targets take effect from the
+        time an administrator sets them, so a target added after this incident entered its
+        queue does not apply to it.
+      </p>
       : <dl className="incident-detail__slo-grid">
         <SloMeasure
           label="Time to claim"
