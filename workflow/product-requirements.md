@@ -49,10 +49,12 @@ contracts. An authenticated Administrator can:
 - configure prospective, versioned SLO targets by category;
 - view privacy-safe operational statistics; and
 - request an advisory AI summary built only from privacy-safe aggregate
-  statistics, with no mutation authority.
+  statistics and ask a bounded operational-statistics question through the
+  closed read-only plan in `admin-ai-insights.md`, with no mutation authority.
 
 Detailed behavior, denied/stale/failure paths, data boundaries, and required
-evidence are specified in `administrator-vertical-slice.md`. Its expanded
+evidence are specified in `administrator-vertical-slice.md` and
+`admin-ai-insights.md`. Its expanded
 feature-parity scope requires product-owner approval because some retained
 desktop capabilities are currently classified as post-MVP in
 `.agents/mvp-scope.md`.

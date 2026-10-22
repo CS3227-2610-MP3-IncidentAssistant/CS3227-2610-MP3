@@ -31,7 +31,7 @@ must hold. UI visibility must mirror, but never replace, domain authorization.
 | Delete/reset account | No | No | Allowed, subject to retention/security rules |
 | AI improve draft | Own current draft text only | No | No |
 | AI incident summary / suggested steps | No | An incident currently viewable under the detail rule | No |
-| AI operational trend summary | No | No | Privacy-safe aggregate statistics only |
+| AI operational trend summary / insights | No | No | Privacy-safe aggregate statistics and the closed read-only query plan in `workflow/admin-ai-insights.md` only |
 
 ## Enforcement rules
 

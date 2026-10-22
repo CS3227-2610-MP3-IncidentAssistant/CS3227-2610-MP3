@@ -26,7 +26,7 @@ import com.company.incidentdesk.infrastructure.soclaas.AiUsagePolicy.Snapshot;
 
 /** Shared admission component. Callers own authorization, immediate dispatch, cancellation and audit. */
 public final class AiUsageLedger {
-    public enum Feature { REPORTER_DESCRIPTION, RESPONDER_INCIDENT, ADMINISTRATOR_TRENDS }
+    public enum Feature { REPORTER_DESCRIPTION, RESPONDER_INCIDENT, ADMINISTRATOR_TRENDS, ADMINISTRATOR_INSIGHTS }
     public record Reservation(UUID id, Instant leaseUntil) { }
 
     private final JdbcTemplate jdbc;

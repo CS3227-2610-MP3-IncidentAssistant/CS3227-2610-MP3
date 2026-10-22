@@ -262,7 +262,7 @@ final class AiGatewayControl {
         return switch (feature) {
         case REPORTER_DESCRIPTION -> "REPORTER";
         case RESPONDER_INCIDENT -> "RESPONDER";
-        case ADMINISTRATOR_TRENDS -> "ADMINISTRATOR";
+        case ADMINISTRATOR_TRENDS, ADMINISTRATOR_INSIGHTS -> "ADMINISTRATOR";
         };
     }
 

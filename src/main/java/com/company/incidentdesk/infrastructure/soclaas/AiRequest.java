@@ -1,6 +1,7 @@
 package com.company.incidentdesk.infrastructure.soclaas;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 import com.company.incidentdesk.domain.incident.IncidentCategory;
@@ -29,11 +30,20 @@ public sealed interface AiRequest {
         @Override public String toString() { return "Administrator AI request [content withheld]"; }
     }
 
+    record AdministratorInsight(String question, Instant requestInstant) implements AiRequest {
+        public AdministratorInsight {
+            text(question, 500);
+            Objects.requireNonNull(requestInstant, "requestInstant");
+        }
+        @Override public String toString() { return "Administrator insight request [content withheld]"; }
+    }
+
     default Feature feature() {
         return switch (this) {
         case ReporterDraft ignored -> Feature.REPORTER_DESCRIPTION;
         case ResponderIncident ignored -> Feature.RESPONDER_INCIDENT;
         case AdministratorTrends ignored -> Feature.ADMINISTRATOR_TRENDS;
+        case AdministratorInsight ignored -> Feature.ADMINISTRATOR_INSIGHTS;
         };
     }
 

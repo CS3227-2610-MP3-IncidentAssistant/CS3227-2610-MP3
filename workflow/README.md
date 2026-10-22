@@ -15,6 +15,8 @@ evidence.
 - `administrator-vertical-slice.md`: draft React + Spring Boot administrator
   feature-parity specification and acceptance boundaries.
 - `ai-features.md`: feature-specific provider data and human-review contracts.
+- `admin-ai-insights.md`: bounded Administrator question planning, read-only
+  analytics capability catalog, privacy rules, and acceptance criteria.
 - `threat-model.md`: assets, trust boundaries, threats, and mitigations.
 - `acceptance-criteria.md`: index linking to acceptance criteria stored in each
   individual specification.

@@ -1,11 +1,12 @@
 # SoCLaaS AI Feature and Gateway Specification
 
-Status: **Draft — provider documentation verified on 2026-10-18; product and
-security/architecture approval are required before implementation.**
+Status: **Approved for implementation on 2026-10-23 — provider documentation
+was verified on 2026-10-18; verification and release approval remain pending.**
 
 This specification refines `.agents/ai-policy.md` for the three approved
-advisory AI features. It does not authorize an autonomous agent, provider-side
-tools, attachment analysis, or any application mutation.
+advisory AI features. The Administrator contract is further refined by
+`admin-ai-insights.md`. It does not authorize an autonomous agent,
+provider-side tools, attachment analysis, or any application mutation.
 
 ## 1. Provider evidence and assumptions
 
@@ -234,6 +235,11 @@ occupying every application worker while SoCLaaS is slow.
   audit rows, credentials, sessions, and row-level timestamps.
 - Output: an escaped plain-text operational trend suggestion with no apply or
   mutation path and no claim that it is an authoritative statistical result.
+- Bounded natural-language operational questions use the separate closed query
+  plan and deterministic-answer contract in `admin-ai-insights.md`. That
+  operation sends no statistics, selections, or identities to the provider,
+  exposes no provider tool, makes at most one provider call, and never feeds a
+  plan or answer into the trend-summary request.
 
 ## 5. Prompt, output, logging, and audit security
 
@@ -327,7 +333,9 @@ is admitted only after the applicable local/circuit limit permits it.
   approved operational fields with no identity, comments, or attachments.
 - [ ] `AI-FEAT-03` — Administrator requests rebuild aggregates server-side,
   suppress groups below five, and contain no row-level identifiers, text, or
-  identities.
+  identities; Administrator insight questions additionally satisfy every
+  `AI-ADM-*` criterion in `admin-ai-insights.md` before that capability is
+  considered verified.
 - [ ] `AI-FEAT-04` — Cross-role, cross-incident, anonymous-identity, excess
   field, forged actor, direct prompt-injection, and indirect prompt-injection
   tests prove that prohibited data and application actions remain unavailable.
@@ -397,6 +405,14 @@ The repository user confirmed agreement with this specification and authorized
 issue #2 implementation in the working session on 2026-10-18. This is not an
 independent security review or release approval.
 
+On 2026-10-23 the repository user explicitly approved this specification and
+`admin-ai-insights.md` as both product owner and security/architecture reviewer,
+including acceptance of the provider's undocumented prompt/response-retention
+risk. This authorizes implementation but does not satisfy implementation
+verification, independent code review, deployed verification, or release
+approval. See
+`reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.
+
 The provider adapter in `infrastructure.soclaas` uses Java's built-in HTTP client
 and existing Jackson support; Spring AI is not required. It has no public route
 and cannot mutate application state. Production AI remains disabled by default.
@@ -429,5 +445,5 @@ See [adapter plan](plans/issue-2-soclaas-provider-adapter.md) and
 | `AI-LIM-*` | `.agents/ai-policy.md`, `.agents/persistence.md`, `.agents/testing.md` | PostgreSQL admission/budget ledger and provider-usage reconciliation | Deterministic-clock, multi-instance concurrency, reset-boundary, and load tests |
 | `AI-FEAT-01` | `.agents/requirements.md`, `.agents/authorization-matrix.md` | Reporter prompt builder and review UI | Payload allowlist, CSRF, apply-versus-submit, and malicious-output tests |
 | `AI-FEAT-02` | `.agents/authorization-matrix.md`, `.agents/anonymity-policy.md` | Responder authorization and prompt builder | Allowed/denied/stale, anonymous-identity, excess-field, and injection tests |
-| `AI-FEAT-03` | `.agents/requirements.md`, `.agents/anonymity-policy.md`, `.agents/slo.md` | Administrator aggregate builder | Server-rebuild, small-group suppression, payload, and privacy tests |
+| `AI-FEAT-03` | `.agents/requirements.md`, `.agents/anonymity-policy.md`, `.agents/slo.md`, `admin-ai-insights.md` | Administrator aggregate builder and closed insight-query planner | Server-rebuild, small-group suppression, payload, plan-validation, deterministic-answer, and privacy tests |
 | `AI-FEAT-04..06` | `.agents/ai-policy.md`, `.agents/audit-policy.md`, `threat-model.md` | Shared prompt/output, audit, logging, and metrics controls | Adversarial fake-provider plus log/trace/metric/audit capture tests |
