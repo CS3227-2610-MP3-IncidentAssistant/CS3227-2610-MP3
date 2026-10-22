@@ -242,6 +242,13 @@ not executable HTML. The current core-fields UI uses React text rendering;
 later comment/history/attachment surfaces still require their own rendering
 and privacy verification.
 
+The Responder timeline now also includes Administrator assignment and
+reassignment transitions, with neutral labels and status changes only. The
+PostgreSQL read test and shared React rendering test are recorded in
+[`test-evidence/2026-10-23-issue-7-timeline-completion.md`](test-evidence/2026-10-23-issue-7-timeline-completion.md).
+RSP-DETAIL-01 remains open for the broader content and privacy verification
+described above.
+
 ### Partial mutation UI progress (does not complete RSP-UI-01)
 
 The Responder detail view offers Claim for `SUBMITTED` incidents and resolve

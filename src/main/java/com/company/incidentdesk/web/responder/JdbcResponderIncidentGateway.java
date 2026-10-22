@@ -194,8 +194,9 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                      WHERE target_type = 'INCIDENT'
                        AND target_identifier = :incidentId
                        AND outcome = 'SUCCESS'
-                       AND action IN ('INCIDENT_SUBMITTED', 'INCIDENT_CLAIMED', 'INCIDENT_RESOLVED',
-                                      'INCIDENT_REOPENED', 'INCIDENT_HANDED_OFF', 'INCIDENT_WITHDRAWN')
+                       AND action IN ('INCIDENT_SUBMITTED', 'INCIDENT_CLAIMED', 'INCIDENT_ASSIGNED',
+                                      'INCIDENT_REASSIGNED', 'INCIDENT_RESOLVED', 'INCIDENT_REOPENED',
+                                      'INCIDENT_HANDED_OFF', 'INCIDENT_WITHDRAWN')
                      ORDER BY occurred_at, sequence
                     """, Map.of("incidentId", incidentId.toString()), (result, row) ->
                     new ResponderIncidentService.LifecycleHistoryEntry(result.getString("action"),

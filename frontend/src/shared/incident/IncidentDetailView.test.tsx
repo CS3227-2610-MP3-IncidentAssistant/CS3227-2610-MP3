@@ -143,6 +143,25 @@ describe('IncidentDetailView', () => {
     expect(document.querySelector('img')).toBeNull()
   })
 
+  it('names administrator assignment changes in the incident history', () => {
+    render(<IncidentDetailView
+      detail={{
+        ...baseDetail,
+        lifecycleHistory: [
+          { action: 'INCIDENT_ASSIGNED', occurredAt: '2026-10-20T08:00:00Z',
+            fromStatus: 'SUBMITTED', toStatus: 'ASSIGNED' },
+          { action: 'INCIDENT_REASSIGNED', occurredAt: '2026-10-20T09:00:00Z',
+            fromStatus: 'ASSIGNED', toStatus: 'ASSIGNED' },
+        ],
+      }}
+      prefix="test"
+      capabilities={{ showLifecycleHistory: true }}
+    />)
+
+    expect(screen.getByText('Assigned: SUBMITTED → ASSIGNED')).toBeInTheDocument()
+    expect(screen.getByText('Reassigned: ASSIGNED → ASSIGNED')).toBeInTheDocument()
+  })
+
   it('never renders an audit timeline section', () => {
     render(<IncidentDetailView
       detail={baseDetail}
