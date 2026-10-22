@@ -1,6 +1,5 @@
 package com.company.incidentdesk.web.security;
 
-import java.security.Principal;
 import java.util.Map;
 
 import javax.sql.DataSource;
@@ -10,6 +9,9 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,21 +32,33 @@ final class OwnPasswordController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<?> changePassword(Principal principal, @RequestBody(required = false) ChangeBody body) {
-        if (principal == null) return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Authentication is required");
+    ResponseEntity<?> changePassword(Authentication authentication, @RequestBody(required = false) ChangeBody body) {
+        if (authentication == null) return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Authentication is required");
         if (body == null || body.currentPassword() == null || body.currentPassword().isEmpty()) {
             return validation("currentPassword");
         }
         if (!OwnPasswordService.isAcceptablePassword(body.newPassword())) return validation("newPassword");
 
         return switch (passwords.changeOwnPassword(
-                principal.getName(), body.currentPassword(), body.newPassword())) {
-        case CHANGED -> ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+                authentication.getName(), body.currentPassword(), body.newPassword())) {
+        case CHANGED -> completePasswordChange(authentication);
         case REJECTED -> error(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_FAILED", "Sign-in failed");
         case RESOURCE_UNAVAILABLE -> error(HttpStatus.NOT_FOUND, "UNAVAILABLE", "Resource unavailable");
         case PERSISTENCE_FAILURE -> error(HttpStatus.SERVICE_UNAVAILABLE, "PERSISTENCE_FAILURE",
                 "The password could not be changed");
         };
+    }
+
+    private static ResponseEntity<Void> completePasswordChange(Authentication authentication) {
+        var retainedAuthorities = authentication.getAuthorities().stream()
+                .filter(authority -> !DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY
+                        .equals(authority.getAuthority()))
+                .toList();
+        var replacement = UsernamePasswordAuthenticationToken.authenticated(
+                authentication.getPrincipal(), authentication.getCredentials(), retainedAuthorities);
+        replacement.setDetails(authentication.getDetails());
+        SecurityContextHolder.getContext().setAuthentication(replacement);
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
     private static ResponseEntity<Map<String, Object>> validation(String field) {

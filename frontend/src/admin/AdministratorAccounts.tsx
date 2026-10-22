@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   loadAdministratorAccounts,
+  resetAdministratorAccountPassword,
   replaceResponderCategories,
   tombstoneAdministratorAccount,
   type AdministratorAccount,
   type IncidentCategory,
   type SessionRefresher,
+  type TemporaryPasswordResponse,
 } from '../api'
 import { Pagination } from '../shared/Pagination'
 import { PromotionRequests } from './PromotionRequests'
@@ -47,6 +49,11 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
   const [feedback, setFeedback] = useState('')
   const [actionError, setActionError] = useState('')
   const [confirmingAccount, setConfirmingAccount] = useState<AdministratorAccount | null>(null)
+  const [resettingAccount, setResettingAccount] = useState<AdministratorAccount | null>(null)
+  const [revealedPassword, setRevealedPassword] = useState<{
+    account: AdministratorAccount
+    response: TemporaryPasswordResponse
+  } | null>(null)
   const [configuringAccount, setConfiguringAccount] = useState<AdministratorAccount | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
@@ -110,6 +117,25 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
     }
   }
 
+  async function confirmPasswordReset(account: AdministratorAccount) {
+    setSubmittingId(account.id)
+    setFeedback('')
+    setActionError('')
+    try {
+      const response = await resetAdministratorAccountPassword(account.id, onRefreshSession)
+      setResettingAccount(null)
+      setRevealedPassword({ account, response })
+    } catch (error) {
+      setActionError(passwordResetError(error))
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
+  function closePasswordReveal() {
+    setRevealedPassword(null)
+  }
+
   return <section className="incident-panel account-directory" aria-labelledby="account-directory-heading">
     <div className="section-heading">
       <div>
@@ -147,6 +173,11 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
               setActionError('')
               setConfirmingAccount(account)
             }}
+            onResetPassword={() => {
+              setFeedback('')
+              setActionError('')
+              setResettingAccount(account)
+            }}
           /></td>
         </tr>)}</tbody>
       </table>
@@ -165,6 +196,19 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
         if (confirmingAccount) void confirmTombstone(confirmingAccount)
       }}
     />
+    <ResetPasswordDialog
+      account={resettingAccount}
+      error={actionError}
+      submitting={submittingId === resettingAccount?.id}
+      onCancel={() => {
+        setActionError('')
+        setResettingAccount(null)
+      }}
+      onConfirm={() => {
+        if (resettingAccount) void confirmPasswordReset(resettingAccount)
+      }}
+    />
+    <TemporaryPasswordRevealDialog revealed={revealedPassword} onClose={closePasswordReveal} />
     <ConfigureCategoriesDialog
       account={configuringAccount}
       error={actionError}
@@ -180,11 +224,12 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
   </section>
 }
 
-function AccountActions({ account, currentLoginName, onConfigure, onDelete }: {
+function AccountActions({ account, currentLoginName, onConfigure, onDelete, onResetPassword }: {
   account: AdministratorAccount
   currentLoginName: string
   onConfigure: () => void
   onDelete: () => void
+  onResetPassword: () => void
 }) {
   if (account.loginName === currentLoginName) return <span>Current account</span>
   if (account.status !== 'ENABLED') return <span>Unavailable</span>
@@ -196,12 +241,120 @@ function AccountActions({ account, currentLoginName, onConfigure, onDelete }: {
       onClick={onConfigure}
     >Configure categories</button>}
     <button
+      aria-label={`Reset password for ${account.loginName}`}
+      className="secondary-button"
+      type="button"
+      onClick={onResetPassword}
+    >Reset password</button>
+    <button
       aria-label={`Delete account ${account.loginName}`}
       className="danger-outline-button"
       type="button"
       onClick={onDelete}
     >Delete</button>
   </div>
+}
+
+function ResetPasswordDialog({ account, error, submitting, onCancel, onConfirm }: {
+  account: AdministratorAccount | null
+  error: string
+  submitting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    if (account && !element.open) {
+      if (typeof element.showModal === 'function') element.showModal()
+      else element.setAttribute('open', '')
+    } else if (!account && element.open) {
+      if (typeof element.close === 'function') element.close()
+      else element.removeAttribute('open')
+    }
+  }, [account])
+
+  return <dialog
+    aria-describedby="temporary-password-description"
+    aria-labelledby="temporary-password-title"
+    className="confirmation-dialog"
+    ref={dialog}
+    onCancel={(event) => {
+      event.preventDefault()
+      if (!submitting) onCancel()
+    }}
+  >
+    {account && <div className="confirmation-dialog__content">
+      <p className="eyebrow">Reset password</p>
+      <h2 id="temporary-password-title">The temporary password expires in 24 hours.</h2>
+      <p id="temporary-password-description">
+        Generate a one-time temporary password for {account.loginName}? Any earlier password will stop working immediately.
+      </p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="confirmation-dialog__actions">
+        <button className="ghost-button" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
+        <button className="primary-button" type="button" disabled={submitting} onClick={onConfirm}>
+          {submitting ? 'Generating…' : 'Generate temporary password'}
+        </button>
+      </div>
+    </div>}
+  </dialog>
+}
+
+function TemporaryPasswordRevealDialog({ revealed, onClose }: {
+  revealed: { account: AdministratorAccount; response: TemporaryPasswordResponse } | null
+  onClose: () => void
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const secretField = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    if (revealed && !element.open) {
+      if (typeof element.showModal === 'function') element.showModal()
+      else element.setAttribute('open', '')
+    } else if (!revealed && element.open) {
+      if (typeof element.close === 'function') element.close()
+      else element.removeAttribute('open')
+    }
+  }, [revealed])
+
+  function clearAndClose() {
+    if (secretField.current) secretField.current.value = ''
+    onClose()
+  }
+
+  useEffect(() => () => {
+    if (secretField.current) secretField.current.value = ''
+  }, [])
+
+  return <dialog
+    aria-describedby="temporary-password-reveal-description"
+    aria-labelledby="temporary-password-reveal-title"
+    className="confirmation-dialog"
+    ref={dialog}
+    onCancel={(event) => {
+      event.preventDefault()
+      clearAndClose()
+    }}
+  >
+    {revealed && <div className="confirmation-dialog__content">
+      <p className="eyebrow">Temporary password</p>
+      <h2 id="temporary-password-reveal-title">Copy this password now — it will not be shown again</h2>
+      <p id="temporary-password-reveal-description">
+        Deliver it securely to {revealed.account.loginName}. They must replace it immediately after signing in.
+      </p>
+      <label className="visually-hidden" htmlFor="temporary-password-value">Temporary password</label>
+      <input id="temporary-password-value" className="temporary-password-field" readOnly
+        ref={secretField} value={revealed.response.temporaryPassword} />
+      <div className="confirmation-dialog__actions">
+        <button className="primary-button" type="button" onClick={clearAndClose}>Done</button>
+      </div>
+    </div>}
+  </dialog>
 }
 
 function ConfigureCategoriesDialog({ account, error, submitting, onCancel, onConfirm }: {
@@ -329,4 +482,20 @@ function displayEnum(value: string) {
 
 function sameCategorySet(left: IncidentCategory[], right: IncidentCategory[]) {
   return left.length === right.length && left.every((category) => right.includes(category))
+}
+
+function passwordResetError(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.status === 404 && error.code === 'UNAVAILABLE') {
+      return 'The account is unavailable. Refresh the directory before trying again.'
+    }
+    if (error.status === 409 && (error.code === 'INVALID_STATE' || error.code === 'CONFLICT')) {
+      return 'The account changed or cannot be reset. Refresh before trying again.'
+    }
+    if (error.status === 503 && error.code === 'PERSISTENCE_FAILURE') {
+      return 'The temporary password could not be generated. Try again.'
+    }
+    return error.message
+  }
+  return 'The temporary password could not be generated. Try again.'
 }

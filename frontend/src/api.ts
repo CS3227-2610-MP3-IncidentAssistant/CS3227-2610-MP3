@@ -11,6 +11,7 @@ export type SessionState = {
   loginName?: string
   role?: string
   responderCategories?: IncidentCategory[]
+  credentialTemporary?: boolean
 }
 
 export type SessionRefresher = () => Promise<SessionState>
@@ -269,6 +270,44 @@ export async function replaceResponderCategories(
   }, refreshSession, {
     authenticationRequired: true,
     fallbackMessage: 'Responder categories could not be updated. Refresh and try again.',
+  })
+}
+
+export type TemporaryPasswordResponse = {
+  temporaryPassword: string
+  expiresInHours: number
+}
+
+export async function resetAdministratorAccountPassword(
+  accountId: string,
+  refreshSession: SessionRefresher,
+): Promise<TemporaryPasswordResponse> {
+  const response = await csrfRequest(
+    `/api/v1/admin/accounts/${encodeURIComponent(accountId)}/temporary-password`,
+    { method: 'POST', credentials: 'same-origin' },
+    refreshSession,
+    {
+      authenticationRequired: true,
+      fallbackMessage: 'The temporary password could not be generated. Try again.',
+    },
+  )
+  if (!response) throw new ApiError(401, 'Authentication is required')
+  return response.json() as Promise<TemporaryPasswordResponse>
+}
+
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest('/api/v1/auth/password', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The password could not be updated. Try again.',
   })
 }
 

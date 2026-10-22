@@ -17,6 +17,7 @@ type RoleShellProps = {
   navigationItems: RoleNavigationItem[]
   navigationLabel: string
   onLogout: () => Promise<void>
+  onUpdatePassword?: () => void
   roleLabel: string
   serviceHealth: HealthState
 }
@@ -36,6 +37,7 @@ export function RoleShell({
   navigationItems,
   navigationLabel,
   onLogout,
+  onUpdatePassword,
   roleLabel,
   serviceHealth,
 }: RoleShellProps) {
@@ -101,6 +103,7 @@ export function RoleShell({
               <small>{roleLabel}</small>
             </span>
           </div>
+          {onUpdatePassword && <button className="sidebar__account-action" type="button" onClick={onUpdatePassword}>Update password</button>}
           <button className="sidebar__sign-out" type="button" onClick={signOut}>Sign out</button>
           <div className="sidebar__status">
             <span className={`status-dot status-dot--${serviceHealth}`} aria-hidden="true" />

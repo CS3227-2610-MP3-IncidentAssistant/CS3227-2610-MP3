@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,6 +24,9 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -48,6 +52,7 @@ class OwnPasswordControllerTest {
 
     @AfterEach
     void close() {
+        SecurityContextHolder.clearContext();
         context.close();
     }
 
@@ -78,6 +83,26 @@ class OwnPasswordControllerTest {
                 .andExpect(header().string("Cache-Control", "no-store"));
 
         verify(passwords).changeOwnPassword("reporter", "old-secret-1", "new-secret-value-1");
+    }
+
+    @Test
+    void successfulReplacementRemovesTheTemporaryAuthorityFromTheActiveSession() {
+        when(passwords.changeOwnPassword("reporter", "old-secret-1", "new-secret-value-1"))
+                .thenReturn(OwnPasswordService.Outcome.CHANGED);
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(
+                "reporter", null, List.of(
+                        new SimpleGrantedAuthority("ROLE_REPORTER"),
+                        new SimpleGrantedAuthority(DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY)));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        var response = new OwnPasswordController(passwords).changePassword(
+                authentication,
+                new OwnPasswordController.ChangeBody("old-secret-1", "new-secret-value-1"));
+
+        assertFalse(SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY
+                        .equals(authority.getAuthority())));
+        org.junit.jupiter.api.Assertions.assertEquals(204, response.getStatusCode().value());
     }
 
     @Test

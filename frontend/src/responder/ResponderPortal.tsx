@@ -61,10 +61,11 @@ const initialFilters: DraftFilters = {
   assignment: 'ALL',
 }
 
-export function ResponderPortal({ categories, loginName, onLogout, serviceHealth }: {
+export function ResponderPortal({ categories, loginName, onLogout, onUpdatePassword, serviceHealth }: {
   categories: IncidentCategory[]
   loginName: string
   onLogout: () => Promise<void>
+  onUpdatePassword?: () => void
   serviceHealth: HealthState
 }) {
   const [draft, setDraft] = useState<DraftFilters>(initialFilters)
@@ -328,6 +329,7 @@ export function ResponderPortal({ categories, loginName, onLogout, serviceHealth
       navigationItems={navigation}
       navigationLabel="Responder navigation"
       onLogout={signOut}
+      onUpdatePassword={onUpdatePassword}
       roleLabel="Responder"
       serviceHealth={serviceHealth}
     >

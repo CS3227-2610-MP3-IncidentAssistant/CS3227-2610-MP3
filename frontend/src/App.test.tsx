@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
@@ -30,6 +30,23 @@ afterEach(() => {
 })
 
 describe('web authentication and administrator slice', () => {
+  it('blocks role workflows behind the required password dialog for a temporary credential', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') return response({ ...administratorSession, credentialTemporary: true })
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Replace your temporary password to continue' })
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    fireEvent(dialog, new Event('cancel', { cancelable: true }))
+    expect(screen.getByRole('dialog', { name: 'Replace your temporary password to continue' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/admin/'))).toBe(false)
+  })
+
   it('shows role entry before the role-specific login without loading protected data', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

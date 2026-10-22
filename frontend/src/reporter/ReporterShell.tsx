@@ -2,12 +2,13 @@ import { useState, type ReactNode } from 'react'
 import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 
-export function ReporterShell({ children, promotionContent, loginName, serviceHealth, onLogout }: {
+export function ReporterShell({ children, promotionContent, loginName, serviceHealth, onLogout, onUpdatePassword }: {
   children: ReactNode
   promotionContent: ReactNode
   loginName: string
   serviceHealth: HealthState
   onLogout: () => Promise<void>
+  onUpdatePassword?: () => void
 }) {
   const [activePage, setActivePage] = useState<'incidents' | 'promotion'>('incidents')
   const navigation: RoleNavigationItem[] = [
@@ -24,6 +25,7 @@ export function ReporterShell({ children, promotionContent, loginName, serviceHe
       navigationItems={navigation}
       navigationLabel="Reporter navigation"
       onLogout={onLogout}
+      onUpdatePassword={onUpdatePassword}
       roleLabel="Reporter"
       serviceHealth={serviceHealth}
     >

@@ -10,9 +10,10 @@ type AdminShellProps = {
   serviceHealth: HealthState
   loginName: string
   onLogout: () => Promise<void>
+  onUpdatePassword?: () => void
 }
 
-export function AdminShell({ children, accountsContent, sloContent, statisticsContent, serviceHealth, loginName, onLogout }: AdminShellProps) {
+export function AdminShell({ children, accountsContent, sloContent, statisticsContent, serviceHealth, loginName, onLogout, onUpdatePassword }: AdminShellProps) {
   const [activePage, setActivePage] = useState<'dashboard' | 'accounts' | 'slo' | 'statistics'>('dashboard')
   const navigation: RoleNavigationItem[] = [
     { label: 'Dashboard', current: activePage === 'dashboard', onSelect: () => setActivePage('dashboard') },
@@ -29,6 +30,7 @@ export function AdminShell({ children, accountsContent, sloContent, statisticsCo
       navigationItems={navigation}
       navigationLabel="Administrator navigation"
       onLogout={onLogout}
+      onUpdatePassword={onUpdatePassword}
       roleLabel="Administrator"
       serviceHealth={serviceHealth}
     >

@@ -27,6 +27,8 @@ MP2 implementation details, not MP3 production architecture.
   creates a Reporter. The Responder and Administrator portals provide no public
   registration or client-controlled role selection.
 - Authenticated users can replace their own password after confirming their current password.
+  Replacement passwords contain 12 through 128 characters; browser helper text
+  describes the minimum while the backend remains authoritative for both bounds.
 - Role- and category-based access control.
 - Reusable table/list views with searching, filtering, and sorting where
   required.

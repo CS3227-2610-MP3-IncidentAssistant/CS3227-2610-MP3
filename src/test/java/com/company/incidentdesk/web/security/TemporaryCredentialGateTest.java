@@ -7,6 +7,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -110,6 +111,23 @@ class TemporaryCredentialGateTest {
     }
 
     @Test
+    void sessionResponseExposesOnlyTheTemporaryCredentialFlag() throws Exception {
+        var temporaryAdmin = user("admin").roles("ADMINISTRATOR")
+                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        "ROLE_ADMINISTRATOR"),
+                        new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY));
+
+        mvc.perform(get("/api/v1/auth/session").with(temporaryAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.credentialTemporary").value(true))
+                .andExpect(jsonPath("$.loginName").value("admin"));
+        mvc.perform(get("/api/v1/auth/session").with(user("admin").roles("ADMINISTRATOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.credentialTemporary").value(false));
+    }
+
+    @Test
     void permanentCredentialRetainsNormalRoleAccess() throws Exception {
         // Also proves the stub route is mapped, so the temporary-credential 404 above is a
         // deliberate authorization denial rather than a missing handler.
@@ -143,7 +161,7 @@ class TemporaryCredentialGateTest {
     @Configuration
     @EnableWebMvc
     @EnableWebSecurity
-    @Import({ WebSecurityConfiguration.class, StubEndpoints.class })
+    @Import({ WebSecurityConfiguration.class, SessionController.class, StubEndpoints.class })
     static class TestConfiguration {
         @Bean
         UserDetailsService userDetailsService() {
