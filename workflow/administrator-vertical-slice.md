@@ -549,6 +549,10 @@ allowlisted typed analytics handler, and renders the factual answer from
 canonical statistics. Responder names, where permitted, are joined only after
 the provider call. The feature has no chat memory, provider-executed tool,
 external MCP server, arbitrary query, incident-row retrieval, or mutation path.
+Responder rankings include every responder with qualifying data and selected
+comparisons retain every valid selection, even when its value is `not
+available`. No minimum completed-cycle threshold may silently suppress a
+responder; the result instead displays its sample size.
 
 ### ADM-AUD-INT-01 — Internal-only audit evidence
 

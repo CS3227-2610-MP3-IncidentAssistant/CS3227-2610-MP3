@@ -157,6 +157,10 @@ translate the question only into a closed query plan. Deterministic application
 code authorizes and executes one read-only analytics capability and renders the
 factual answer. Responder names may appear in the local Administrator answer but
 must not be sent to the provider; named comparisons use structured selections.
+Responder insight results have no hidden minimum-sample eligibility threshold:
+rankings include every responder with qualifying data, selected comparisons do
+not silently omit a responder with no qualifying data, and every responder
+result displays its sample size.
 The feature has no general chat memory, SQL, row-level incident retrieval,
 provider-executed application tools, or mutation path.
 

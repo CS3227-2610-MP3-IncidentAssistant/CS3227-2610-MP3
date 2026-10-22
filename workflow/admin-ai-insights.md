@@ -1,7 +1,8 @@
 # Administrator AI Insights Specification
 
-Status: **Approved for implementation on 2026-10-23 — verification and release
-approval remain pending.**
+Status: **No-minimum-sample amendment approved for implementation on
+2026-10-23 — implementation, re-verification, and release approval remain
+pending.**
 
 This specification refines the Administrator AI capability in
 `.agents/ai-policy.md` and `ai-features.md`. It allows an authenticated
@@ -126,25 +127,29 @@ All calculations use `.agents/slo.md` and persisted lifecycle timestamps:
   reported separately while retaining the attribution required by
   `.agents/slo.md`.
 
-The renderer states the metric, exact period, filters, eligible sample size,
-and excluded-data reason. It reports ties rather than selecting an arbitrary
-winner. Stable secondary ordering is display name followed by account
-identifier, both ascending; the identifier is not displayed or sent to the
-provider.
+The renderer states the metric, exact period, filters, sample size, and any
+reason that a value is unavailable. It reports ties rather than selecting an
+arbitrary winner. Stable secondary ordering is display name followed by
+account identifier, both ascending; the identifier is not displayed or sent
+to the provider.
 
 ### 3.3 Small samples and fairness
 
-- Comparative responder duration, rate, SLO, and count rankings require at
-  least five eligible completed cycles per displayed responder. The threshold
-  is fixed in version one and cannot be lowered by the browser or model.
+- Responder rankings include every responder with at least one qualifying
+  completed cycle in the selected scope. There is no minimum-sample eligibility
+  threshold and no hidden suppression of low-sample responder results.
+- A structured comparison returns one row for every valid selected responder.
+  If a selected responder has no qualifying completed cycle, count is shown as
+  zero and duration or rate values with a zero denominator are shown as `not
+  available`; the responder is not silently omitted.
 - Category aggregates disclosed to the provider under the separate narrative
   trend feature continue to suppress or combine groups below five incidents.
-- A responder below the threshold is omitted from comparative rankings and
-  counted only in an `insufficient sample` total. The answer does not imply
-  that omission means good or bad performance.
+  That provider-disclosure privacy rule does not suppress deterministic insight
+  results, which are rendered locally to the Administrator.
 - Ranking output is labelled an operational indicator rather than an employee
-  performance or disciplinary judgment. It includes the sample size and does
-  not infer cause, intent, competence, or misconduct.
+  performance or disciplinary judgment. It includes the exact sample size so
+  the Administrator can judge the amount of supporting data, and does not infer
+  cause, intent, competence, or misconduct.
 
 ## 4. Closed query-plan contract
 
@@ -186,8 +191,8 @@ services, not provider tools and not a network MCP server.
 
 | Query type / handler | Supported questions and output |
 | --- | --- |
-| `RANK_RESPONDERS` / `rankResponders` | Rank eligible responders by resolved-cycle count, average time in progress, or reopen rate. Returns up to ten entries with value and sample size. Queue-level time to claim is deliberately unavailable for responder ranking. |
-| `COMPARE_SELECTED_RESPONDERS` / `compareSelectedResponders` | Compare two through five responders selected outside the question across the same responder metrics. Free-text responder names are unsupported. |
+| `RANK_RESPONDERS` / `rankResponders` | Rank every responder with at least one qualifying completed cycle by resolved-cycle count, average time in progress, or reopen rate. There is no minimum-sample threshold. Returns up to ten entries with value and sample size. Queue-level time to claim is deliberately unavailable for responder ranking. |
+| `COMPARE_SELECTED_RESPONDERS` / `compareSelectedResponders` | Compare two through five responders selected outside the question across the same responder metrics. Every valid selection receives a row, including a zero-count / `not available` row when the selected responder has no qualifying completed cycle. Free-text responder names are unsupported. |
 | `RANK_CATEGORIES` / `rankCategories` | Rank categories by volume, claim/progress duration, reopen count/rate, unassigned count, or oldest unassigned age. |
 | `CATEGORY_TREND` / `categoryTrend` | Return daily, weekly, or monthly bounded series for one metric and at most ten selected categories. |
 | `PERIOD_COMPARISON` / `comparePeriods` | Compare one company- or category-level metric across two adjacent or explicit non-overlapping periods. |
@@ -236,9 +241,9 @@ The browser receives a structured application response containing:
 - interpreted period and filters;
 - metric definition label;
 - zero through ten result rows;
-- eligible and excluded sample counts;
+- the sample size for every responder result;
 - snapshot timestamp for backlog results;
-- advisory and small-sample notices; and
+- advisory notices; and
 - a stable safe error or clarification code when applicable.
 
 All text is rendered through normal React escaping. There is no raw provider
@@ -249,6 +254,12 @@ withdraw, delete, promote, reset, configure, audit, notify, or schedule.
 The Administrator reviews the answer in place. Any later operational action
 uses the ordinary separately authorized workflow; the insight creates no
 approval, recommendation record, or domain mutation.
+
+The browser explains every product constraint that can prevent or materially
+change a result, including the required period, supported metrics, responder
+selection cardinality, row limit, and zero-denominator behavior. No
+undocumented data-volume, completion-count, or sample-size condition may hide a
+result or convert a data-bearing request into `no qualifying data`.
 
 ## 8. Failure, stale, and concurrent behavior
 
@@ -265,8 +276,9 @@ approval, recommendation record, or domain mutation.
   application-generated instant. Concurrent incident changes may appear only
   in a later request; no locks block ordinary incident mutations merely to
   preserve an insight result.
-- An empty or all-suppressed result is a successful `no qualifying data`
-  response, not a fabricated ranking or provider retry.
+- An empty result is a successful `no qualifying data` response, not a
+  fabricated ranking or provider retry. Low-sample responder data is not
+  treated as empty or suppressed.
 - AI failure never blocks the ordinary non-AI operational-statistics view.
 
 ## 9. Audit, observability, and limits
@@ -319,8 +331,10 @@ statistics-unavailable result and never retries the provider.
   calendar period boundary, inclusive/exclusive behavior, comparison interval,
   future-date rejection, and 366-day maximum.
 - [ ] `AI-ADM-QUERY-03` — Ranking tests prove metric attribution, direction,
-  ties, stable ordering, sample counts, division-by-zero behavior, five-cycle
-  eligibility, and no-qualifying-data behavior.
+  ties, stable ordering, sample counts, division-by-zero behavior, inclusion of
+  every responder with a qualifying cycle regardless of sample size, explicit
+  zero-sample rows for selected-responder comparisons, and
+  no-qualifying-data behavior.
 - [ ] `AI-ADM-QUERY-04` — Category trend, period comparison, backlog snapshot,
   and operational overview tests prove their metric definitions, bounds, row
   limits, and empty-result behavior against isolated persisted lifecycle data.
@@ -336,9 +350,9 @@ statistics-unavailable result and never retries the provider.
 - [ ] `AI-ADM-SAFE-01` — Anonymous incidents contribute only to allowed
   aggregates; responder ranking, category filtering, repeated comparisons,
   errors, logs, metrics, audits, and evidence reveal no reporter identity.
-- [ ] `AI-ADM-SAFE-02` — Comparative responder output excludes samples below
-  five, reports eligible/excluded counts and ties, states the metric and exact
-  period, and carries the operational-indicator notice.
+- [ ] `AI-ADM-SAFE-02` — Comparative responder output applies no hidden
+  minimum-sample threshold, reports each result's sample size and ties, states
+  the metric and exact period, and carries the operational-indicator notice.
 - [x] `AI-ADM-SAFE-03` — The browser renders only escaped deterministic text and
   structured rows; provider HTML, Markdown, URLs, tool calls, and instructions
   are rejected and cannot execute, fetch, persist, or mutate anything.
@@ -353,6 +367,10 @@ statistics-unavailable result and never retries the provider.
 - [ ] `AI-ADM-SAFE-06` — Load and concurrency tests prove one provider call per
   user action, bounded query/result sizes, no response chaining, and continued
   availability of normal authenticated incident endpoints.
+- [ ] `AI-ADM-SAFE-07` — UI and response tests prove every result-affecting
+  product constraint is disclosed, no undocumented data-volume or sample-size
+  condition suppresses a result, and a data-bearing responder request is not
+  reported as `no qualifying data` solely because its sample is small.
 
 ## 11. Traceability and verification evidence
 
@@ -375,12 +393,18 @@ statistics-unavailable result and never retries the provider.
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
-- Product approver/date: repository user, 2026-10-23 (Asia/Singapore).
+- Product approver/date: repository user, 2026-10-23 (Asia/Singapore), including
+  the no-minimum-sample amendment.
 - Security/architecture approver/date: repository user, 2026-10-23
-  (Asia/Singapore).
+  (Asia/Singapore), including the no-minimum-sample amendment.
 - Provider-retention risk acceptance: repository user explicitly accepted the
   provider's undocumented prompt/response-retention risk on 2026-10-23.
 
 Unchecked criteria remain pending for their complete role, metric, concurrency,
-privacy, audit-capture, resilience, load, manual, or deployed evidence. See
-`reviews/2026-10-23-ai-features-and-admin-insights-approval.md`.
+privacy, audit-capture, resilience, load, manual, or deployed evidence. The
+existing implementation still enforces the superseded five-cycle responder
+threshold and is not evidence for the amended criteria. The historical
+approval record remains in
+`reviews/2026-10-23-ai-features-and-admin-insights-approval.md`; the amendment
+approval is recorded in
+`reviews/2026-10-23-admin-insights-sample-threshold-amendment.md`.
