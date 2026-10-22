@@ -189,6 +189,38 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
     }
 
     @Override
+    public List<ResponderPromotionRequest> findPromotionRequestsByRequester(
+            AccountId requesterId, long offset, int limit) {
+        try {
+            return jdbc.query("""
+                    SELECT id, requester_id, comments, requested_at, status, decided_by, decided_at
+                      FROM responder_promotion_requests
+                     WHERE requester_id = ?
+                     ORDER BY requested_at DESC, id ASC
+                     LIMIT ? OFFSET ?
+                    """, (result, row) -> mapRequest(result.getObject("id", UUID.class),
+                    result.getObject("requester_id", UUID.class), result.getString("comments"),
+                    result.getObject("requested_at", OffsetDateTime.class), result.getString("status"),
+                    result.getObject("decided_by", UUID.class),
+                    result.getObject("decided_at", OffsetDateTime.class)), requesterId.value(), limit, offset);
+        } catch (DataAccessException exception) {
+            throw unavailable(exception);
+        }
+    }
+
+    @Override
+    public long countPromotionRequestsByRequester(AccountId requesterId) {
+        try {
+            Long count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM responder_promotion_requests WHERE requester_id = ?",
+                    Long.class, requesterId.value());
+            return count == null ? 0 : count;
+        } catch (DataAccessException exception) {
+            throw unavailable(exception);
+        }
+    }
+
+    @Override
     public List<ResponderPromotionRequest> findPendingPromotionRequests(long offset, int limit) {
         try {
             return jdbc.query("""

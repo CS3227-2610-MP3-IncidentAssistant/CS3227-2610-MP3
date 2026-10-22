@@ -257,6 +257,22 @@ public final class LocalApplicationStore
     }
 
     @Override
+    public synchronized List<ResponderPromotionRequest> findPromotionRequestsByRequester(
+            AccountId requesterId, long offset, int limit) {
+        return findPromotionRequestsByRequester(requesterId).stream()
+                .sorted(Comparator.comparing(ResponderPromotionRequest::requestedAt).reversed()
+                        .thenComparing(request -> request.id().value()))
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public synchronized long countPromotionRequestsByRequester(AccountId requesterId) {
+        return findPromotionRequestsByRequester(requesterId).size();
+    }
+
+    @Override
     public synchronized boolean hasPendingPromotionRequest(AccountId requesterId) {
         return state.promotionRequests().values().stream().anyMatch(request ->
                 request.requesterId().equals(Objects.requireNonNull(requesterId, "requesterId"))

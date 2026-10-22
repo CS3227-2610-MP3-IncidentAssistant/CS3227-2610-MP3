@@ -140,6 +140,31 @@ class PromotionWorkflowPostgresTest {
     }
 
     @Test
+    void reporterHistoryPaginationIsNewestFirstAndReportsTheOwnedCount() {
+        Account reporter = account(Role.REPORTER, "paged-history-reporter");
+        Account administrator = account(Role.ADMINISTRATOR, "paged-history-admin");
+        store.create(reporter);
+        store.create(administrator);
+        ResponderPromotionRequest oldest = submit(reporter, Set.of(IncidentCategory.IT));
+        assertTrue(service(UUID::randomUUID).decideAs(
+                administrator, oldest.id(), false, Set.of()).isSuccess());
+        ResponderPromotionRequest middle = submit(reporter, Set.of(IncidentCategory.FACILITIES));
+        assertTrue(service(UUID::randomUUID).decideAs(
+                administrator, middle.id(), false, Set.of()).isSuccess());
+        ResponderPromotionRequest newest = submit(reporter, Set.of(IncidentCategory.HUMAN_RELATIONS));
+        jdbc.update("UPDATE responder_promotion_requests SET requested_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minusSeconds(2)), oldest.id().value());
+        jdbc.update("UPDATE responder_promotion_requests SET requested_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minusSeconds(1)), middle.id().value());
+
+        assertEquals(List.of(newest.id()), store.findPromotionRequestsByRequester(reporter.id(), 0, 1)
+                .stream().map(ResponderPromotionRequest::id).toList());
+        assertEquals(List.of(middle.id()), store.findPromotionRequestsByRequester(reporter.id(), 1, 1)
+                .stream().map(ResponderPromotionRequest::id).toList());
+        assertEquals(3, store.countPromotionRequestsByRequester(reporter.id()));
+    }
+
+    @Test
     void concurrentAdministratorRevocationWinsBeforeDecisionCommit() throws Exception {
         Account reporter = account(Role.REPORTER, "stale-reporter");
         Account administrator = account(Role.ADMINISTRATOR, "stale-admin");
