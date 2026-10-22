@@ -262,6 +262,14 @@ unchecked until complete keyboard/screen-reader and narrow-layout verification
 and keyboard access to the detail comments and attachment downloads is
 verified.
 
+The shared role shell now removes closed narrow-screen navigation from the
+accessibility and keyboard trees and restores focus to the Menu control after a
+navigation choice. The focused React regression and full project check are
+recorded in
+[`test-evidence/2026-10-23-issue-7-mobile-navigation.md`](test-evidence/2026-10-23-issue-7-mobile-navigation.md).
+RSP-UI-01 remains unchecked pending actual narrow-browser, keyboard, and
+screen-reader verification of the complete Responder journey.
+
 ## 7. Approved implementation decisions
 
 The product owner approved the following decisions for this slice:

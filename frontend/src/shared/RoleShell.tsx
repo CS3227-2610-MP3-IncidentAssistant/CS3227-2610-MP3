@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useRef, useState, useSyncExternalStore } from 'react'
 import type { HealthState } from '../health/useServiceHealth'
 
 export type RoleNavigationItem = {
@@ -28,6 +28,19 @@ const healthLabels: Record<HealthState, string> = {
   unavailable: 'Service unavailable',
 }
 
+const narrowNavigationQuery = '(max-width: 720px)'
+
+function subscribeToNarrowNavigation(change: () => void) {
+  if (!window.matchMedia) return () => {}
+  const query = window.matchMedia(narrowNavigationQuery)
+  query.addEventListener('change', change)
+  return () => query.removeEventListener('change', change)
+}
+
+function isNarrowNavigation() {
+  return window.matchMedia?.(narrowNavigationQuery).matches ?? false
+}
+
 export function RoleShell({
   actorInitial,
   brandSubtitle,
@@ -42,8 +55,11 @@ export function RoleShell({
   serviceHealth,
 }: RoleShellProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const narrowNavigation = useSyncExternalStore(subscribeToNarrowNavigation, isNarrowNavigation, () => false)
+  const menuButton = useRef<HTMLButtonElement>(null)
 
   function closeMenu() {
+    if (narrowNavigation) menuButton.current?.focus()
     setMenuOpen(false)
   }
 
@@ -61,6 +77,7 @@ export function RoleShell({
         id={navigationId}
         className={menuOpen ? 'sidebar sidebar--open' : 'sidebar'}
         aria-label={navigationLabel}
+        inert={narrowNavigation && !menuOpen}
       >
         <div className="brand">
           <span className="brand__mark" aria-hidden="true">ID</span>
@@ -118,6 +135,7 @@ export function RoleShell({
       <div className="workspace">
         <header className="topbar">
           <button
+            ref={menuButton}
             className="menu-button"
             type="button"
             aria-expanded={menuOpen}
