@@ -503,8 +503,11 @@ Current criterion status:
   implemented or proved.
 - `REP-AC-07` through `REP-AC-11` remain open because their workflows are not
   implemented in this walking slice.
-- `REP-AC-12` is partial for logout only; own-password change and complete
-  client-state/session verification remain required.
+- `REP-AC-12` is partial: logout and own-password change now have React and
+  focused Spring evidence in
+  [`test-evidence/2026-10-22-password-management-frontend.md`](test-evidence/2026-10-22-password-management-frontend.md);
+  browser client-memory/session verification, exact-commit evidence, and
+  deployed HTTPS verification remain required.
 - `REP-AC-13` is partial: the shared responsive shell, bottom-sidebar account
   block, mobile menu, and single-column new-incident form layout are implemented;
   manual verification of field alignment, narrow-width reflow, keyboard use,

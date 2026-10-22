@@ -290,41 +290,41 @@ copy instructs the Administrator to use an approved secure channel.
 
 ### ADM-ACC-04 acceptance criteria — temporary-password reset
 
-- [ ] `ADM-ACC-04-A`: A reset succeeds only after the trusted acting account
+- [x] `ADM-ACC-04-A`: A reset succeeds only after the trusted acting account
   row is locked and rechecked as an enabled persisted Administrator. A
   self-reset, a missing/disabled/demoted actor, a non-existent or
   already-disabled target, a signed-out caller, a wrong-role caller, and a
   missing CSRF token each leave the target credential unchanged, return the
   stable generic response for that class, and create no success audit record.
-- [ ] `ADM-ACC-04-B`: A successful reset replaces the target credential with a
+- [x] `ADM-ACC-04-B`: A successful reset replaces the target credential with a
   salted bcrypt hash of a freshly generated high-entropy one-time password,
   marks it temporary with an expiry 24 hours after the
   application-generated UTC instant, deletes the target's persisted sessions,
   and commits the credential change together with a secret-free
   `PASSWORD_RESET_INITIATED` audit record in one transaction.
-- [ ] `ADM-ACC-04-C`: The plaintext temporary password is returned exactly once
+- [x] `ADM-ACC-04-C`: The plaintext temporary password is returned exactly once
   in a `Cache-Control: no-store` response body after durable commit. No
   plaintext, hash, or audit detail field contains the secret, and an injected
   persistence or audit failure returns a safe error carrying no secret and
   leaves neither a changed credential nor a success audit.
-- [ ] `ADM-ACC-04-D`: Authentication is refused for a temporary credential whose
+- [x] `ADM-ACC-04-D`: Authentication is refused for a temporary credential whose
   expiry has passed, using the same generic sign-in failure as any other
   rejected login, and is accepted for an unexpired temporary credential.
-- [ ] `ADM-ACC-04-E`: While a credential is marked temporary, every role
+- [x] `ADM-ACC-04-E`: While a credential is marked temporary, every role
   workflow endpoint is refused and only the own-password replacement and logout
   endpoints remain available; replacing the password clears the temporary
   marker and expiry and restores normal access.
-- [ ] `ADM-ACC-04-F`: The React account directory exposes the reset action,
+- [x] `ADM-ACC-04-F`: The React account directory exposes the reset action,
   its confirmation dialog, single-reveal display, and cleared client state as
-  specified in ADM-ACC-04. Not started; backend-only scope was approved for
-  the current change.
+  specified in ADM-ACC-04. Automated evidence is recorded in the
+  [2026-10-22 password-management React verification](test-evidence/2026-10-22-password-management-frontend.md);
+  manual accessibility and deployed checks remain slice-level release evidence.
 
-Backend implementation and its partial automated evidence are recorded in the
+Backend implementation and its automated evidence are recorded in the
 [2026-10-22 temporary-password reset verification](test-evidence/2026-10-22-administrator-temporary-password-reset.md).
-Criteria `ADM-ACC-04-A` through `ADM-ACC-04-C` remain unticked pending isolated
-PostgreSQL evidence, which was skipped for want of a configured test database.
-Criteria `ADM-ACC-04-D` and `ADM-ACC-04-E` have passing automated evidence but
-remain unticked pending the product owner's approval of this criteria text.
+Criteria `ADM-ACC-04-A` through `ADM-ACC-04-E` have passing focused and isolated
+PostgreSQL evidence. The repository user explicitly approved their text in the
+current Codex chat on 2026-10-22, so they are ticked above.
 
 ### ADM-ACC-05 — Account deletion
 
@@ -686,6 +686,10 @@ The administrator slice is acceptable when:
   request-time SPA tokens, bounded exact-error recovery, secret-free logging
   and auditing, session invalidation, and client cache clearing. Recovery does
   not retry an authenticated mutation after the refreshed session is anonymous.
+  Password-change React and focused Spring evidence is recorded in the
+  [2026-10-22 password-management verification](test-evidence/2026-10-22-password-management-frontend.md).
+  The criterion remains open pending browser client-memory/session verification,
+  exact-commit evidence, and deployed HTTPS verification.
 - [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
   reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
 - [ ] The required automated, accessibility, and deployed checks below are
