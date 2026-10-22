@@ -21,6 +21,11 @@ class AdministratorInsightPromptBuilderTest {
         assertEquals("2026-10-23T08:30:00Z", payload.path("requestInstant").asString());
         assertTrue(prepared.system().contains("RANK_CATEGORIES"));
         assertTrue(prepared.system().contains("Never include prose"));
+        assertTrue(prepared.system().contains("incident-level extrema"));
+        assertTrue(prepared.system().contains("details, identifiers, titles or text, comments, or attachments"));
+        assertTrue(prepared.system().contains("Never silently"));
+        assertTrue(prepared.system().contains("broaden an unsupported incident-level question"));
+        assertTrue(prepared.system().contains("OPERATIONAL_OVERVIEW"));
         assertFalse(prepared.data().contains("responder"));
         assertFalse(prepared.data().contains("category\":"));
         assertFalse(prepared.data().contains("model"));

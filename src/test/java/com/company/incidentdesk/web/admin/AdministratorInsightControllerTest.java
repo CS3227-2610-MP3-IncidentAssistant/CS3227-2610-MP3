@@ -33,7 +33,8 @@ class AdministratorInsightControllerTest {
         AdministratorInsightService service = mock(AdministratorInsightService.class);
         var expected = new AdministratorInsightRenderer.Response("ANSWER", null, "summary", "INCIDENT_COUNT",
                 Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-10-23T00:00:00Z"),
-                Instant.parse("2026-10-23T00:00:00Z"), List.of(), "advisory", "COMPANY");
+                Instant.parse("2026-10-23T00:00:00Z"), List.of(), "advisory", "COMPANY",
+                null, null, List.of(), List.of());
         when(service.answer(eq("admin"), any())).thenReturn(expected);
         AdministratorInsightController controller = new AdministratorInsightController(service);
 

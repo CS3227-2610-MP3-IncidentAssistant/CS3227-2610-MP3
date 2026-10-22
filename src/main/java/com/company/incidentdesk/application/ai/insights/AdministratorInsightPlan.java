@@ -57,7 +57,8 @@ public record AdministratorInsightPlan(
         require(allowed.contains(metric));
 
         boolean ranked = type == QueryType.RANK_RESPONDERS || type == QueryType.RANK_CATEGORIES;
-        require(ranked == (direction.isPresent() && limit.isPresent()));
+        require(ranked == direction.isPresent());
+        require(ranked == limit.isPresent());
         limit.ifPresent(value -> require(value >= 1 && value <= 10));
 
         boolean permitsComparison = type == QueryType.PERIOD_COMPARISON || type == QueryType.OPERATIONAL_OVERVIEW;

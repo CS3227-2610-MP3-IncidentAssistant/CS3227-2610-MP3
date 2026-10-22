@@ -68,6 +68,7 @@ class AdministratorInsightPlanParserTest {
                 "{\"outcome\":\"QUERY\",\"outcome\":\"NEEDS_CLARIFICATION\"}",
                 "{\"outcome\":\"QUERY\",\"queryType\":\"RANK_RESPONDERS\",\"metric\":\"AVERAGE_TIME_TO_CLAIM\",\"period\":\"ROLLING_30_DAYS\",\"direction\":\"DESCENDING\",\"limit\":5}",
                 "{\"outcome\":\"QUERY\",\"queryType\":\"RANK_CATEGORIES\",\"metric\":\"INCIDENT_COUNT\",\"period\":\"ROLLING_30_DAYS\",\"direction\":\"DESCENDING\",\"limit\":11}",
+                "{\"outcome\":\"QUERY\",\"queryType\":\"OPERATIONAL_OVERVIEW\",\"metric\":\"INCIDENT_COUNT\",\"period\":\"ROLLING_30_DAYS\",\"direction\":\"ASCENDING\"}",
                 "{\"outcome\":\"QUERY\",\"queryType\":\"BACKLOG_SNAPSHOT\",\"metric\":\"UNASSIGNED_BACKLOG_COUNT\",\"period\":{\"fromDate\":\"2026-01-01\",\"throughDate\":\"2026-01-31\",\"timezone\":\"UTC\"}}",
                 "{\"outcome\":\"NEEDS_CLARIFICATION\",\"clarificationCode\":\"write your own message\"}",
                 "{\"outcome\":\"NEEDS_CLARIFICATION\",\"clarificationCode\":\"MISSING_PERIOD\"} trailing prose");

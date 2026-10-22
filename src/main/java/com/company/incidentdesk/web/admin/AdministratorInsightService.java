@@ -77,7 +77,7 @@ final class AdministratorInsightService {
         try {
             var result = analytics.execute(actor, new AdministratorInsightAnalytics.Query(plan, periods,
                     Set.copyOf(validatedRequest.categories()), Set.copyOf(validatedRequest.responderIds())));
-            return renderer.answer(plan, periods, result);
+            return renderer.answer(plan, periods, result, Set.copyOf(validatedRequest.categories()));
         } catch (JdbcAdministratorInsightAnalytics.AnalyticsUnavailableException unavailable) {
             throw new InsightUnavailableException();
         }

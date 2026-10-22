@@ -11,6 +11,10 @@ import {
 } from '../api'
 
 const CATEGORIES: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
+const SINGAPORE_HOUR = new Intl.DateTimeFormat('en-SG', {
+  timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric',
+  hour: 'numeric', hour12: true,
+})
 const EMPTY_FILTERS: AdministratorStatisticsFilters = {
   categories: [], responderId: '', reporterId: '', periodFrom: '', periodThrough: '',
 }
@@ -215,13 +219,27 @@ export function AdministratorStatistics({ onRefreshSession }: { onRefreshSession
 }
 
 function InsightResult({ insight }: { insight: AdministratorInsight }) {
-  return <div className="statistics-insight-result" aria-live="polite">
+  const activeFilters = [
+    insight.categoryFilters.length > 0
+      ? `Categories: ${insight.categoryFilters.map(displayEnum).join(', ')}`
+      : null,
+    insight.responderFilters.length > 0
+      ? `Responders: ${insight.responderFilters.join(', ')}`
+      : null,
+  ].filter((filter): filter is string => filter !== null)
+
+  return <div className="statistics-insight-result" role="region" aria-label="AI insight result" aria-live="polite">
     <p className="eyebrow">{insight.outcome === 'ANSWER' ? 'Deterministic answer' : 'Clarification needed'}</p>
     <h3>{insight.summary}</h3>
-    {insight.periodStart && insight.periodEndExclusive && <p className="help-text">
-      UTC period: {new Date(insight.periodStart).toISOString()} to {new Date(insight.periodEndExclusive).toISOString()} (end exclusive)
-    </p>}
-    {insight.rows.length > 0 && <div className="table-region" role="region" aria-label="AI insight result" tabIndex={0}>
+    {insight.outcome === 'ANSWER' && <dl className="insight-query-details" aria-label="Deterministic query details">
+      <div><dt>Metric</dt><dd>{displayEnum(insight.metric!)}</dd></div>
+      <div><dt>Ranking direction</dt><dd>{insight.rankingDirection ? displayEnum(insight.rankingDirection) : 'Not applicable'}</dd></div>
+      <div><dt>Limit</dt><dd>{insight.limit ?? 'Not applicable'}</dd></div>
+      <div><dt>Grouping</dt><dd>{displayEnum(insight.grouping!)}</dd></div>
+      <div><dt>Period</dt><dd>{formatSingaporeHour(insight.periodStart!)} to {formatSingaporeHour(insight.periodEndExclusive!)} (Singapore time; end exclusive)</dd></div>
+      <div><dt>Active filters</dt><dd>{activeFilters.length > 0 ? activeFilters.join('; ') : 'None'}</dd></div>
+    </dl>}
+    {insight.rows.length > 0 && <div className="table-region" role="region" aria-label="AI insight rows" tabIndex={0}>
       <table><thead><tr><th scope="col">Result</th><th scope="col">Value</th><th scope="col">Sample</th></tr></thead>
         <tbody>{insight.rows.map((row) => <tr key={row.label}>
           <th scope="row">{row.label}</th><td>{row.displayValue}</td><td>{row.sampleSize}</td>
@@ -301,6 +319,10 @@ function formatDuration(milliseconds: number | null) {
   if (hours) parts.push(`${hours}h`)
   if (minutes || parts.length === 0) parts.push(`${minutes}m`)
   return parts.join(' ')
+}
+
+function formatSingaporeHour(instant: string) {
+  return SINGAPORE_HOUR.format(new Date(instant))
 }
 
 function formatRate(rate: number | null) {

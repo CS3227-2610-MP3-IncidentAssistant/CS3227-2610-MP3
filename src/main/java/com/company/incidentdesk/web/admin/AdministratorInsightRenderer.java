@@ -3,6 +3,7 @@ package com.company.incidentdesk.web.admin;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import com.company.incidentdesk.application.ai.insights.AdministratorInsightPeriodResolver.ResolvedPlan;
 import com.company.incidentdesk.application.ai.insights.AdministratorInsightPlan;
@@ -11,18 +12,28 @@ import com.company.incidentdesk.application.ai.insights.AdministratorInsightPlan
 
 /** Converts application-owned aggregate values into escaped browser DTO fields. */
 final class AdministratorInsightRenderer {
-    Response answer(AdministratorInsightPlan plan, ResolvedPlan periods, AdministratorInsightAnalytics.Result result) {
+    Response answer(AdministratorInsightPlan plan, ResolvedPlan periods, AdministratorInsightAnalytics.Result result,
+            Set<String> categories) {
         List<Row> rows = result.values().stream().map(this::row).toList();
         String summary = rows.isEmpty() ? "No qualifying data was found." : summary(plan);
         return new Response("ANSWER", null, summary, plan.metric().orElseThrow().name(),
                 periods.period().startInclusive(), periods.period().endExclusive(), result.snapshotAt(), rows,
                 "AI interpreted the question; application code calculated every value.",
-                plan.effectiveGrouping().name());
+                plan.effectiveGrouping().name(), plan.direction().map(Enum::name).orElse(null),
+                plan.limit().orElse(null), categories.stream().sorted().toList(),
+                responderFilters(plan, rows));
     }
 
     Response clarification(ClarificationCode code, Instant at) {
         return new Response("NEEDS_CLARIFICATION", code.name(), clarificationText(code), null,
-                null, null, at, List.of(), "No analytics query was run.", null);
+                null, null, at, List.of(), "No analytics query was run.", null,
+                null, null, List.of(), List.of());
+    }
+
+    private static List<String> responderFilters(AdministratorInsightPlan plan, List<Row> rows) {
+        return plan.queryType().orElseThrow() == AdministratorInsightPlan.QueryType.COMPARE_SELECTED_RESPONDERS
+                ? rows.stream().map(Row::label).sorted().toList()
+                : List.of();
     }
 
     private Row row(AdministratorInsightAnalytics.Value value) {
@@ -62,7 +73,12 @@ final class AdministratorInsightRenderer {
     record Row(String label, Double numericValue, String displayValue, long sampleSize) { }
     record Response(String outcome, String clarificationCode, String summary, String metric,
             Instant periodStart, Instant periodEndExclusive, Instant snapshotAt, List<Row> rows,
-            String advisoryNotice, String grouping) {
-        Response { rows = List.copyOf(rows); }
+            String advisoryNotice, String grouping, String rankingDirection, Integer limit,
+            List<String> categoryFilters, List<String> responderFilters) {
+        Response {
+            rows = List.copyOf(rows);
+            categoryFilters = List.copyOf(categoryFilters);
+            responderFilters = List.copyOf(responderFilters);
+        }
     }
 }

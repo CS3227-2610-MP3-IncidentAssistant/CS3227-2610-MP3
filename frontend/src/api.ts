@@ -117,6 +117,10 @@ export type AdministratorInsight = {
   rows: Array<{ label: string, numericValue: number | null, displayValue: string, sampleSize: number }>
   advisoryNotice: string
   grouping: string | null
+  rankingDirection: string | null
+  limit: number | null
+  categoryFilters: string[]
+  responderFilters: string[]
 }
 
 export type IncidentRow = {

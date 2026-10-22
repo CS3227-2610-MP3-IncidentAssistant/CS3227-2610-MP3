@@ -126,14 +126,16 @@ describe('AdministratorStatistics', () => {
   it('submits filters separately and renders deterministic insight rows as escaped text', async () => {
     const insight = {
       outcome: 'ANSWER', clarificationCode: null, summary: 'Responder operational indicator.',
-      metric: 'AVERAGE_TIME_IN_PROGRESS', periodStart: '2026-09-23T00:00:00Z',
-      periodEndExclusive: '2026-10-23T00:00:00Z', snapshotAt: '2026-10-23T00:00:00Z',
+      metric: 'AVERAGE_TIME_IN_PROGRESS', periodStart: '2026-10-01T00:00:00.000Z',
+      periodEndExclusive: '2026-10-22T18:27:45.266Z', snapshotAt: '2026-10-23T00:00:00Z',
       rows: [
         { label: '<script>alert(1)</script>', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 1 },
         { label: 'response-one', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 1 },
         { label: 'response-two', numericValue: null, displayValue: 'Not available', sampleSize: 0 },
       ],
       advisoryNotice: 'AI interpreted the question; application code calculated every value.', grouping: 'RESPONDER',
+      rankingDirection: 'DESCENDING', limit: 3, categoryFilters: ['IT'],
+      responderFilters: ['response-one', 'response-two'],
     }
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init
@@ -161,6 +163,13 @@ describe('AdministratorStatistics', () => {
     expect(within(region).getByText('Not available')).toBeInTheDocument()
     expect(within(region).getByRole('cell', { name: '0' })).toBeInTheDocument()
     expect(within(region).getAllByRole('cell', { name: '1' })).toHaveLength(2)
+    expect(within(region).getByText('Metric')).toBeInTheDocument()
+    expect(within(region).getByText('Average time in progress')).toBeInTheDocument()
+    expect(within(region).getByText('Descending')).toBeInTheDocument()
+    expect(within(region).getByText('3')).toBeInTheDocument()
+    expect(within(region).getByText('Responder')).toBeInTheDocument()
+    expect(within(region).getByText('1 Oct 2026, 8 am to 23 Oct 2026, 2 am (Singapore time; end exclusive)')).toBeInTheDocument()
+    expect(within(region).getByText('Categories: IT; Responders: response-one, response-two')).toBeInTheDocument()
     expect(screen.getByText(/Every responder result is shown regardless of sample size/)).toBeInTheDocument()
     expect(screen.getByText(/first-place ties shown together/)).toBeInTheDocument()
     expect(screen.queryByText(/responder samples were excluded/)).not.toBeInTheDocument()
@@ -177,6 +186,7 @@ describe('AdministratorStatistics', () => {
       summary: 'Specify a reporting period.', metric: null, periodStart: null,
       periodEndExclusive: null, snapshotAt: '2026-10-23T00:00:00Z', rows: [],
       advisoryNotice: 'No analytics query was run.', grouping: null,
+      rankingDirection: null, limit: null, categoryFilters: [], responderFilters: [],
     }
     let insightCalls = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

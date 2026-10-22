@@ -76,6 +76,10 @@ The request lifecycle is:
 If the question is unsupported or materially ambiguous, the plan outcome is
 `NEEDS_CLARIFICATION` with one allowlisted clarification code. The application
 shows a deterministic clarification prompt and makes no analytics query.
+Questions about an individual incident are unsupported, including requests for
+incident-level extrema, details, identifiers, titles or text, comments, or
+attachments. The interpreter must not silently broaden such a request into an
+operational overview or any other company- or category-level aggregate.
 
 ## 3. Interpretation and metric rules
 
@@ -240,13 +244,17 @@ Reporter grouping and reporter filtering are not available.
 The browser receives a structured application response containing:
 
 - deterministic summary text;
-- interpreted period and filters;
+- interpreted metric, ranking direction, limit, grouping, exact period, and
+  active category and responder filters;
 - metric definition label;
 - zero through ten result rows;
 - the sample size for every responder result;
 - snapshot timestamp for backlog results;
 - advisory notices; and
 - a stable safe error or clarification code when applicable.
+
+The response retains exact UTC period bounds. The browser presents those bounds
+in Singapore time at hour precision and keeps the exclusive-end label visible.
 
 All text is rendered through normal React escaping. There is no raw provider
 text, Markdown, HTML, executable link, auto-apply operation, or response-fed
@@ -318,7 +326,10 @@ statistics-unavailable result and never retries the provider.
   structured responder selection is excluded from the provider payload.
 - [x] `AI-ADM-AUTH-04` — Captured provider requests contain only the validated
   question, request instant, fixed instructions, and closed plan vocabulary,
-  with no statistics, selections, identities, incident data, or credentials.
+  with no statistics, selections, identities, incident data, or credentials;
+  fixed instructions classify individual-incident extrema, details,
+  identifiers, text, comments, and attachments as unsupported and prohibit
+  broadening such a question into an operational overview.
 - [x] `AI-ADM-AUTH-05` — Malformed JSON, extra prose, unknown fields or enums,
   invalid periods, excessive limits, and unsupported or ambiguous questions
   execute no analytics handler and return only an application-owned safe error
@@ -404,6 +415,11 @@ statistics-unavailable result and never retries the provider.
   deterministic order within the ten-row response ceiling. Repository-wide
   and isolated PostgreSQL checks also passed. See
   [`test-evidence/2026-10-23-admin-insight-first-place-ties.md`](test-evidence/2026-10-23-admin-insight-first-place-ties.md).
+- Planning-guardrail evidence: prompt-contract and strict-plan tests prove that
+  individual-incident questions are explicitly unsupported, cannot be silently
+  broadened by the planning instructions, and non-ranking plans reject lone
+  ranking fields. The repository-wide check also passed. See
+  [`test-evidence/2026-10-23-admin-insight-planning-guardrails.md`](test-evidence/2026-10-23-admin-insight-planning-guardrails.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.

@@ -65,6 +65,11 @@ final class AiPromptBuilder {
                     CATEGORY, or RESPONDER. clarificationCode is MISSING_PERIOD, AMBIGUOUS_METRIC,
                     UNSUPPORTED_QUESTION, or CONFLICTING_PERIODS. Omit every field not required by the plan.
                     A question without a period must use NEEDS_CLARIFICATION and MISSING_PERIOD.
+                    Any question about an individual incident is unsupported, including requests for
+                    incident-level extrema, details, identifiers, titles or text, comments, or attachments.
+                    Use NEEDS_CLARIFICATION with UNSUPPORTED_QUESTION for those questions. Never silently
+                    broaden an unsupported incident-level question into OPERATIONAL_OVERVIEW or another
+                    company- or category-level aggregate.
                     """;
         }
         }

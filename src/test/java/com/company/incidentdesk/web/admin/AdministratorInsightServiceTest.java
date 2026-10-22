@@ -36,6 +36,12 @@ class AdministratorInsightServiceTest {
         assertEquals("2 minutes", answer.rows().getFirst().displayValue());
         assertEquals(NOW.minusSeconds(30L * 86400), analytics.query.periods().period().startInclusive());
         assertEquals(NOW, analytics.query.periods().period().endExclusive());
+        assertEquals("AVERAGE_TIME_IN_PROGRESS", answer.metric());
+        assertEquals("DESCENDING", answer.rankingDirection());
+        assertEquals(3, answer.limit());
+        assertEquals("RESPONDER", answer.grouping());
+        assertEquals(List.of("IT"), answer.categoryFilters());
+        assertEquals(List.of(), answer.responderFilters());
     }
 
     @Test
@@ -56,6 +62,9 @@ class AdministratorInsightServiceTest {
         assertEquals("Not available", answer.rows().getFirst().displayValue());
         assertNull(answer.rows().getFirst().numericValue());
         assertEquals(0, answer.rows().getFirst().sampleSize());
+        assertNull(answer.rankingDirection());
+        assertNull(answer.limit());
+        assertEquals(List.of("responder-without-data"), answer.responderFilters());
     }
 
     @Test
