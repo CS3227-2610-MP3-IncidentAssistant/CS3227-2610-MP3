@@ -183,9 +183,28 @@ occupying every application worker while SoCLaaS is slow.
 
 - Actor/precondition: an enabled authenticated Responder who, at execution
   time, may view the incident under `.agents/authorization-matrix.md`.
+- The detail-view rule governs eligibility: an unassigned `SUBMITTED` incident
+  requires current category access; an `ASSIGNED` incident remains viewable to
+  its assignee even after category access is revoked. A consistent authorized
+  read selects the provider data immediately before gateway admission.
 - Allowlisted data: incident identifier, category label, title, description,
-  lifecycle state, creation time, current assignment age, and privacy-safe SLO
-  state. Version one sends no comments.
+  lifecycle state, creation time, current-stage kind and elapsed seconds, and
+  privacy-safe current-stage SLO state. Version one sends no comments.
+- For an unassigned `SUBMITTED` incident, the stage is `QUEUE` and elapsed time
+  is measured from the current resolution cycle's `queue_entered_at`. For an
+  `ASSIGNED` incident, the stage is `IN_PROGRESS` and elapsed time is measured
+  from that cycle's first assignment, including time through handoff or
+  reassignment. Use one application-generated UTC instant for selection and
+  elapsed-time calculation. A missing or future stage timestamp rejects the
+  request before provider dispatch; do not substitute zero.
+- Select the category target version effective at the current cycle's queue-entry
+  instant, following the prospective rule in `.agents/slo.md`. A later target
+  change does not rewrite that cycle; reopening starts a new cycle with a new
+  target selection. The provider receives only `WITHIN_TARGET`, `OVERDUE`, or
+  `NOT_APPLICABLE`, never target history or SLO configuration. An absent target
+  yields `NOT_APPLICABLE`. A handed-off `SUBMITTED` incident retains queue age,
+  but its time-to-claim SLO state is `NOT_APPLICABLE` because that cycle was
+  already claimed, matching the current live SLO calculation.
 - Excluded data: reporter identity whether anonymous or not, internal ownership
   link, comments, attachments or names/bytes, audit events, credentials,
   sessions, unrelated incidents, and hidden administrator fields.
@@ -193,7 +212,13 @@ occupying every application worker while SoCLaaS is slow.
   text. It cannot claim, assign, comment, hand off, resolve, or call a tool.
 - Stale/concurrent path: authorization and state are read consistently just
   before data selection. Loss of access or a conflicting state change denies
-  the request without provider disclosure.
+  the request without provider disclosure. Reauthorize before returning a
+  completed result; if access was lost during provider processing, discard the
+  result without exposing its text. This second check cannot retract an
+  already-authorized provider request.
+- Human point: the Responder explicitly requests and reviews the result in the
+  incident detail view. It does not prefill resolution remarks or trigger any
+  claim, assignment, comment, handoff, or resolution action.
 
 ### 4.3 Administrator trend assistance (`AI-ADM-01`)
 
@@ -312,6 +337,44 @@ is admitted only after the applicable local/circuit limit permits it.
 - [ ] `AI-FEAT-06` — Each admitted request records a redacted audit outcome and
   safe operational metrics; failure never persists generated content or a
   partial domain change.
+
+### Responder incident assistance (`AI-RES`)
+
+- [ ] `AI-RES-02` — A currently authorized Responder can explicitly request a
+  summary and suggested investigation steps for one viewable incident through
+  a CSRF-protected endpoint that accepts only its identifier; the result is
+  labelled advisory plain text and causes no incident mutation.
+- [ ] `AI-RES-03` — A signed-out, disabled, wrong-role, or unauthorized account,
+  or an incident made inaccessible by category, assignment, or state change,
+  is denied before provider dispatch or usage reservation; missing and forbidden
+  incidents have the same privacy-safe presentation. An incident assigned to
+  the requesting Responder remains eligible after category access revocation.
+- [ ] `AI-RES-04` — A deterministic fake-provider capture contains only the
+  fields in section 4.2 within shared input bounds. `SUBMITTED` uses `QUEUE`
+  age from current-cycle queue entry and its time-to-claim SLO when never
+  claimed; a handed-off `SUBMITTED` cycle uses `NOT_APPLICABLE` SLO state.
+  `ASSIGNED` uses `IN_PROGRESS` age from current-cycle first assignment and
+  its in-progress SLO. The target is the version effective at cycle queue
+  entry, including after a mid-cycle configuration edit or a reopening.
+  Missing targets produce `NOT_APPLICABLE`; invalid timestamps fail before
+  dispatch. Identity, comments, attachments, history, audit content, and other
+  incidents are absent.
+- [ ] `AI-RES-05` — A concurrent access or state change yields either one
+  consistently authorized selection or denial before provider dispatch. A
+  second authorization check denies a result if access was lost during provider
+  processing. The UI ignores a late result after incident navigation, actor
+  change, an access-denied detail refresh, or detail-state reconciliation.
+- [ ] `AI-RES-06` — Valid output is displayed only as escaped, bounded,
+  labelled text. Malformed or oversized output, markup, URLs, and tool calls
+  cannot execute, fetch, prefill remarks, or change application state.
+- [ ] `AI-RES-07` — Provider failure, timeout, cancellation, and rate or budget
+  limits leave the normal incident workflow usable and persist no generated
+  text or partial domain change. Admitted requests record only the required
+  content-free audit outcome and safe metrics.
+- [ ] `AI-RES-08` — Both eligible detail states offer an explicit request,
+  pending/cancel, error, and user-initiated retry path; keyboard, focus, and
+  narrow-layout checks verify that the advice can be reviewed without an
+  automatic apply or retry action.
 
 ## 8. Verification evidence and approval
 

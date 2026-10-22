@@ -42,7 +42,8 @@ class AiGatewayContractTest {
         var selector = new AiDataSelector() {
             @Override public Optional<ResponderData> responder(UUID actor, UUID id) {
                 return Optional.of(new ResponderData(UUID.randomUUID(), IncidentCategory.IT, "title", "text",
-                        IncidentStatus.SUBMITTED, Instant.parse("2026-10-19T09:00:00Z"), 0, false));
+                        IncidentStatus.SUBMITTED, Instant.parse("2026-10-19T09:00:00Z"),
+                        ResponderData.Stage.QUEUE, 0, ResponderData.SloState.NOT_APPLICABLE));
             }
         };
         assertThrows(SoclaasException.class, () -> AiPromptBuilder.prepare(new AiRequest.ResponderIncident(incident),
@@ -55,12 +56,15 @@ class AiGatewayContractTest {
         var selector = new AiDataSelector() {
             @Override public Optional<ResponderData> responder(UUID actor, UUID id) {
                 return Optional.of(new ResponderData(id, IncidentCategory.IT, "title", POISON,
-                        IncidentStatus.SUBMITTED, Instant.parse("2026-10-19T09:00:00Z"), 0, false));
+                        IncidentStatus.SUBMITTED, Instant.parse("2026-10-19T09:00:00Z"),
+                        ResponderData.Stage.QUEUE, 0, ResponderData.SloState.NOT_APPLICABLE));
             }
         };
         var prepared = AiPromptBuilder.prepare(new AiRequest.ResponderIncident(incident), UUID.randomUUID(), selector);
         var data = json.readTree(prepared.data());
-        assertEquals(8, data.size());
+        assertEquals(9, data.size());
+        assertEquals("QUEUE", data.path("stage").asString());
+        assertEquals("NOT_APPLICABLE", data.path("sloState").asString());
         assertEquals(POISON, data.path("description").asString());
         for (String excluded : List.of("actor", "reporter", "identity", "comments", "attachments", "anonymous")) {
             assertFalse(data.has(excluded));

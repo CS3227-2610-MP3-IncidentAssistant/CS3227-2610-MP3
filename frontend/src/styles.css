@@ -141,6 +141,9 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .incident-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
 .responder-detail__description p,
 .incident-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.responder-detail__advice { display: grid; justify-items: start; gap: 10px; min-width: 0; padding: 0 22px 22px; }
+.responder-detail__advice h3, .responder-detail__advice p { margin: 0; }
+.responder-detail__advice-text { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .responder-resolution { display: grid; gap: 8px; padding: 0 22px 22px; }
 .responder-resolution label { font-size: 13px; font-weight: 700; }
 .responder-resolution textarea { width: 100%; min-height: 112px; resize: vertical; padding: 10px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }

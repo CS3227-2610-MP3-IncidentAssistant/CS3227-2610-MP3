@@ -32,8 +32,8 @@ final class AiPromptBuilder {
             if (!target.incidentId().equals(incident.incidentId())) { throw rejected(); }
             data = Map.of("incidentId", incident.incidentId().toString(), "category", incident.category().displayName(),
                     "title", incident.title(), "description", incident.description(), "state", incident.state().name(),
-                    "createdAt", incident.createdAt().toString(), "assignmentAgeSeconds", incident.assignmentAgeSeconds(),
-                    "sloOverdue", incident.sloOverdue());
+                    "createdAt", incident.createdAt().toString(), "stage", incident.stage().name(),
+                    "stageElapsedSeconds", incident.stageElapsedSeconds(), "sloState", incident.sloState().name());
             task = "Summarize this incident and suggest investigation steps for human review. Do not perform any action.";
         }
         case AiRequest.AdministratorTrends range -> {
