@@ -1,8 +1,9 @@
 # Reporter-to-Responder Promotion Journey
 
-Status: **Product-owner, security/architecture, and implementation review
-approved by the repository user on 2026-10-22. Verification evidence and the
-remaining acceptance criteria are still pending.**
+Status: **Product-owner and security/architecture approval recorded on
+2026-10-22. Automated implementation evidence now satisfies `PROM-AC-01`
+through `PROM-AC-08`; browser, manual accessibility, deployed verification,
+and independent review of the subsequent transaction fix remain pending.**
 
 This specification governs the complete Reporter-to-Responder promotion
 journey across Reporter request and history, Administrator review and decision,
@@ -216,34 +217,34 @@ change.
 | `PROM-UX-01` | React style guide | Reporter and Administrator promotion surfaces | interaction, focus, semantic, malicious-text, error-state, reflow, and accessibility evidence |
 | `PROM-E2E-01` | MP2 improvements and testing policy | deployed Reporter → Administrator → Responder journey | isolated PostgreSQL, browser, restart, and HTTPS smoke evidence |
 
-- [ ] `PROM-AC-01` — An enabled Reporter can create one pending request with a
+- [x] `PROM-AC-01` — An enabled Reporter can create one pending request with a
   non-empty set of distinct valid categories and an optional comment within
   2,000 characters; actor, identifier, and UTC time are server-derived, and the
   request plus redacted audit event commit atomically.
-- [ ] `PROM-AC-02` — Empty, duplicate, unknown, or tampered categories,
+- [x] `PROM-AC-02` — Empty, duplicate, unknown, or tampered categories,
   over-limit comments, signed-out/wrong-role/disabled actors, persistence or
   audit failure, and concurrent duplicate submissions create neither a second
   pending request nor a misleading success audit.
-- [ ] `PROM-AC-03` — Bounded history returns only the authenticated Reporter's
+- [x] `PROM-AC-03` — Bounded history returns only the authenticated Reporter's
   retained requests in deterministic order with the specified pending,
   approved, and rejected outcomes; cross-user reads and missing resources do
   not disclose whether another request exists.
-- [ ] `PROM-AC-04` — Only an enabled Administrator can page through pending
+- [x] `PROM-AC-04` — Only an enabled Administrator can page through pending
   requests or open request detail, and representations are bounded,
   non-cacheable, safely rendered, and neutral for unavailable historical
   requesters.
-- [ ] `PROM-AC-05` — Approval accepts exactly a non-empty subset of the
+- [x] `PROM-AC-05` — Approval accepts exactly a non-empty subset of the
   persisted requested categories; empty, duplicate, unknown, browser-tampered,
   or unrequested grants are rejected without mutation or success audit.
-- [ ] `PROM-AC-06` — Rejection leaves role, category access, and sessions
+- [x] `PROM-AC-06` — Rejection leaves role, category access, and sessions
   unchanged while atomically retaining the rejected decision and one redacted
   rejection audit event.
-- [ ] `PROM-AC-07` — Approval atomically preserves account identity/history,
+- [x] `PROM-AC-07` — Approval atomically preserves account identity/history,
   changes the requester to `RESPONDER`, replaces access with exactly the
   approved subset, records the decision, invalidates all existing requester
   sessions, and writes one redacted approval audit; an injected failure leaves
   every effect uncommitted.
-- [ ] `PROM-AC-08` — A stale, duplicate, or concurrent decision has at most one
+- [x] `PROM-AC-08` — A stale, duplicate, or concurrent decision has at most one
   winner. Transaction-time loss of Administrator authority or requester
   eligibility prevents the decision, and every loser creates no second
   mutation or success audit.
@@ -261,6 +262,14 @@ change.
   login, and category-scoped queue access, then verifies persisted request,
   account, category, session, and audit state. Restart/redeploy and deployed
   HTTPS smoke evidence use the exact release commit and non-production data.
+
+Automated evidence for `PROM-AC-01` through `PROM-AC-08`, and partial evidence
+for `PROM-AC-09` and `PROM-AC-10`, is recorded in the
+[2026-10-22 promotion journey verification](test-evidence/2026-10-22-promotion-journey.md).
+`PROM-AC-09` remains open pending a fresh-login, category-scoped browser check.
+`PROM-AC-10` remains open pending manual keyboard, 200% zoom, and narrow-reflow
+evidence. `PROM-AC-11` remains open pending browser, restart/redeploy, and
+deployed HTTPS evidence against an exact committed release revision.
 
 ## 9. Verification and approval record
 
@@ -284,7 +293,8 @@ Current record:
 
 - Existing implementation: merged on `main` through issue #6; treated as
   provisional and not as specification approval or completion evidence.
-- Automated evidence linked to this revision: pending.
+- Automated evidence: `PROM-AC-01` through `PROM-AC-08` verified in the
+  [2026-10-22 promotion journey record](test-evidence/2026-10-22-promotion-journey.md).
 - Manual/accessibility/deployed evidence: pending.
 - Product-owner approval of this revision: repository user, confirmed in the
   current Codex chat on 2026-10-22 and recorded in
