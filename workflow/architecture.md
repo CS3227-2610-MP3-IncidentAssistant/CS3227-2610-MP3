@@ -45,9 +45,10 @@ a separate static frontend.
   foundation.
 - `decisions/ADR-002-spa-csrf-token-flow.md`: accepted cookie-backed SPA CSRF
   flow with request-time token reads and bounded stale-token recovery.
-- `decisions/ADR-003-promotion-decision-and-session-invalidation.md`: proposed
-  transaction, category-subset, and shared-session contract for issue #6;
-  approval remains pending.
+- `decisions/ADR-003-promotion-decision-and-session-invalidation.md`:
+  approval-ready proposed transaction, category-subset, bounded-history, and
+  shared-session contract for issue #6; existing implementation remains
+  provisional and approval remains pending.
 - `decisions/ADR-004-responder-mutations.md`: approved issue #7 responder
   projection, transactional claim/resolution, audit atomicity, and history
   behavior. Separate cross-role human security/architecture review waived by

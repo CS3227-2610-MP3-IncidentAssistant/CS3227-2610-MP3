@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   decidePromotionRequest,
@@ -16,6 +16,11 @@ const categoryNames: Record<IncidentCategory, string> = {
   FACILITIES: 'Facilities',
 }
 
+type PendingDecision = {
+  request: PromotionRequestRecord
+  decision: 'APPROVE' | 'REJECT'
+}
+
 export function PromotionRequests({ onRefreshSession }: { onRefreshSession: SessionRefresher }) {
   const [requests, setRequests] = useState<PromotionRequestRecord[]>([])
   const [selectedByRequest, setSelectedByRequest] = useState<Record<string, IncidentCategory[]>>({})
@@ -24,8 +29,16 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [feedback, setFeedback] = useState('')
+  const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
+  const returnFocus = useRef<HTMLButtonElement | null>(null)
+  const feedbackRegion = useRef<HTMLParagraphElement | null>(null)
+
+  useEffect(() => {
+    if (feedback) feedbackRegion.current?.focus()
+  }, [feedback])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -36,7 +49,7 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
         setSelectedByRequest((current) => {
           const next = { ...current }
           for (const request of result.requests) {
-            next[request.requestId] ??= []
+            next[request.requestId] ??= [...request.requestedCategories]
           }
           return next
         })
@@ -69,19 +82,45 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
     })
   }
 
-  async function decide(request: PromotionRequestRecord, decision: 'APPROVE' | 'REJECT') {
+  function requestDecision(
+    request: PromotionRequestRecord,
+    decision: 'APPROVE' | 'REJECT',
+    trigger: HTMLButtonElement,
+  ) {
     const approvedCategories = selectedByRequest[request.requestId] ?? []
     setActionError('')
+    setFeedback('')
     if (decision === 'APPROVE' && approvedCategories.length === 0) {
       setActionError(`Select at least one category for ${request.requesterLabel ?? 'this request'}.`)
       return
     }
+    returnFocus.current = trigger
+    setPendingDecision({ request, decision })
+  }
+
+  function closeConfirmation() {
+    if (submittingId) return
+    setPendingDecision(null)
+    setActionError('')
+    window.setTimeout(() => returnFocus.current?.focus(), 0)
+  }
+
+  async function decide() {
+    if (!pendingDecision) return
+    const { request, decision } = pendingDecision
+    const approvedCategories = selectedByRequest[request.requestId] ?? []
     setSubmittingId(request.requestId)
     try {
       await decidePromotionRequest(request.requestId, decision, approvedCategories, onRefreshSession)
+      setPendingDecision(null)
+      setFeedback(decision === 'APPROVE'
+        ? `${request.requesterLabel ?? 'The Reporter'} was promoted with ${approvedCategories.map((category) => categoryNames[category]).join(', ')} access.`
+        : `${request.requesterLabel ?? 'The Reporter'}'s promotion request was rejected.`)
       reload()
     } catch (error) {
-      setActionError(error instanceof ApiError && (error.status === 409 || error.status === 404)
+      setActionError(error instanceof ApiError && (error.status === 401 || error.code === 'UNAUTHENTICATED')
+        ? 'Your session has expired. Sign in again before deciding this request.'
+        : error instanceof ApiError && (error.status === 409 || error.status === 404)
         ? 'This request has already changed. Refresh the list before deciding again.'
         : error instanceof Error
           ? error.message
@@ -107,7 +146,10 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
           Refresh
         </button>
       </header>
-      {actionError && <p className="form-error" role="alert">{actionError}</p>}
+      {actionError && !pendingDecision && <p className="form-error" role="alert">{actionError}</p>}
+      {feedback && (
+        <p className="form-success" role="status" ref={feedbackRegion} tabIndex={-1}>{feedback}</p>
+      )}
       {loading && <p className="panel-state" role="status">Loading promotion requests…</p>}
       {!loading && loadError && (
         <div className="panel-state" role="alert">
@@ -150,7 +192,7 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
                 className="primary-button"
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => void decide(request, 'APPROVE')}
+                onClick={(event) => requestDecision(request, 'APPROVE', event.currentTarget)}
               >
                 {isSubmitting ? 'Saving…' : 'Approve selected categories'}
               </button>
@@ -158,7 +200,7 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
                 className="secondary-button"
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => void decide(request, 'REJECT')}
+                onClick={(event) => requestDecision(request, 'REJECT', event.currentTarget)}
               >
                 Reject
               </button>
@@ -168,6 +210,76 @@ export function PromotionRequests({ onRefreshSession }: { onRefreshSession: Sess
       })}
       {!loadError && <Pagination page={page} totalPages={totalPages} ariaLabel="Promotion request pages"
         disabled={loading} onPageChange={setPage} />}
+      <PromotionDecisionDialog
+        pendingDecision={pendingDecision}
+        selectedCategories={pendingDecision
+          ? selectedByRequest[pendingDecision.request.requestId] ?? []
+          : []}
+        error={actionError}
+        submitting={submittingId !== null}
+        onCancel={closeConfirmation}
+        onConfirm={() => void decide()}
+      />
     </section>
   )
+}
+
+function PromotionDecisionDialog({ pendingDecision, selectedCategories, error, submitting, onCancel, onConfirm }: {
+  pendingDecision: PendingDecision | null
+  selectedCategories: IncidentCategory[]
+  error: string
+  submitting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    if (pendingDecision && !element.open) {
+      if (typeof element.showModal === 'function') element.showModal()
+      else element.setAttribute('open', '')
+    } else if (!pendingDecision && element.open) {
+      if (typeof element.close === 'function') element.close()
+      else element.removeAttribute('open')
+    }
+  }, [pendingDecision])
+
+  const requester = pendingDecision?.request.requesterLabel ?? 'this Reporter'
+  const approving = pendingDecision?.decision === 'APPROVE'
+  const categoryList = selectedCategories.map((category) => categoryNames[category]).join(', ')
+
+  return <dialog
+    aria-describedby="promotion-decision-description"
+    aria-labelledby="promotion-decision-title"
+    className="confirmation-dialog"
+    ref={dialog}
+    onCancel={(event) => {
+      event.preventDefault()
+      onCancel()
+    }}
+  >
+    {pendingDecision && <div className="confirmation-dialog__content">
+      <p className="eyebrow">Promotion decision</p>
+      <h2 id="promotion-decision-title">{approving ? 'Confirm promotion' : 'Confirm rejection'}</h2>
+      <p id="promotion-decision-description">
+        {approving
+          ? `Promote ${requester} and grant exactly ${categoryList} access? Their Reporter sessions will end, and they must sign in through the Responder portal.`
+          : `Reject ${requester}'s request? The request will close without changing their role or category access.`}
+      </p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="confirmation-dialog__actions">
+        <button className="ghost-button" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
+        <button
+          className={approving ? 'primary-button' : 'danger-button'}
+          type="button"
+          disabled={submitting}
+          onClick={onConfirm}
+        >
+          {submitting ? 'Saving…' : approving ? 'Confirm promotion' : 'Confirm rejection'}
+        </button>
+      </div>
+    </div>}
+  </dialog>
 }

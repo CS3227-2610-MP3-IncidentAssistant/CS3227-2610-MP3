@@ -25,6 +25,7 @@ import com.company.incidentdesk.persistence.AccountRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,7 +40,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1")
 @ConditionalOnBean(DataSource.class)
 public final class PromotionRequestController {
-    private static final int DEFAULT_PAGE_SIZE = 25;
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_COMMENT_LENGTH = 2_000;
 
@@ -51,18 +51,28 @@ public final class PromotionRequestController {
         this.accounts = accounts;
     }
 
-    @GetMapping("/reporter/promotion-request")
-    ResponseEntity<?> reporterHistory(Principal principal) {
+    @GetMapping(path = "/reporter/promotion-request", produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<?> reporterHistory(
+            Principal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
         Optional<Account> reporter = currentPrincipal(principal, Role.REPORTER);
         if (reporter.isEmpty()) return unavailable();
-        List<PromotionRequestRecord> requests = promotions.visibleHistoryAs(reporter.orElseThrow()).stream()
-                .filter(request -> request.requesterId().equals(reporter.orElseThrow().id()))
+        Optional<PageRequest> pagination = pageRequest(page, size);
+        if (pagination.isEmpty()) return validation(List.of("page", "size"));
+        PageRequest requestedPage = pagination.orElseThrow();
+        List<PromotionRequestRecord> requests = promotions.reporterHistoryAs(
+                reporter.orElseThrow(), requestedPage.offset(), requestedPage.size()).stream()
                 .map(PromotionRequestController::toReporterRecord)
                 .toList();
-        return noStore(HttpStatus.OK, new ReporterRequestHistory(requests));
+        long total = promotions.countReporterHistoryAs(reporter.orElseThrow());
+        long totalPages = Math.max(1, (total + requestedPage.size() - 1) / requestedPage.size());
+        return noStore(HttpStatus.OK, new ReporterRequestPage(
+                requests, requestedPage.page(), requestedPage.size(), total, totalPages));
     }
 
-    @PostMapping("/reporter/promotion-request")
+    @PostMapping(path = "/reporter/promotion-request", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<?> submit(Principal principal, @RequestBody PromotionRequestBody body) {
         Optional<Account> reporter = currentPrincipal(principal, Role.REPORTER);
         if (reporter.isEmpty()) return unavailable();
@@ -80,44 +90,50 @@ public final class PromotionRequestController {
         return noStore(HttpStatus.CREATED, toReporterRecord(result.value().orElseThrow()));
     }
 
-    @GetMapping("/admin/promotion-requests")
+    @GetMapping(path = "/admin/promotion-requests", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<?> pendingRequests(
             Principal principal,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         Optional<Account> administrator = currentPrincipal(principal, Role.ADMINISTRATOR);
         if (administrator.isEmpty()) return unavailable();
-        int boundedPage = Math.max(0, page);
-        int boundedSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        long offset = (long) boundedPage * boundedSize;
+        Optional<PageRequest> pagination = pageRequest(page, size);
+        if (pagination.isEmpty()) return validation(List.of("page", "size"));
+        PageRequest requestedPage = pagination.orElseThrow();
         List<AdministratorPromotionRequestRecord> requests = promotions
-                .pendingRequestsAs(administrator.orElseThrow(), offset, boundedSize).stream()
+                .pendingRequestsAs(administrator.orElseThrow(), requestedPage.offset(), requestedPage.size()).stream()
                 .map(request -> toAdministratorRecord(request, requesterLabel(request)))
                 .toList();
         long total = promotions.countPendingRequestsAs(administrator.orElseThrow());
-        long totalPages = Math.max(1, (total + boundedSize - 1) / boundedSize);
+        long totalPages = Math.max(1, (total + requestedPage.size() - 1) / requestedPage.size());
         return noStore(HttpStatus.OK,
-                new AdministratorRequestPage(requests, boundedPage, boundedSize, total, totalPages));
+                new AdministratorRequestPage(
+                        requests, requestedPage.page(), requestedPage.size(), total, totalPages));
     }
 
-    @GetMapping("/admin/promotion-requests/{requestId}")
-    ResponseEntity<?> requestDetail(Principal principal, @PathVariable UUID requestId) {
+    @GetMapping(path = "/admin/promotion-requests/{requestId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<?> requestDetail(Principal principal, @PathVariable String requestId) {
         Optional<Account> administrator = currentPrincipal(principal, Role.ADMINISTRATOR);
         if (administrator.isEmpty()) return unavailable();
+        Optional<PromotionRequestId> parsedRequestId = requestId(requestId);
+        if (parsedRequestId.isEmpty()) return validation(List.of("requestId"));
         Optional<ResponderPromotionRequest> request = promotions.findRequestAs(
-                administrator.orElseThrow(), new PromotionRequestId(requestId));
+                administrator.orElseThrow(), parsedRequestId.orElseThrow());
         if (request.isEmpty()) return unavailable();
         return noStore(HttpStatus.OK,
                 toAdministratorRecord(request.orElseThrow(), requesterLabel(request.orElseThrow())));
     }
 
-    @PostMapping("/admin/promotion-requests/{requestId}/decision")
+    @PostMapping(path = "/admin/promotion-requests/{requestId}/decision",
+            consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<?> decide(
             Principal principal,
-            @PathVariable UUID requestId,
+            @PathVariable String requestId,
             @RequestBody DecisionBody body) {
         Optional<Account> administrator = currentPrincipal(principal, Role.ADMINISTRATOR);
         if (administrator.isEmpty()) return unavailable();
+        Optional<PromotionRequestId> parsedRequestId = requestId(requestId);
+        if (parsedRequestId.isEmpty()) return validation(List.of("requestId"));
         if (body == null) return validation(List.of("decision"));
         if (body.decision() == null || !Set.of("APPROVE", "REJECT").contains(body.decision())) {
             return validation(List.of("decision"));
@@ -133,7 +149,7 @@ public final class PromotionRequestController {
         if (!validation.isEmpty()) return validation(validation);
 
         ApplicationResult<ResponderPromotionRequest> result = promotions.decideAs(
-                administrator.orElseThrow(), new PromotionRequestId(requestId), approve, approved);
+                administrator.orElseThrow(), parsedRequestId.orElseThrow(), approve, approved);
         if (!result.isSuccess()) return applicationError(result.error().orElseThrow());
         ResponderPromotionRequest decided = result.value().orElseThrow();
         return noStore(HttpStatus.OK, toAdministratorRecord(decided, requesterLabel(decided)));
@@ -193,6 +209,24 @@ public final class PromotionRequestController {
         return Set.copyOf(categories);
     }
 
+    private static Optional<PageRequest> pageRequest(int page, int size) {
+        if (page < 0 || size < 1) return Optional.empty();
+        int boundedSize = Math.min(size, MAX_PAGE_SIZE);
+        try {
+            return Optional.of(new PageRequest(page, boundedSize, Math.multiplyExact((long) page, boundedSize)));
+        } catch (ArithmeticException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<PromotionRequestId> requestId(String value) {
+        try {
+            return Optional.of(new PromotionRequestId(UUID.fromString(value)));
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return Optional.empty();
+        }
+    }
+
     private static ResponseEntity<?> applicationError(ApplicationError error) {
         return switch (error.code()) {
         case VALIDATION -> validation(error.validation().errors().stream().map(ValidationError::field)
@@ -250,7 +284,12 @@ public final class PromotionRequestController {
             Instant decidedAt) {
     }
 
-    record ReporterRequestHistory(List<PromotionRequestRecord> requests) {
+    record ReporterRequestPage(
+            List<PromotionRequestRecord> requests,
+            int page,
+            int size,
+            long totalElements,
+            long totalPages) {
     }
 
     record AdministratorRequestPage(
@@ -259,5 +298,8 @@ public final class PromotionRequestController {
             int size,
             long totalElements,
             long totalPages) {
+    }
+
+    private record PageRequest(int page, int size, long offset) {
     }
 }

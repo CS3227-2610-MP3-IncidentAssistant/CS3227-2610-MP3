@@ -21,6 +21,18 @@ public interface PromotionWorkflowStore {
                 .toList();
     }
 
+    default List<ResponderPromotionRequest> findPromotionRequestsByRequester(
+            AccountId requesterId, long offset, int limit) {
+        return findPromotionRequestsByRequester(requesterId).stream()
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    default long countPromotionRequestsByRequester(AccountId requesterId) {
+        return findPromotionRequestsByRequester(requesterId).size();
+    }
+
     default List<ResponderPromotionRequest> findPendingPromotionRequests(long offset, int limit) {
         return findPromotionRequests().stream()
                 .filter(request -> request.status() == PromotionRequestStatus.PENDING)

@@ -1,9 +1,14 @@
 # ADR-003: Promotion Decision Persistence and Session Invalidation
 
-Status: **Proposed — pending independent security/architecture review and human approval.**
+Status: **Accepted — product-owner and independent security/architecture
+approval recorded on 2026-10-22. Implementation verification remains governed
+by the promotion journey acceptance criteria.**
 
 - Date: 2026-10-19
-- Decider: pending
+- Product owner: repository user, approved in the current Codex chat on
+  2026-10-22
+- Independent security/architecture decider: repository user, approved in the
+  current Codex chat on 2026-10-22
 
 ## Context
 
@@ -17,6 +22,15 @@ Issue #6 must persist Reporter promotion requests and decisions in PostgreSQL. A
 - Commit request status, the existing account's role and exact approved categories, request history, and required audit record as one logical transaction. A rollback leaves none of these changes.
 - Use the shared Spring Session JDBC store to invalidate every session for the promoted account. Verify that revocation participates safely in the promotion transaction; if the session repository cannot join that transaction, add a fail-closed current-role/version check so an old session cannot access Reporter or Responder protected routes.
 - A fresh login reloads the account's persisted role and category access. The Reporter portal cannot silently become a Responder session.
+- Rejection changes neither role nor access and therefore does not invalidate
+  the requester's sessions. Approval and rejection both retain immutable
+  request history.
+- Bound and deterministically order Reporter history and Administrator pending
+  lists. Reject invalid pagination values instead of silently selecting a
+  different page.
+- Return promotion representations with `Cache-Control: no-store`; never place
+  request comments, session identifiers, or authorization state in URLs,
+  browser persistence, logs, or audit details.
 
 ## Security and privacy effects
 
@@ -33,4 +47,6 @@ This adds persistent schema and integration tests for migration, rollback, concu
 - Injected persistence/audit failure rolls back account, request, and category changes.
 - Multiple active sessions are invalidated or fail closed across application instances after approval.
 - A newly authenticated Responder receives only the approved categories; a wrong-role portal remains denied.
-- Independent security/architecture reviewer and named human approval are recorded before implementation.
+- Independent security/architecture reviewer and named human approval are
+  recorded before the existing provisional implementation is accepted as the
+  approved design or extended further.

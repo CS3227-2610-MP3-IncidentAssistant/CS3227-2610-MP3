@@ -237,7 +237,7 @@ unit. For MP3:
 | Controlled Administrator bootstrap | TODO | TODO | TODO | TODO | Not started |
 | Role-separated login portals | TODO | TODO | TODO | TODO | Not started |
 | Anonymous submission control and persisted value | TODO | TODO | TODO | TODO | Not started |
-| Reporter-to-Responder promotion journey | TODO | TODO | TODO | TODO | Not started |
+| Reporter-to-Responder promotion journey | `workflow/promotion-journey.md`; `workflow/decisions/ADR-003-promotion-decision-and-session-invalidation.md` | Existing component, security, application, and PostgreSQL tests require verification and a dated evidence record against the approved revision | Pending browser, restart/redeploy, and deployed HTTPS evidence | Product-owner approved 2026-10-22; independent security/architecture review pending | Specification approved by product owner; implementation provisional |
 | Denied privileged registration and reset | TODO | TODO | TODO | TODO | Not started |
 | Complete three-role journeys | TODO | TODO | TODO | TODO | Not started |
 | Anonymous/privacy regression coverage | TODO | TODO | TODO | TODO | Not started |
