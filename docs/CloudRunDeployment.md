@@ -165,7 +165,9 @@ Cloud Run as well:
 - `INCIDENT_DESK_NEON_REQUIRED=true`
 - `INCIDENT_DESK_SECURE_COOKIES=true`
 - `INCIDENT_DESK_ATTACHMENT_BUCKET=incident-attachments`
-- `AI_ENABLED=false` until the AI production gate is approved
+- `AI_ENABLED=true`, enabled on 2026-10-23 under the authorization recorded in
+  `workflow/reviews/2026-10-23-production-ai-enablement.md`; set `false` to
+  fail AI safely without touching incident management
 - `SOCLAAS_MODEL` to the approved production model
 - `AI_CONFIGURATION_REVISION=1`, incremented after a key/model repair or
   rotation
@@ -184,7 +186,8 @@ value in screenshots. Record only the numeric enabled version shown by Secret
 Manager.
 
 Then attach that version and the non-secret settings from the authenticated
-administrator workstation. These commands deliberately leave AI disabled:
+administrator workstation. These commands leave AI disabled so that the secret
+reference and settings can be confirmed before any provider call is possible:
 
 ```powershell
 $AiSecretName = 'incidentdesk-soclaas-api-key'
@@ -218,8 +221,11 @@ version, the runtime service account is correct, and `AI_ENABLED` is still
 `false`. Never put the describe output in public evidence if it contains other
 configuration that has not been reviewed for disclosure.
 
-Only after the AI specification/security approvals, production model and quota
-checks, and release authorization are recorded should an operator enable it:
+Enable AI only once its specification/security approvals, production model and
+quota checks, and an operator authorization record exist. For the current
+production service this was done on 2026-10-23 under
+`workflow/reviews/2026-10-23-production-ai-enablement.md`; repeat this step only
+when re-enabling after a fail-safe disable or when configuring a new service:
 
 ```powershell
 gcloud run services update $CloudRunService `
