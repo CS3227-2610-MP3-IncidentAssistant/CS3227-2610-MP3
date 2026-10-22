@@ -322,9 +322,13 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                  WHERE i.id = :incidentId
                    AND i.status = 'ASSIGNED'
                    AND i.assignee_id = :responderId
-                RETURNING i.id
+                RETURNING i.id, i.queue_entered_at, i.first_assigned_at
                 """, Map.of("incidentId", incidentId, "responderId", responderId),
-                (result, row) -> new ResolvedIncident(result.getObject("id", UUID.class), responderId));
+                (result, row) -> new ResolvedIncident(
+                        result.getObject("id", UUID.class),
+                        responderId,
+                        result.getObject("queue_entered_at", OffsetDateTime.class).toInstant(),
+                        result.getObject("first_assigned_at", OffsetDateTime.class).toInstant()));
         return resolved.stream().findFirst();
     }
 
@@ -339,8 +343,10 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
         int cycleNumber = Objects.requireNonNull(previousCycles, "previousCycles") + 1;
         jdbc.update("""
                 INSERT INTO incident_resolutions (
-                    id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks
-                ) VALUES (:resolutionId, :requestId, :incidentId, :cycleNumber, :responderId, :occurredAt, :remarks)
+                    id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks,
+                    queue_entered_at, first_assigned_at, responder_at_resolution
+                ) VALUES (:resolutionId, :requestId, :incidentId, :cycleNumber, :responderId, :occurredAt, :remarks,
+                          :queueEnteredAt, :firstAssignedAt, :responderId)
                 """, Map.of(
                 "resolutionId", resolutionId,
                 "requestId", requestId,
@@ -348,7 +354,9 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
                 "cycleNumber", cycleNumber,
                 "responderId", incident.responderId(),
                 "occurredAt", Timestamp.from(occurredAt),
-                "remarks", remarks));
+                "remarks", remarks,
+                "queueEnteredAt", Timestamp.from(incident.queueEnteredAt()),
+                "firstAssignedAt", Timestamp.from(incident.firstAssignedAt())));
         insertResolutionAudit(incident, occurredAt, auditEventId, resolutionId, cycleNumber);
         return new ResolutionResult(true, cycleNumber);
     }
@@ -386,7 +394,11 @@ class JdbcResponderIncidentGateway implements ResponderIncidentGateway {
 
     private record ClaimedIncident(UUID incidentId, UUID responderId) { }
 
-    private record ResolvedIncident(UUID incidentId, UUID responderId) { }
+    private record ResolvedIncident(
+            UUID incidentId,
+            UUID responderId,
+            Instant queueEnteredAt,
+            Instant firstAssignedAt) { }
 
     private IncidentPage readQueue(String loginName, ListCriteria criteria) {
         List<UUID> actorIds = jdbc.query("""

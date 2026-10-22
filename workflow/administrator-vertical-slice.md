@@ -622,6 +622,10 @@ The administrator slice is acceptable when:
 - [ ] Statistics use persisted lifecycle timestamps, apply the specified
   filters and formulas, handle empty populations, and include anonymous
   incidents only in non-identifying aggregates.
+  Backend-only automated evidence is recorded in
+  [the 2026-10-22 administrator statistics verification](test-evidence/2026-10-22-administrator-statistics-backend.md).
+  The criterion remains open pending the React page, interaction/accessibility,
+  browser end-to-end, and deployed verification.
 - [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
   sends only allowlisted aggregate data, renders escaped advisory text, has no
   mutation path, and fails without blocking statistics.
