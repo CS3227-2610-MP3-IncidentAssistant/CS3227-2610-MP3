@@ -302,6 +302,7 @@ tasks.register('registrationDatabaseTest', Test) {
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorSloPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorStatisticsPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorStatisticsMigrationUpgradePostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorIncidentPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.responder.ResponderIncidentPostgresTest'
     }
 

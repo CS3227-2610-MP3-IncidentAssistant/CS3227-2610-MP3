@@ -15,7 +15,9 @@
   --color-info: #2854b6;
   --color-info-soft: #e4ecff;
   --color-success: #1f7a55;
+  --color-success-soft: #e2f4ec;
   --color-danger: #b33a3a;
+  --color-danger-soft: #fce8e8;
   --shadow-card: 0 10px 30px rgb(23 35 63 / 7%);
 }
 
@@ -119,15 +121,24 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .incident-title { display: block; overflow-wrap: anywhere; }
 .incident-title-link { display: block; min-height: 40px; padding: 0; border: 0; color: var(--color-action); background: transparent; text-align: left; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer; }
 .incident-title-link:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
-.responder-detail > .section-heading { align-items: flex-start; padding: 22px; }
-.responder-detail > .section-heading h2 { margin-top: 5px; overflow-wrap: anywhere; }
-.responder-detail__metadata { display: flex; flex-wrap: wrap; gap: 24px 48px; margin: 0; padding: 0 22px 20px; border-bottom: 1px solid var(--color-border); }
-.responder-detail__metadata div { min-width: 150px; }
-.responder-detail__metadata dt { color: var(--color-text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
-.responder-detail__metadata dd { margin: 4px 0 0; overflow-wrap: anywhere; }
-.responder-detail__description { padding: 22px; }
-.responder-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
-.responder-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.responder-detail > .section-heading,
+.incident-detail > .section-heading { align-items: flex-start; padding: 22px; }
+.responder-detail > .section-heading h2,
+.incident-detail > .section-heading h2 { margin-top: 5px; overflow-wrap: anywhere; }
+.responder-detail__metadata,
+.incident-detail__metadata { display: flex; flex-wrap: wrap; gap: 24px 48px; margin: 0; padding: 20px 22px; border-bottom: 1px solid var(--color-border); }
+.responder-detail__metadata div,
+.incident-detail__metadata div { min-width: 150px; }
+.responder-detail__metadata dt,
+.incident-detail__metadata dt { color: var(--color-text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.responder-detail__metadata dd,
+.incident-detail__metadata dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.responder-detail__description,
+.incident-detail__description { padding: 22px; }
+.responder-detail__description h3,
+.incident-detail__description h3 { margin: 0 0 10px; font-size: 15px; }
+.responder-detail__description p,
+.incident-detail__description p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .responder-resolution { display: grid; gap: 8px; padding: 0 22px 22px; }
 .responder-resolution label { font-size: 13px; font-weight: 700; }
 .responder-resolution textarea { width: 100%; min-height: 112px; resize: vertical; padding: 10px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
@@ -136,13 +147,6 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .responder-resolution #responder-resolution-count { color: var(--color-text-muted); font-size: 12px; }
 .responder-resolution #responder-resolution-error { min-height: 1.25em; color: var(--color-danger); }
 .responder-resolution button { justify-self: start; }
-.responder-resolution-history { padding: 0 22px 20px; }
-.responder-resolution-history h3 { margin: 0 0 12px; font-size: 15px; }
-.responder-resolution-history ol { display: grid; gap: 12px; margin: 0; padding-left: 22px; }
-.responder-resolution-history li { padding-left: 4px; }
-.responder-resolution-history h4 { margin: 0; font-size: 14px; }
-.responder-resolution-history__date { margin: 4px 0; color: var(--color-text-muted); font-size: 12px; }
-.responder-resolution-history__remarks { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .responder-detail__feedback { margin: 0 22px 18px; padding: 12px 14px; border-radius: 8px; background: var(--color-info-soft); }
 .responder-detail-view { display: grid; gap: 8px; }
 .responder-detail__feedback p { margin: 0 0 8px; }
@@ -258,3 +262,64 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .ai-description-review { grid-column: 1 / -1; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
 .ai-description-review h3 { margin-top: 0; }
 .ai-description-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Shared incident detail sections (used by every role portal). */
+.incident-detail { display: grid; }
+.incident-detail > .ghost-button { justify-self: start; margin: 18px 22px 0; padding: 0; }
+/* Deliberate reporter, comment, and resolution whitespace is preserved. */
+.incident-detail__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.incident-detail__attachments,
+.incident-detail__comments,
+.incident-detail__lifecycle,
+.incident-detail__resolutions,
+.incident-detail__slo,
+.incident-detail__actions { padding: 0 22px 20px; }
+.incident-detail__attachments h3,
+.incident-detail__comments h3,
+.incident-detail__lifecycle h3,
+.incident-detail__resolutions h3,
+.incident-detail__slo h3,
+.incident-detail__actions h3 { margin: 0 0 12px; font-size: 15px; }
+.incident-detail__attachments ul { margin: 0; padding-left: 22px; }
+.incident-comment-list { display: grid; gap: 14px; margin: 0; padding-left: 22px; }
+.incident-comment-list li { padding-left: 4px; }
+.incident-comment-list p { margin: 0 0 4px; }
+.incident-comment-list time { color: var(--color-text-muted); font-size: 12px; }
+.incident-detail__lifecycle ol,
+.incident-detail__resolutions ol { display: grid; gap: 12px; margin: 0; padding-left: 22px; }
+.incident-detail__lifecycle li,
+.incident-detail__resolutions li { padding-left: 4px; }
+.incident-detail__lifecycle p { margin: 0 0 4px; }
+.incident-detail__lifecycle time { color: var(--color-text-muted); font-size: 12px; }
+.incident-detail__resolutions h4 { margin: 0; font-size: 14px; }
+.incident-detail__resolution-date { margin: 4px 0; color: var(--color-text-muted); font-size: 12px; }
+.incident-detail__slo-grid { display: flex; flex-wrap: wrap; gap: 16px 48px; margin: 0; }
+.incident-detail__slo-grid div { min-width: 180px; }
+.incident-detail__slo-grid dt { color: var(--color-text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.incident-detail__slo-grid dd { display: grid; gap: 6px; justify-items: start; margin: 6px 0 0; }
+.incident-detail__slo-values { color: var(--color-text-muted); font-size: 13px; }
+.incident-detail__assign { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 14px; }
+.incident-detail__assign label { flex-basis: 100%; font-size: 13px; font-weight: 700; }
+.incident-detail__assign select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.incident-detail__comment-form,
+.incident-detail__resolution-form { display: grid; gap: 8px; padding: 0 22px 22px; }
+.incident-detail__resolution-form h3 { margin: 0; font-size: 15px; }
+.incident-detail__comment-form label,
+.incident-detail__resolution-form label { font-size: 13px; font-weight: 700; }
+.incident-detail__comment-form textarea,
+.incident-detail__resolution-form textarea { width: 100%; min-height: 112px; resize: vertical; padding: 10px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.incident-detail__comment-form textarea[aria-invalid="true"],
+.incident-detail__resolution-form textarea[aria-invalid="true"] { border-color: var(--color-danger); }
+.incident-detail__comment-form p,
+.incident-detail__resolution-form p { margin: 0; }
+.incident-detail__comment-form #administrator-comment-count,
+.incident-detail__resolution-form #administrator-resolution-count { color: var(--color-text-muted); font-size: 12px; }
+.incident-detail__comment-form #administrator-comment-error,
+.incident-detail__resolution-form #administrator-resolution-error { min-height: 1.25em; color: var(--color-danger); }
+.incident-detail__comment-form button,
+.incident-detail__resolution-form button { justify-self: start; }
+.incident-detail .panel-state,
+.incident-detail .form-error,
+.incident-detail .form-success { margin: 0 22px 18px; }
+.status-badge--danger { color: var(--color-danger); background: var(--color-danger-soft); }
+.status-badge--positive { color: var(--color-success); background: var(--color-success-soft); }

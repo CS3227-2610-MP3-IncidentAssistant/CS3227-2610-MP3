@@ -82,7 +82,7 @@ class AdministratorStatisticsMigrationUpgradePostgresTest {
         assertEquals(responder, jdbc.queryForObject(
                 "SELECT responder_at_resolution FROM incident_resolutions WHERE id = ?",
                 UUID.class, resolution));
-        assertEquals(9, jdbc.queryForObject(
+        assertEquals(10, jdbc.queryForObject(
                 "SELECT MAX(CAST(version AS integer)) FROM flyway_schema_history WHERE success",
                 Integer.class));
     }
