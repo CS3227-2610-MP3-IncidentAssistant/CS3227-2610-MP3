@@ -1,6 +1,7 @@
 package com.company.incidentdesk.web.admin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Timestamp;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -273,6 +275,94 @@ class AdministratorAccountPostgresTest {
         assertEquals(AccountTombstoneOutcome.RESOURCE_UNAVAILABLE,
                 store().tombstone(deletedLogin, enabledTarget, UUID.randomUUID(), NOW));
         assertEquals(1, count("SELECT COUNT(*) FROM audit_events WHERE action = 'ACCOUNT_DELETED'"));
+    }
+
+    @Test
+    void temporaryPasswordResetCommitsHashedCredentialSessionInvalidationAndAuditAtomically() {
+        UUID administrator = account("admin", "ADMINISTRATOR");
+        UUID reporter = account("reporter", "REPORTER");
+        credential(reporter);
+        session("reporter");
+
+        TemporaryPasswordResetOutcome outcome =
+                store().resetTemporaryPassword("admin", reporter, UUID.randomUUID(), NOW);
+
+        assertEquals(TemporaryPasswordResetOutcome.Status.RESET, outcome.status());
+        String plaintext = outcome.takeTemporaryPassword().orElseThrow();
+        assertEquals(24, plaintext.length());
+
+        String storedHash = value("SELECT password_hash FROM account_credentials WHERE account_id = ?", reporter);
+        assertTrue(storedHash.startsWith("$2"), "the credential must be stored as a bcrypt hash");
+        assertFalse(storedHash.contains(plaintext), "the stored hash must not contain the plaintext");
+        assertTrue(new BCryptPasswordEncoder(12).matches(plaintext, storedHash));
+        assertEquals(Boolean.TRUE,
+                jdbc.queryForObject("SELECT temporary FROM account_credentials WHERE account_id = ?",
+                        Boolean.class, reporter));
+        assertEquals(NOW.plus(JdbcAdministratorAccountStore.TEMPORARY_PASSWORD_LIFETIME),
+                jdbc.queryForObject("SELECT expires_at FROM account_credentials WHERE account_id = ?",
+                        Timestamp.class, reporter).toInstant());
+        assertEquals(0, count("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = 'reporter'"));
+        assertEquals(1, count("""
+                SELECT COUNT(*) FROM audit_events
+                 WHERE actor_account_id = ? AND action = 'PASSWORD_RESET_INITIATED'
+                """, administrator));
+        assertEquals(reporter.toString(), value("""
+                SELECT target_identifier FROM audit_events WHERE action = 'PASSWORD_RESET_INITIATED'
+                """));
+        assertFalse(value("SELECT details::text FROM audit_events WHERE action = 'PASSWORD_RESET_INITIATED'")
+                .contains(plaintext), "the audit record must never carry the secret");
+    }
+
+    @Test
+    void temporaryPasswordResetDeniesSelfServiceWrongActorAndIneligibleTarget() {
+        UUID administrator = account("admin", "ADMINISTRATOR");
+        credential(administrator);
+        UUID reporter = account("reporter", "REPORTER");
+        credential(reporter);
+        account("reporter-actor", "REPORTER");
+        UUID disabled = account("disabled", "REPORTER");
+        credential(disabled);
+        jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", disabled);
+
+        assertEquals(TemporaryPasswordResetOutcome.Status.INVALID_STATE,
+                store().resetTemporaryPassword("admin", administrator, UUID.randomUUID(), NOW).status());
+        assertEquals(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE,
+                store().resetTemporaryPassword("reporter-actor", reporter, UUID.randomUUID(), NOW).status());
+        assertEquals(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE,
+                store().resetTemporaryPassword("missing-admin", reporter, UUID.randomUUID(), NOW).status());
+        assertEquals(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE,
+                store().resetTemporaryPassword("admin", disabled, UUID.randomUUID(), NOW).status());
+        assertEquals(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE,
+                store().resetTemporaryPassword("admin", UUID.randomUUID(), UUID.randomUUID(), NOW).status());
+
+        assertEquals("synthetic-hash",
+                value("SELECT password_hash FROM account_credentials WHERE account_id = ?", reporter));
+        assertEquals("synthetic-hash",
+                value("SELECT password_hash FROM account_credentials WHERE account_id = ?", administrator));
+        assertEquals(0, count("SELECT COUNT(*) FROM audit_events WHERE action = 'PASSWORD_RESET_INITIATED'"));
+    }
+
+    @Test
+    void temporaryPasswordResetRollsBackCredentialWhenTheAuditWriteFails() {
+        account("admin", "ADMINISTRATOR");
+        UUID reporter = account("reporter", "REPORTER");
+        credential(reporter);
+        session("reporter");
+
+        // A duplicate audit event identifier makes the audit insert fail inside the transaction.
+        UUID reused = UUID.randomUUID();
+        store().resetTemporaryPassword("admin", reporter, reused, NOW);
+        String hashAfterFirst =
+                value("SELECT password_hash FROM account_credentials WHERE account_id = ?", reporter);
+
+        TemporaryPasswordResetOutcome outcome =
+                store().resetTemporaryPassword("admin", reporter, reused, NOW);
+
+        assertEquals(TemporaryPasswordResetOutcome.Status.PERSISTENCE_FAILURE, outcome.status());
+        assertTrue(outcome.takeTemporaryPassword().isEmpty(), "a failed reset must reveal no secret");
+        assertEquals(hashAfterFirst,
+                value("SELECT password_hash FROM account_credentials WHERE account_id = ?", reporter));
+        assertEquals(1, count("SELECT COUNT(*) FROM audit_events WHERE action = 'PASSWORD_RESET_INITIATED'"));
     }
 
     private static JdbcAdministratorAccountStore store() {

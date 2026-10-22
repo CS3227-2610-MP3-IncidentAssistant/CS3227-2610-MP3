@@ -1,6 +1,8 @@
 package com.company.incidentdesk.web.admin;
 
+import java.security.SecureRandom;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -17,6 +19,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -24,21 +28,44 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Repository
 @ConditionalOnBean(DataSource.class)
 class JdbcAdministratorAccountStore implements AdministratorAccountStore {
+    static final Duration TEMPORARY_PASSWORD_LIFETIME = Duration.ofHours(24);
+    private static final char[] TEMPORARY_PASSWORD_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?".toCharArray();
+    private static final int TEMPORARY_PASSWORD_LENGTH = 24;
+
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
+    private final PasswordEncoder passwords;
     private final Runnable actorLockedHook;
+    private final SecureRandom random = new SecureRandom();
 
     @Autowired
+    JdbcAdministratorAccountStore(
+            JdbcTemplate jdbc,
+            TransactionTemplate transactions,
+            PasswordEncoder passwords) {
+        this(jdbc, transactions, passwords, () -> { });
+    }
+
     JdbcAdministratorAccountStore(JdbcTemplate jdbc, TransactionTemplate transactions) {
-        this(jdbc, transactions, () -> { });
+        this(jdbc, transactions, new BCryptPasswordEncoder(12), () -> { });
     }
 
     JdbcAdministratorAccountStore(
             JdbcTemplate jdbc,
             TransactionTemplate transactions,
             Runnable actorLockedHook) {
+        this(jdbc, transactions, new BCryptPasswordEncoder(12), actorLockedHook);
+    }
+
+    JdbcAdministratorAccountStore(
+            JdbcTemplate jdbc,
+            TransactionTemplate transactions,
+            PasswordEncoder passwords,
+            Runnable actorLockedHook) {
         this.jdbc = jdbc;
         this.transactions = transactions;
+        this.passwords = passwords;
         this.actorLockedHook = actorLockedHook;
     }
 
@@ -84,6 +111,92 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
         } catch (DataAccessException exception) {
             return AccountTombstoneOutcome.PERSISTENCE_FAILURE;
         }
+    }
+
+    @Override
+    public TemporaryPasswordResetOutcome resetTemporaryPassword(
+            String administratorLoginName,
+            UUID targetAccountId,
+            UUID auditEventId,
+            Instant occurredAt) {
+        try {
+            TemporaryPasswordResetOutcome outcome = transactions.execute(status ->
+                    resetTemporaryPasswordInTransaction(
+                            administratorLoginName, targetAccountId, auditEventId, occurredAt));
+            return outcome == null
+                    ? TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.PERSISTENCE_FAILURE)
+                    : outcome;
+        } catch (PessimisticLockingFailureException exception) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.CONFLICT);
+        } catch (DataAccessException exception) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.PERSISTENCE_FAILURE);
+        }
+    }
+
+    private TemporaryPasswordResetOutcome resetTemporaryPasswordInTransaction(
+            String administratorLoginName,
+            UUID targetAccountId,
+            UUID auditEventId,
+            Instant occurredAt) {
+        List<ActorState> actors = jdbc.query("""
+                SELECT id, role, status
+                  FROM accounts
+                 WHERE login_name = ?
+                 FOR UPDATE
+                """, (result, row) -> new ActorState(
+                result.getObject("id", UUID.class), result.getString("role"), result.getString("status")),
+                administratorLoginName);
+        if (actors.size() != 1 || !actors.getFirst().isEnabledAdministrator()) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE);
+        }
+        ActorState actor = actors.getFirst();
+        if (actor.id().equals(targetAccountId)) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.INVALID_STATE);
+        }
+
+        actorLockedHook.run();
+        List<TargetState> targets = jdbc.query("""
+                SELECT login_name, role, status, version
+                  FROM accounts
+                 WHERE id = ?
+                 FOR UPDATE
+                """, (result, row) -> new TargetState(
+                result.getString("login_name"), result.getString("role"), result.getString("status"),
+                result.getLong("version")),
+                targetAccountId);
+        if (targets.size() != 1 || !AccountStatus.ENABLED.name().equals(targets.getFirst().status())) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE);
+        }
+        TargetState target = targets.getFirst();
+
+        String temporaryPassword = generateTemporaryPassword();
+        int changed = jdbc.update("""
+                UPDATE account_credentials
+                   SET password_hash = ?, temporary = TRUE, expires_at = ?
+                 WHERE account_id = ?
+                """, passwords.encode(temporaryPassword),
+                Timestamp.from(occurredAt.plus(TEMPORARY_PASSWORD_LIFETIME)), targetAccountId);
+        if (changed != 1) {
+            return TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE);
+        }
+        jdbc.update("DELETE FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?", target.loginName());
+        jdbc.update("""
+                INSERT INTO audit_events (
+                    id, occurred_at, actor_account_id, actor_role, action,
+                    target_type, target_identifier, outcome, details
+                ) VALUES (?, ?, ?, 'ADMINISTRATOR', 'PASSWORD_RESET_INITIATED',
+                    'ACCOUNT', ?, 'SUCCESS', CAST(? AS jsonb))
+                """, auditEventId, Timestamp.from(occurredAt), actor.id(), targetAccountId.toString(),
+                "{\"changes\":[{\"field\":\"ACCOUNT_CREDENTIAL\",\"before\":\"ACTIVE\",\"after\":\"TEMPORARY\"}]}");
+        return TemporaryPasswordResetOutcome.reset(temporaryPassword);
+    }
+
+    private String generateTemporaryPassword() {
+        StringBuilder password = new StringBuilder(TEMPORARY_PASSWORD_LENGTH);
+        for (int index = 0; index < TEMPORARY_PASSWORD_LENGTH; index++) {
+            password.append(TEMPORARY_PASSWORD_ALPHABET[random.nextInt(TEMPORARY_PASSWORD_ALPHABET.length)]);
+        }
+        return password.toString();
     }
 
     @Override

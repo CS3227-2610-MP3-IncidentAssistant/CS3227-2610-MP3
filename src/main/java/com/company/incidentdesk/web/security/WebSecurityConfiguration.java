@@ -2,6 +2,7 @@ package com.company.incidentdesk.web.security;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +17,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.csrf.CsrfException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,6 +34,14 @@ public class WebSecurityConfiguration {
     private static final String REPORTER_LOGIN_PATH = "/api/v1/auth/reporter/login";
     private static final String RESPONDER_LOGIN_PATH = "/api/v1/auth/responder/login";
     private static final String SECURITY_SESSION_EXPIRED = "{\"code\":\"SECURITY_SESSION_EXPIRED\",\"message\":\"Your security session expired. Try again.\"}";
+
+    /** Application-generated UTC clock for security-sensitive credential timestamps. */
+    public static final String SECURITY_CLOCK = "securityClock";
+
+    @Bean(SECURITY_CLOCK)
+    Clock securityClock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -46,9 +59,14 @@ public class WebSecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, REPORTER_LOGIN_PATH, ADMINISTRATOR_LOGIN_PATH,
                                 RESPONDER_LOGIN_PATH)
                         .permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMINISTRATOR")
-                        .requestMatchers("/api/v1/reporter/**").hasRole("REPORTER")
-                        .requestMatchers("/api/v1/responder/**").hasRole("RESPONDER")
+                        // A holder of a temporary credential may only replace it or sign out.
+                        .requestMatchers("/api/v1/auth/password", "/api/v1/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/admin/**")
+                        .access(allOf(hasRole("ADMINISTRATOR"), credentialNotTemporary()))
+                        .requestMatchers("/api/v1/reporter/**")
+                        .access(allOf(hasRole("REPORTER"), credentialNotTemporary()))
+                        .requestMatchers("/api/v1/responder/**")
+                        .access(allOf(hasRole("RESPONDER"), credentialNotTemporary()))
                         .requestMatchers("/api/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
@@ -80,6 +98,22 @@ public class WebSecurityConfiguration {
                         .referrerPolicy(referrer -> referrer.policy(
                                 org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)));
         return http.build();
+    }
+
+    private static AuthorizationManager<RequestAuthorizationContext> hasRole(String role) {
+        return AuthorityAuthorizationManager.hasRole(role);
+    }
+
+    private static AuthorizationManager<RequestAuthorizationContext> credentialNotTemporary() {
+        return AuthorizationManagers.not(
+                AuthorityAuthorizationManager.hasAuthority(
+                        DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY));
+    }
+
+    @SafeVarargs
+    private static AuthorizationManager<RequestAuthorizationContext> allOf(
+            AuthorizationManager<RequestAuthorizationContext>... managers) {
+        return AuthorizationManagers.allOf(managers);
     }
 
     private static AuthenticationSuccessHandler rolePortalSuccessHandler() {

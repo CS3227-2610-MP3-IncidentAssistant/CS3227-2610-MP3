@@ -17,6 +17,12 @@ interface AdministratorAccountStore {
             UUID auditEventId,
             Instant occurredAt);
 
+    TemporaryPasswordResetOutcome resetTemporaryPassword(
+            String administratorLoginName,
+            UUID targetAccountId,
+            UUID auditEventId,
+            Instant occurredAt);
+
     ResponderCategoryAccessOutcome replaceResponderCategories(
             String administratorLoginName,
             UUID targetAccountId,
