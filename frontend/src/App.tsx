@@ -3,6 +3,7 @@ import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminShell } from './admin/AdminShell'
 import { AdministratorAccounts } from './admin/AdministratorAccounts'
 import { AdministratorSloConfiguration } from './admin/AdministratorSloConfiguration'
+import { AdministratorStatistics } from './admin/AdministratorStatistics'
 import {
   loadSession,
   logout,
@@ -48,6 +49,7 @@ export function App() {
           onRefreshSession={sessionState.refresh}
         />}
         sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
+        statisticsContent={<AdministratorStatistics />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}

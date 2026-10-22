@@ -288,7 +288,7 @@ def neonTestEnvironmentNames = [
 
 tasks.register('registrationDatabaseTest', Test) {
     group = 'verification'
-    description = 'Runs identity, bootstrap, and promotion integration tests against an explicitly isolated PostgreSQL database.'
+    description = 'Runs the PostgreSQL integration suites against an explicitly isolated database.'
     dependsOn testClasses
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
@@ -300,6 +300,9 @@ tasks.register('registrationDatabaseTest', Test) {
         includeTestsMatching 'com.company.incidentdesk.web.admin.PromotionJourneyHttpPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorAccountPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorSloPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorStatisticsPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorStatisticsMigrationUpgradePostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.web.responder.ResponderIncidentPostgresTest'
     }
 
     doFirst {

@@ -58,6 +58,47 @@ export type SloConfiguration = {
   categories: SloCategoryConfiguration[]
 }
 
+export type StatisticsIdentityOption = {
+  id: string
+  displayName: string
+}
+
+export type AdministratorStatistics = {
+  outcome: 'AVAILABLE'
+  summary: {
+    resolvedIncidentCount: number
+    averageTimeToClaimMillis: number | null
+    claimedCycleCount: number
+    averageTimeInProgressMillis: number | null
+    completedCycleCount: number
+    reopenedIncidentCount: number
+    reopenRate: number | null
+    reopenEventCount: number
+    administratorResolvedCount: number
+  }
+  responders: Array<{
+    responderId: string
+    displayName: string
+    resolvedCycleCount: number
+    averageTimeInProgressMillis: number | null
+    reopenedCycleCount: number
+    reopenRate: number | null
+    administratorResolvedCount: number
+  }>
+  filterOptions: {
+    responders: StatisticsIdentityOption[]
+    reporters: StatisticsIdentityOption[]
+  }
+}
+
+export type AdministratorStatisticsFilters = {
+  categories: IncidentCategory[]
+  responderId: string
+  reporterId: string
+  periodFrom: string
+  periodThrough: string
+}
+
 export type IncidentRow = {
   id: string
   title: string
@@ -257,6 +298,20 @@ export async function loadDashboard(search: string, page: number, signal: AbortS
 
 export async function loadSloConfiguration(signal?: AbortSignal): Promise<SloConfiguration> {
   return requestJson<SloConfiguration>('/api/v1/admin/slo', { signal })
+}
+
+export async function loadAdministratorStatistics(
+  filters: AdministratorStatisticsFilters,
+  signal?: AbortSignal,
+): Promise<AdministratorStatistics> {
+  const parameters = new URLSearchParams()
+  filters.categories.forEach((category) => parameters.append('category', category))
+  if (filters.responderId) parameters.set('responderId', filters.responderId)
+  if (filters.reporterId) parameters.set('reporterId', filters.reporterId)
+  if (filters.periodFrom) parameters.set('periodFrom', `${filters.periodFrom}T00:00:00.000Z`)
+  if (filters.periodThrough) parameters.set('periodThrough', `${filters.periodThrough}T23:59:59.999Z`)
+  const query = parameters.size > 0 ? `?${parameters}` : ''
+  return requestJson<AdministratorStatistics>(`/api/v1/admin/statistics${query}`, { signal })
 }
 
 export async function saveSloTarget(

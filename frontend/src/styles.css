@@ -200,10 +200,26 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .slo-history { padding: 22px; }
 .slo-history h3 { margin: 0 0 14px; font-size: 16px; }
 .slo-history > p { margin: 0; color: var(--color-text-muted); }
+.statistics-filter-panel { margin-bottom: 32px; }
+.statistics-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; padding: 22px; }
+.statistics-filters .category-choice { grid-column: 1 / -1; margin: 0 0 8px; }
+.statistics-field { display: grid; align-content: start; gap: 7px; }
+.statistics-field label { font-size: 13px; font-weight: 700; }
+.statistics-field select, .statistics-field input { min-width: 0; min-height: 42px; padding: 8px 11px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.statistics-field input[aria-invalid="true"] { border-color: var(--color-danger); }
+.statistics-filters .help-text, .statistics-filters .field-error, .statistics-filters .form-actions { grid-column: 1 / -1; }
+.statistics-filters .field-error { margin: 0; }
+.statistics-section-heading { margin-top: 4px; }
+.statistics-metric-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.statistics-state { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.statistics-state p, .statistics-refresh-state { margin: 0; }
+.statistics-refresh-state { margin-bottom: 16px; color: var(--color-info); }
+.statistics-table-note { margin: 0; padding: 14px 22px; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 920px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .slo-target-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .statistics-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -224,6 +240,9 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
   .slo-target-form { grid-template-columns: 1fr; }
   .slo-target-metrics { grid-template-columns: 1fr; }
   .slo-target-form > button, .slo-target-form > .account-feedback, .slo-target-form > .form-error { grid-column: 1; }
+  .statistics-filters { grid-template-columns: 1fr; }
+  .statistics-filters .category-choice, .statistics-filters .help-text,
+  .statistics-filters .field-error, .statistics-filters .form-actions { grid-column: 1; }
   .incident-form textarea, .incident-form #incident-description + .field-error, .incident-form label[for="incident-description"] { grid-column: auto; }
 }
 

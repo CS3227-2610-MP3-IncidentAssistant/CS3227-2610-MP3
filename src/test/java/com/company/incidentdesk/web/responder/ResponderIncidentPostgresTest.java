@@ -539,10 +539,11 @@ class ResponderIncidentPostgresTest {
                     org.springframework.dao.DataIntegrityViolationException.class,
                     () -> jdbc.update("""
                             INSERT INTO incident_resolutions (
-                                id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks
-                            ) VALUES (?, ?, ?, 1, ?, ?, ?)
+                                id, request_id, incident_id, cycle_number, resolved_by, resolved_at, remarks,
+                                queue_entered_at, first_assigned_at, responder_at_resolution
+                            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
                             """, UUID.randomUUID(), UUID.randomUUID(), assigned, RESPONDER,
-                            Timestamp.from(NOW), remarks));
+                            Timestamp.from(NOW), remarks, Timestamp.from(NOW), Timestamp.from(NOW), RESPONDER));
         }
         assertEquals(0, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM incident_resolutions WHERE incident_id = ?", Integer.class, assigned));
@@ -661,14 +662,16 @@ class ResponderIncidentPostgresTest {
 
     private UUID incident(String id, String category, String status, UUID assignee, Instant queueEnteredAt) {
         UUID incidentId = UUID.fromString(id);
+        Timestamp assignedAt = "ASSIGNED".equals(status) ? Timestamp.from(queueEnteredAt) : null;
         jdbc.update("""
                 INSERT INTO incidents (
                     id, reporter_id, title, description, category, status, anonymous,
-                    created_at, submitted_at, queue_entered_at, assignee_id, version
-                ) VALUES (?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?, 0)
+                    created_at, submitted_at, queue_entered_at, first_assigned_at,
+                    latest_assigned_at, assignee_id, version
+                ) VALUES (?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?, ?, ?, 0)
                 """, incidentId, REPORTER, "Incident " + id.substring(id.length() - 1), "private incident body",
                 category, status, java.sql.Timestamp.from(NOW), java.sql.Timestamp.from(NOW),
-                java.sql.Timestamp.from(queueEnteredAt), assignee);
+                java.sql.Timestamp.from(queueEnteredAt), assignedAt, assignedAt, assignee);
         return incidentId;
     }
 
