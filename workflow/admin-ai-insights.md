@@ -168,6 +168,12 @@ Category and responder filters come only from validated browser selections and
 are applied after plan validation. A selected responder must still exist and
 be visible to the Administrator when the query executes.
 
+A named `period` or `comparisonPeriod` is encoded as its enum string. Explicit
+date bounds are encoded only as an object with exactly `fromDate` and
+`throughDate` ISO-8601 date strings. `throughDate` is inclusive and resolves to
+the exclusive start of the following UTC date. No timestamp, timezone, or
+additional field is accepted in an explicit-period object.
+
 Allowed clarification codes are `MISSING_PERIOD`, `AMBIGUOUS_METRIC`,
 `UNSUPPORTED_QUESTION`, and `CONFLICTING_PERIODS`. The UI owns their display
 text; provider-authored clarification text is ignored.
@@ -309,7 +315,7 @@ statistics-unavailable result and never retries the provider.
 - [ ] `AI-ADM-QUERY-01` — Each query type dispatches only to its allowlisted
   typed handler; adversarial plans cannot invoke SQL, reflection, URLs, files,
   incident details, audit data, repository methods, or mutations.
-- [ ] `AI-ADM-QUERY-02` — Deterministic-clock tests prove every relative and UTC
+- [x] `AI-ADM-QUERY-02` — Deterministic-clock tests prove every relative and UTC
   calendar period boundary, inclusive/exclusive behavior, comparison interval,
   future-date rejection, and 366-day maximum.
 - [ ] `AI-ADM-QUERY-03` — Ranking tests prove metric attribution, direction,
@@ -356,9 +362,22 @@ statistics-unavailable result and never retries the provider.
 | `AI-ADM-QUERY-*` | `.agents/slo.md`, `.agents/persistence.md` | Typed analytics registry, statistics services, deterministic renderer | Domain calculations, PostgreSQL integration, deterministic-clock and concurrency tests |
 | `AI-ADM-SAFE-*` | `.agents/anonymity-policy.md`, `.agents/audit-policy.md`, `threat-model.md` | Privacy projection, UI, audit and observability integration | Anonymous/differencing, escaped output, audit/log capture, resilience and load tests |
 
-- Automated evidence: pending implementation; use the deterministic fake
-  provider, deterministic clock, and isolated PostgreSQL required by
-  `.agents/testing.md`.
+- Automated evidence: the application-layer safety boundary is partially
+  implemented on the working tree based on approval commit `d403ee5`.
+  `AdministratorInsightQuestionValidatorTest`,
+  `AdministratorInsightPlanParserTest`, and
+  `AdministratorInsightPeriodResolverTest` cover pre-disclosure text limits,
+  identity-shaped input, strict closed-plan parsing, every named/explicit UTC
+  period, comparison rules, future bounds, and the 366-day limit. Verified on
+  2026-10-23 with
+  `gradle test --tests "com.company.incidentdesk.application.ai.insights.*"
+  -PfrontendSkipBuild=true` and `gradle test -PfrontendSkipBuild=true`; the
+  latter reported 786 tests, 0 failures, 0 errors, and 130 skipped
+  environment-dependent tests. `AI-ADM-QUERY-02` is satisfied by this evidence.
+  The `AI-ADM-AUTH-*` criteria remain open until the trusted account lookup,
+  endpoint, provider payload, reauthorization, and no-dispatch failure paths
+  are integrated and verified. The remaining `AI-ADM-QUERY-*` and all
+  `AI-ADM-SAFE-*` criteria also remain open.
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
