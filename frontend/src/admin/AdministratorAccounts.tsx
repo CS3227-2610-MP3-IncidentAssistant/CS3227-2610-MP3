@@ -12,13 +12,9 @@ import {
 } from '../api'
 import { Pagination } from '../shared/Pagination'
 import { PromotionRequests } from './PromotionRequests'
+import { incidentCategoryNames as categoryNames } from '../shared/incident/incidentDetail'
 
 const categories: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
-const categoryNames: Record<IncidentCategory, string> = {
-  IT: 'IT',
-  HUMAN_RELATIONS: 'Human relations',
-  FACILITIES: 'Facilities',
-}
 
 export function AdministratorAccounts({ currentLoginName, onRefreshSession }: {
   currentLoginName: string

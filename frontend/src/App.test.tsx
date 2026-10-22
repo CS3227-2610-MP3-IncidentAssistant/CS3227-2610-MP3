@@ -119,7 +119,7 @@ describe('web authentication and administrator slice', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Company incident overview' })).toBeInTheDocument()
     expect(screen.getByText('operations-admin')).toBeInTheDocument()
-    expect(await screen.findByText('30 min')).toBeInTheDocument()
+    expect(await screen.findByText('0h 30m')).toBeInTheDocument()
     expect(await screen.findByText('No incidents match')).toBeInTheDocument()
   })
 

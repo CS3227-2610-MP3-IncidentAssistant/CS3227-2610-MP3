@@ -204,6 +204,9 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .slo-current-target > .section-heading { align-items: flex-end; }
 .slo-target-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 0; padding: 22px; }
 .slo-category > .section-heading { align-items: flex-start; }
+.slo-dashboard-category { margin-bottom: 24px; border: 1px solid var(--color-border); border-radius: 12px; background: #fff; }
+.slo-dashboard-category > .section-heading { align-items: baseline; padding: 18px 22px 0; margin-bottom: 0; }
+.slo-dashboard-category > .section-heading h3 { margin: 0; font-size: 17px; }
 .slo-target-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 22px; border-bottom: 1px solid var(--color-border); }
 .slo-field { display: grid; align-content: start; gap: 7px; }
 .slo-field label { font-size: 13px; font-weight: 700; }
@@ -299,6 +302,7 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .incident-detail__resolutions,
 .incident-detail__slo,
 .incident-detail__actions { padding: 0 22px 20px; }
+.incident-detail__actions { padding-top: 24px; }
 .incident-detail__attachments h3,
 .incident-detail__comments h3,
 .incident-detail__lifecycle h3,

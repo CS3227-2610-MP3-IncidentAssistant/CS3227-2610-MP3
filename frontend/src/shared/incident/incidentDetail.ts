@@ -75,7 +75,7 @@ export type IncidentLifecycleEntry = {
 
 export const incidentCategoryNames: Record<IncidentCategory, string> = {
   IT: 'IT',
-  HUMAN_RELATIONS: 'Human relations',
+  HUMAN_RELATIONS: 'Human Relations',
   FACILITIES: 'Facilities',
 }
 
@@ -131,6 +131,11 @@ export function attachmentFormatLabel(mediaType: string): string {
 export function formatInstant(value: string): string {
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
+}
+
+/** SLO target duration in the desktop application's hours-and-minutes form. */
+export function formatSloTargetMinutes(minutes: number): string {
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
 /** Human-readable elapsed/target duration built from whole minutes. */

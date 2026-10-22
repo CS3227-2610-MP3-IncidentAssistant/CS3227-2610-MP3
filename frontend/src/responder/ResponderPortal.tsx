@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IncidentCategory } from '../api'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
+import { incidentCategoryNames as categoryNames } from '../shared/incident/incidentDetail'
 import {
   AttachmentList,
   IncidentComments,
@@ -20,11 +21,6 @@ import {
 } from './responderApi'
 
 const PAGE_SIZE = 25
-const categoryNames: Record<IncidentCategory, string> = {
-  IT: 'IT',
-  HUMAN_RELATIONS: 'Human relations',
-  FACILITIES: 'Facilities',
-}
 const statusOptions = ['SUBMITTED', 'ASSIGNED'] as const
 
 type DraftFilters = Pick<ResponderQueueQuery, 'search' | 'categories' | 'statuses' | 'assignment'>

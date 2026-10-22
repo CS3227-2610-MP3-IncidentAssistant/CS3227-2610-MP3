@@ -72,13 +72,13 @@ describe('AdministratorSloConfiguration', () => {
     expect(category).toHaveValue('IT')
     expect(screen.getByRole('heading', { name: 'IT' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'New IT target version' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'IT SLO version history' })).toHaveTextContent('10 min')
-    expect(screen.queryByRole('heading', { name: 'New Human relations target version' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'IT SLO version history' })).toHaveTextContent('0h 10m')
+    expect(screen.queryByRole('heading', { name: 'New Human Relations target version' })).not.toBeInTheDocument()
 
     fireEvent.change(category, { target: { value: 'HUMAN_RELATIONS' } })
 
-    expect(screen.getByRole('heading', { name: 'Human relations' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'New Human relations target version' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Human Relations' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'New Human Relations target version' })).toBeInTheDocument()
     expect(screen.getByText('No target versions yet.')).toBeInTheDocument()
 
     fireEvent.change(category, { target: { value: 'FACILITIES' } })
@@ -187,11 +187,11 @@ describe('AdministratorSloConfiguration', () => {
     render(<AdministratorSloConfiguration onRefreshSession={vi.fn()} />)
 
     const history = await screen.findByRole('region', { name: 'IT SLO version history' })
-    expect(within(history).queryByText('2 min')).not.toBeInTheDocument()
+    expect(within(history).queryByText('0h 2m')).not.toBeInTheDocument()
     const pagination = screen.getByRole('navigation', { name: 'IT SLO version history pages' })
     expect(pagination).toHaveTextContent('Page 1 of 2')
     fireEvent.click(within(pagination).getByRole('button', { name: 'Next' }))
-    expect(within(history).getByText('2 min')).toBeInTheDocument()
+    expect(within(history).getByText('0h 2m')).toBeInTheDocument()
     expect(pagination).toHaveTextContent('Page 2 of 2')
   })
 })

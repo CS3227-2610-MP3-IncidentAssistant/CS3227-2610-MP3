@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ApiError, loadDashboard, type DashboardPage, type IncidentRow, type SloTarget } from '../api'
+import { ApiError, loadDashboard, type DashboardPage, type IncidentCategory, type IncidentRow, type SloTarget } from '../api'
 import { Pagination } from '../shared/Pagination'
+import { formatSloTargetMinutes, incidentCategoryName } from '../shared/incident/incidentDetail'
 
 type DashboardQuery = {
   search: string
@@ -168,7 +169,7 @@ function IncidentTableRow({ incident, onOpenIncident }: {
         : <span className="incident-title">{incident.title}</span>}
       <small>{incident.id}</small>
     </th>
-    <td>{displayEnum(incident.category)}</td>
+    <td>{incidentCategoryName(incident.category as IncidentCategory)}</td>
     <td><span className="status-badge">{displayEnum(incident.status)}</span></td>
     <td>{incident.reporterLabel}</td>
     <td>{incident.assigneeLabel ?? 'Unassigned'}</td>
@@ -188,23 +189,42 @@ function SloOverview({ targets, loading }: { targets: SloTarget[], loading: bool
     <div className="section-heading">
       <div><p className="eyebrow">Service objectives</p><h2 id="slo-heading">Category targets</h2></div>
     </div>
-    <div className="metric-grid">
-      {loading
-        ? <p role="status">Loading SLO targets…</p>
-        : targets.map((target) => <SloTargetCard target={target} key={target.category} />)}
+    {loading
+      ? <p role="status">Loading SLO targets…</p>
+      : targets.map((target) => <SloTargetCategory target={target} key={target.category} />)}
+  </section>
+}
+
+function SloTargetCategory({ target }: { target: SloTarget }) {
+  const headingId = `slo-category-${target.category}`
+  return <section className="slo-dashboard-category" aria-labelledby={headingId}>
+    <div className="section-heading">
+      <h3 id={headingId}>{`Current effective target — ${incidentCategoryName(target.category as IncidentCategory)}`}</h3>
+      <span className="data-state">{target.effectiveAt == null
+        ? 'No target version yet'
+        : `Effective ${formatInstant(target.effectiveAt)}`}</span>
+    </div>
+    <div className="metric-grid slo-target-metrics">
+      <SloTargetMetric label="Average time to claim" caption="Elapsed wall-clock target"
+        value={target.timeToClaimMinutes == null ? null : formatSloTargetMinutes(target.timeToClaimMinutes)} />
+      <SloTargetMetric label="Average time in progress" caption="Elapsed wall-clock target"
+        value={target.timeInProgressMinutes == null ? null : formatSloTargetMinutes(target.timeInProgressMinutes)} />
+      <SloTargetMetric label="Average reopen rate" caption="Target across resolved incidents"
+        value={target.reopenRatePercent == null ? null : `${target.reopenRatePercent}%`} />
     </div>
   </section>
 }
 
-function SloTargetCard({ target }: { target: SloTarget }) {
-  const configured = target.timeToClaimMinutes != null
+function SloTargetMetric({ label, value, caption }: { label: string, value: string | null, caption: string }) {
   return <article className="metric-card">
-    <p>{displayEnum(target.category)}</p>
-    <strong>{configured ? `${target.timeToClaimMinutes} min` : 'Not configured'}</strong>
-    <small>{target.timeInProgressMinutes == null
-      ? 'Set targets in SLO configuration'
-      : `${target.timeInProgressMinutes} min in progress · ${target.reopenRatePercent}% reopen`}</small>
+    <p>{label}</p>
+    <strong>{value ?? '—'}</strong>
+    <small>{value == null ? 'Not configured' : caption}</small>
   </article>
+}
+
+function formatInstant(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 function displayEnum(value: string) {

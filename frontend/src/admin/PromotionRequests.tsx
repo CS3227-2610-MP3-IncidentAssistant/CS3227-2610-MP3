@@ -8,13 +8,9 @@ import {
   type SessionRefresher,
 } from '../api'
 import { Pagination } from '../shared/Pagination'
+import { incidentCategoryNames as categoryNames } from '../shared/incident/incidentDetail'
 
 const categories: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
-const categoryNames: Record<IncidentCategory, string> = {
-  IT: 'IT',
-  HUMAN_RELATIONS: 'Human relations',
-  FACILITIES: 'Facilities',
-}
 
 type PendingDecision = {
   request: PromotionRequestRecord

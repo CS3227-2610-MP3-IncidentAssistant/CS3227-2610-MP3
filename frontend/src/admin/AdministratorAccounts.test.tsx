@@ -192,7 +192,7 @@ describe('Administrator account directory', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Configure categories' })
     expect(within(dialog).getByRole('checkbox', { name: 'IT' })).toBeChecked()
-    expect(within(dialog).getByRole('checkbox', { name: 'Human relations' })).not.toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Human Relations' })).not.toBeChecked()
     expect(within(dialog).getByRole('button', { name: 'No changes' })).toBeDisabled()
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'IT' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Facilities' }))

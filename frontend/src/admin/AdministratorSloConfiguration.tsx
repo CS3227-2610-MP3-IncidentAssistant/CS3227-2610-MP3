@@ -7,6 +7,7 @@ import {
   type SloCategoryConfiguration,
 } from '../api'
 import { Pagination } from '../shared/Pagination'
+import { formatSloTargetMinutes, incidentCategoryName } from '../shared/incident/incidentDetail'
 
 const HISTORY_PAGE_SIZE = 10
 
@@ -69,7 +70,7 @@ export function AdministratorSloConfiguration({ onRefreshSession }: {
         <label htmlFor="slo-category">Category</label>
         <select id="slo-category" value={selectedCategory}
           onChange={(event) => setSelectedCategory(event.target.value)}>
-          {categories.map(({ category }) => <option value={category} key={category}>{displayEnum(category)}</option>)}
+          {categories.map(({ category }) => <option value={category} key={category}>{incidentCategoryName(category)}</option>)}
         </select>
       </section>
       {categories.filter(({ category }) => category === selectedCategory).map((configuration) => <SloCategoryEditor
@@ -95,7 +96,7 @@ function SloCategoryEditor({ configuration, onRefreshSession, onSaved }: {
   const [feedback, setFeedback] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [historyPage, setHistoryPage] = useState(0)
-  const categoryLabel = displayEnum(configuration.category)
+  const categoryLabel = incidentCategoryName(configuration.category)
   const history = [...configuration.history].reverse()
   const totalHistoryPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE))
   const visibleHistory = history.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE)
@@ -142,8 +143,8 @@ function SloCategoryEditor({ configuration, onRefreshSession, onSaved }: {
         <span className="data-state">{current ? `Effective ${formatInstant(current.effectiveAt)}` : 'Not configured'}</span>
       </div>
       <div className="metric-grid slo-target-metrics">
-        <SloMetric label="Average time to claim" value={current ? `${current.timeToClaimMinutes} min` : '—'} />
-        <SloMetric label="Average time in progress" value={current ? `${current.timeInProgressMinutes} min` : '—'} />
+        <SloMetric label="Average time to claim" value={current ? formatSloTargetMinutes(current.timeToClaimMinutes) : '—'} />
+        <SloMetric label="Average time in progress" value={current ? formatSloTargetMinutes(current.timeInProgressMinutes) : '—'} />
         <SloMetric label="Average reopen rate" value={current ? `${current.reopenRatePercent}%` : '—'} />
       </div>
     </section>
@@ -175,8 +176,8 @@ function SloCategoryEditor({ configuration, onRefreshSession, onSaved }: {
             <thead><tr><th scope="col">Effective</th><th scope="col">Claim</th><th scope="col">In progress</th><th scope="col">Reopen rate</th></tr></thead>
             <tbody>{visibleHistory.map((version) => <tr key={version.id}>
               <th scope="row">{formatInstant(version.effectiveAt)}</th>
-              <td>{version.timeToClaimMinutes} min</td>
-              <td>{version.timeInProgressMinutes} min</td>
+              <td>{formatSloTargetMinutes(version.timeToClaimMinutes)}</td>
+              <td>{formatSloTargetMinutes(version.timeInProgressMinutes)}</td>
               <td>{version.reopenRatePercent}%</td>
             </tr>)}</tbody>
           </table>
@@ -213,11 +214,6 @@ function SloNumberField({ id, label, value, onChange, error, step, max }: {
       onChange={(event) => onChange(event.target.value)} />
     {error && <span className="field-error" id={errorId}>{error}</span>}
   </div>
-}
-
-function displayEnum(value: string) {
-  if (value === 'IT') return 'IT'
-  return value.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
 }
 
 function formatInstant(value: string) {

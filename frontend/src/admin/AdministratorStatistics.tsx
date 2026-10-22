@@ -9,6 +9,7 @@ import {
   type IncidentCategory,
   type SessionRefresher,
 } from '../api'
+import { incidentCategoryName } from '../shared/incident/incidentDetail'
 
 const CATEGORIES: IncidentCategory[] = ['IT', 'HUMAN_RELATIONS', 'FACILITIES']
 const SINGAPORE_HOUR = new Intl.DateTimeFormat('en-SG', {
@@ -132,7 +133,7 @@ export function AdministratorStatistics({ onRefreshSession }: { onRefreshSession
           {CATEGORIES.map((category) => <label key={category}>
             <input type="checkbox" checked={filters.categories.includes(category)}
               onChange={() => toggleCategory(category)} />
-            {displayEnum(category)}
+            {incidentCategoryName(category)}
           </label>)}
         </fieldset>
         <div className="statistics-field">
@@ -221,7 +222,7 @@ export function AdministratorStatistics({ onRefreshSession }: { onRefreshSession
 function InsightResult({ insight }: { insight: AdministratorInsight }) {
   const activeFilters = [
     insight.categoryFilters.length > 0
-      ? `Categories: ${insight.categoryFilters.map(displayEnum).join(', ')}`
+      ? `Categories: ${insight.categoryFilters.map((category) => incidentCategoryName(category as IncidentCategory)).join(', ')}`
       : null,
     insight.responderFilters.length > 0
       ? `Responders: ${insight.responderFilters.join(', ')}`
