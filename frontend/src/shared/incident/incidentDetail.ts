@@ -65,7 +65,8 @@ export type IncidentAttachmentEntry = {
 }
 
 export type IncidentLifecycleEntry = {
-  action: 'INCIDENT_SUBMITTED' | 'INCIDENT_CLAIMED' | 'INCIDENT_RESOLVED'
+  action: 'INCIDENT_SUBMITTED' | 'INCIDENT_CLAIMED' | 'INCIDENT_ASSIGNED'
+    | 'INCIDENT_REASSIGNED' | 'INCIDENT_RESOLVED'
     | 'INCIDENT_REOPENED' | 'INCIDENT_HANDED_OFF' | 'INCIDENT_WITHDRAWN'
   occurredAt: string
   fromStatus: string | null
@@ -98,6 +99,8 @@ export function incidentLifecycleLabel(action: IncidentLifecycleEntry['action'])
   switch (action) {
     case 'INCIDENT_SUBMITTED': return 'Submitted'
     case 'INCIDENT_CLAIMED': return 'Claimed'
+    case 'INCIDENT_ASSIGNED': return 'Assigned'
+    case 'INCIDENT_REASSIGNED': return 'Reassigned'
     case 'INCIDENT_RESOLVED': return 'Resolved'
     case 'INCIDENT_REOPENED': return 'Reopened'
     case 'INCIDENT_HANDED_OFF': return 'Handed off'
