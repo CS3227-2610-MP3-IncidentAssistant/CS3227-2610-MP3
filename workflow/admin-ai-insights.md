@@ -129,7 +129,9 @@ All calculations use `.agents/slo.md` and persisted lifecycle timestamps:
 
 The renderer states the metric, exact period, filters, sample size, and any
 reason that a value is unavailable. It reports ties rather than selecting an
-arbitrary winner. Stable secondary ordering is display name followed by
+arbitrary winner. When a ranking requests one result, every entry tied for
+first place is preserved and displayed together, subject to the absolute
+ten-row response ceiling. Stable secondary ordering is display name followed by
 account identifier, both ascending; the identifier is not displayed or sent
 to the provider.
 
@@ -331,7 +333,8 @@ statistics-unavailable result and never retries the provider.
   calendar period boundary, inclusive/exclusive behavior, comparison interval,
   future-date rejection, and 366-day maximum.
 - [ ] `AI-ADM-QUERY-03` — Ranking tests prove metric attribution, direction,
-  ties, stable ordering, sample counts, division-by-zero behavior, inclusion of
+  preservation and display of every first-place tie within the ten-row response
+  ceiling, stable ordering, sample counts, division-by-zero behavior, inclusion of
   every responder with a qualifying cycle regardless of sample size, explicit
   zero-sample rows for selected-responder comparisons, and
   no-qualifying-data behavior.
@@ -396,6 +399,11 @@ statistics-unavailable result and never retries the provider.
   visible with an explicit `not available` value, obsolete exclusion fields and
   messaging are removed, and the UI discloses the applicable constraints. See
   [`test-evidence/2026-10-23-admin-insight-sample-threshold.md`](test-evidence/2026-10-23-admin-insight-sample-threshold.md).
+- First-place tie evidence: focused ranking and React tests prove that a
+  one-result ranking preserves and displays every equal first-place row in
+  deterministic order within the ten-row response ceiling. Repository-wide
+  and isolated PostgreSQL checks also passed. See
+  [`test-evidence/2026-10-23-admin-insight-first-place-ties.md`](test-evidence/2026-10-23-admin-insight-first-place-ties.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.

@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import javax.sql.DataSource;
 
@@ -32,6 +33,7 @@ import com.company.incidentdesk.application.ai.insights.AdministratorInsightPeri
 @ConditionalOnBean(DataSource.class)
 class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics {
     private static final int QUERY_TIMEOUT_SECONDS = 5;
+    private static final int MAX_DISPLAYED_ROWS = 10;
     private static final Set<String> ALL_CATEGORIES = EnumSet.allOf(com.company.incidentdesk.domain.incident.IncidentCategory.class)
             .stream().map(Enum::name).collect(java.util.stream.Collectors.toUnmodifiableSet());
 
@@ -104,8 +106,9 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         Comparator<ResponderRank> comparator = Comparator.comparing(rank -> rank.value().numericValue(), values);
         comparator = comparator.thenComparing(rank -> rank.value().label().toLowerCase(Locale.ROOT))
                 .thenComparing(ResponderRank::responderId);
-        List<Value> ranked = responders.stream().sorted(comparator).limit(query.plan().limit().orElse(10))
-                .map(ResponderRank::value).toList();
+        List<ResponderRank> sorted = responders.stream().sorted(comparator).toList();
+        List<Value> ranked = limitPreservingFirstPlaceTies(sorted, query.plan().limit().orElse(MAX_DISPLAYED_ROWS),
+                rank -> rank.value().numericValue()).stream().map(ResponderRank::value).toList();
         return new Result(ranked, snapshot);
     }
 
@@ -382,11 +385,24 @@ class JdbcAdministratorInsightAnalytics implements AdministratorInsightAnalytics
         if (count == null || count != ids.size()) throw new AnalyticsUnavailableException();
     }
 
-    private static List<Value> ranked(List<Value> values, Direction direction, int limit) {
+    static List<Value> ranked(List<Value> values, Direction direction, int limit) {
         Comparator<Value> comparator = Comparator.comparing(Value::numericValue);
         if (direction == Direction.DESCENDING) comparator = comparator.reversed();
         comparator = comparator.thenComparing(value -> value.label().toLowerCase(Locale.ROOT));
-        return values.stream().sorted(comparator).limit(limit).toList();
+        List<Value> sorted = values.stream().sorted(comparator).toList();
+        return limitPreservingFirstPlaceTies(sorted, limit, Value::numericValue);
+    }
+
+    private static <T> List<T> limitPreservingFirstPlaceTies(
+            List<T> sorted, int requestedLimit, Function<T, Double> numericValue) {
+        if (sorted.isEmpty()) return List.of();
+        int resultSize = Math.min(Math.min(requestedLimit, MAX_DISPLAYED_ROWS), sorted.size());
+        Double firstPlaceValue = numericValue.apply(sorted.getFirst());
+        while (resultSize < sorted.size() && resultSize < MAX_DISPLAYED_ROWS
+                && java.util.Objects.equals(firstPlaceValue, numericValue.apply(sorted.get(resultSize)))) {
+            resultSize++;
+        }
+        return List.copyOf(sorted.subList(0, resultSize));
     }
 
     private static Double responderValue(Metric metric, AdministratorStatisticsStore.ResponderBreakdown row) {

@@ -130,6 +130,7 @@ describe('AdministratorStatistics', () => {
       periodEndExclusive: '2026-10-23T00:00:00Z', snapshotAt: '2026-10-23T00:00:00Z',
       rows: [
         { label: '<script>alert(1)</script>', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 1 },
+        { label: 'response-one', numericValue: 7200000, displayValue: '120 minutes', sampleSize: 1 },
         { label: 'response-two', numericValue: null, displayValue: 'Not available', sampleSize: 0 },
       ],
       advisoryNotice: 'AI interpreted the question; application code calculated every value.', grouping: 'RESPONDER',
@@ -156,10 +157,12 @@ describe('AdministratorStatistics', () => {
     const region = await screen.findByRole('region', { name: 'AI insight result' })
     expect(within(region).getByText('<script>alert(1)</script>')).toBeInTheDocument()
     expect(region.querySelector('script')).toBeNull()
+    expect(within(region).getAllByText('120 minutes')).toHaveLength(2)
     expect(within(region).getByText('Not available')).toBeInTheDocument()
     expect(within(region).getByRole('cell', { name: '0' })).toBeInTheDocument()
-    expect(within(region).getByRole('cell', { name: '1' })).toBeInTheDocument()
+    expect(within(region).getAllByRole('cell', { name: '1' })).toHaveLength(2)
     expect(screen.getByText(/Every responder result is shown regardless of sample size/)).toBeInTheDocument()
+    expect(screen.getByText(/first-place ties shown together/)).toBeInTheDocument()
     expect(screen.queryByText(/responder samples were excluded/)).not.toBeInTheDocument()
     const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/insights'))!
     expect(JSON.parse(String(init?.body))).toEqual({
