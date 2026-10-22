@@ -456,7 +456,9 @@ deployed evidence is recorded.
   category outcome, and cannot decide or alter requests; tampered, duplicate,
   denied, stale, and persistence-failed requests create neither a second
   request nor a misleading audit, while an approved role change invalidates
-  old sessions and requires sign-in through the Responder portal.
+  old sessions and requires sign-in through the Responder portal. The complete
+  cross-role contract and evidence remain owned by
+  [`workflow/promotion-journey.md`](promotion-journey.md#8-traceability-and-acceptance-criteria).
 - [ ] `REP-AC-11` — Reporter AI requests are reauthorized, send only title,
   normalized category, and current description within the approved limits,
   exclude all identity and unrelated data, render safe bounded plain text, and
