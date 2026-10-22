@@ -15,6 +15,7 @@ Incident Desk is a web application for reporting workplace incidents, assigning 
 - [Use description assistance](#use-description-assistance)
 - [Request responder access](#request-responder-access)
 - [Handle incidents as a responder](#handle-incidents-as-a-responder)
+- [Use responder AI incident assistance](#use-responder-ai-incident-assistance)
 - [Administer incidents and accounts](#administer-incidents-and-accounts)
 - [Configure SLOs and review statistics](#configure-slos-and-review-statistics)
 - [Troubleshooting and current limits](#troubleshooting-and-current-limits)
@@ -101,6 +102,17 @@ For an incident assigned to you, inspect its description and available history, 
 
 If the result of a claim or resolution is uncertain because the connection failed, use the displayed status-check or safe-retry control before attempting another action. **Back to queue** returns to the list. Access can change when an administrator changes your category grants.
 
+## Use responder AI incident assistance
+
+AI incident assistance is optional. Open an available, unassigned incident in a category you can handle, or an incident assigned to you. In its detail view, find **AI incident assistance** below the description.
+
+1. Select **Request AI advice** to request a summary and suggested investigation steps for that incident.
+2. While **Preparing advice…** appears, you can select **Cancel request** to stop waiting. A request already accepted by the AI provider may still use quota.
+3. Read the **AI-generated suggestion · Advisory only** text and check it against the incident details. The suggestion may be incomplete or wrong.
+4. Decide what to do yourself. Claiming an incident and entering **Resolution remarks** remain separate actions; the advice does not fill the remarks or change the incident.
+
+If the request fails, the incident remains available for normal handling. Select **Try again** if appropriate, or continue without AI. If you lose access to the incident while the request is running, its advice is not shown. The AI request uses selected incident details, including its description and current status, so avoid placing unnecessary sensitive information in incident text.
+
 ## Administer incidents and accounts
 
 ### Dashboard and incident details
@@ -179,4 +191,4 @@ The page reports incident outcomes and responder resolution performance, includi
 
 The web application stores shared records on its server database. A browser refresh can lose an unsubmitted form; there is no saved-draft workflow. Do not use the old desktop application's local JSON files or JAR instructions for this web version.
 
-The current web interface does not offer Reporter incident editing/reopening, attachment upload, Reporter or Responder comment creation, responder handoff, or an audit-log browser. AI assistance is currently exposed for Reporter descriptions only. This guide describes available controls rather than planned desktop-feature parity.
+The current web interface does not offer Reporter incident editing/reopening, attachment upload, Reporter or Responder comment creation, responder handoff, or an audit-log browser. AI assistance is available for Reporter descriptions and authorized Responder incident details. This guide describes available controls rather than planned desktop-feature parity.

@@ -131,6 +131,7 @@ not automatically imply a corresponding web endpoint.
 | `WebSecurityConfiguration`, `OwnPasswordController` | POST `/api/v1/auth/{reporter,responder,administrator}/login`, `/api/v1/auth/logout`, `/api/v1/auth/password` |
 | `PromotionRequestController` | GET/POST `/api/v1/reporter/promotion-request`; GET `/api/v1/admin/promotion-requests`; POST `/{requestId}/decision` under the administrator path |
 | `ResponderIncidentController` | POST queue `/query`, GET detail, POST `/{incidentId}/claim` and `/{incidentId}/resolve` under `/api/v1/responder/incidents` |
+| `ResponderAiIncidentController` | POST `/api/v1/responder/incidents/{incidentId}/ai/advice` for advisory incident summary and investigation steps |
 | `AdministratorIncidentController` | GET detail; POST comments, assignment, unassign and resolve under `/api/v1/admin/incidents/{incidentId}` |
 | `AdministratorDashboardController` | `/api/v1/admin/dashboard` projections |
 | `AdministratorAccountController` | `/api/v1/admin/accounts` account administration |
@@ -253,10 +254,12 @@ The implemented Reporter endpoint is `POST /api/v1/reporter/ai/description`.
 It accepts the draft title, category and description, checks the authenticated
 Reporter, and returns a bounded description suggestion. Applying it changes only
 the browser form; submitting the incident remains a separate operation.
-Responder summaries and Administrator aggregate analysis are policy-approved
-feature directions, not evidence of implemented role-specific endpoints.
+The implemented Responder endpoint is
+`POST /api/v1/responder/incidents/{incidentId}/ai/advice`. It returns advisory
+text for one currently viewable incident; claim and resolution remain separate
+operations.
 
-### Request and review flow
+### Reporter request and review flow
 
 ```mermaid
 sequenceDiagram
@@ -282,6 +285,45 @@ Categories use `IT`, `HUMAN_RELATIONS` or `FACILITIES`. Unknown or duplicate fie
 trailing JSON, invalid structure and an over-limit body are rejected. Success
 returns `{"description":"..."}` with `Cache-Control: no-store`. The endpoint
 does not accept an account ID, arbitrary system prompt, model or provider URL.
+
+### Responder incident advice
+
+The Responder advice endpoint requires an authenticated, enabled Responder and a
+CSRF-protected POST. The incident UUID is its only input: query parameters and
+request bodies are rejected. An unassigned `SUBMITTED` incident requires current
+category access; an `ASSIGNED` incident is eligible for its assignee, including
+after category access is revoked. Missing or inaccessible incidents receive the
+same privacy-safe unavailable response. The gateway selects authorized data
+immediately before admission and checks access again before returning the result.
+
+`JdbcResponderAiSelector` reads a consistent PostgreSQL snapshot. The provider
+receives only the incident identifier, category label, title, description,
+lifecycle state, creation time, current stage and elapsed seconds, and a
+privacy-safe current-stage SLO state. The queue stage uses the current cycle's
+queue-entry time; the in-progress stage uses its first assignment time. The
+selector uses the SLO target effective at queue entry. Reporter identity,
+comments, attachments, audit records, other incidents, and internal ownership
+data are excluded. Invalid stage timestamps reject the request before provider
+dispatch.
+
+Success returns `{"advice":"..."}` with `Cache-Control: no-store`. The React
+detail view presents the bounded result as escaped, labelled text in both
+eligible states. It never writes the advice to incident data or pre-fills
+resolution remarks. Navigation, cancellation, actor changes, and loss of detail
+access discard late output in the browser. Cancellation does not guarantee that
+provider work already accepted has stopped. An access change during generation
+can prevent delivery of the result, but cannot retract data already sent in an
+authorized provider request.
+
+The route returns `UNAVAILABLE` with HTTP 404 for denied or missing incidents,
+`AI_RATE_LIMITED` with 429 for admission limits, `AI_TIMEOUT` with 504,
+`AI_INVALID_RESPONSE` or `AI_OUTPUT_TOO_LARGE` with 502, and `AI_UNAVAILABLE`
+with 503 for provider or configuration failure. Invalid input returns
+`AI_REJECTED` with 400 for a query string or nonempty body. The frontend shows a
+safe generic failure message and allows an explicit retry; normal incident
+handling remains available.
+
+### Shared gateway and provider safeguards
 
 `SecuredAiGateway` combines trusted actor checks, `AiDataSelector`,
 `AiPromptBuilder`, shared PostgreSQL usage admission and the `SoclaasClient`.
@@ -407,11 +449,13 @@ task.
 | Shared AI admission and concurrency | `AiUsageLedgerPostgresTest`, `AiGatewayConcurrencyPostgresTest` |
 | Circuits, accounting and authorization | `AiGatewayControlPostgresTest`, `SecuredAiGatewayPostgresTest` |
 | Reporter AI HTTP/session/CSRF integration | `ReporterAiDescriptionControllerTest`, `ReporterAiHttpPostgresTest` |
+| Responder AI authorization, data selection and HTTP integration | `ResponderAiIncidentControllerTest`, `JdbcResponderAiSelectorPostgresTest`, `ResponderAiHttpPostgresTest` |
 | Responder claim and resolution | `ResponderIncidentPostgresTest` |
 | Promotion and session effects | `PromotionWorkflowPostgresTest` |
 | Administrator mutations and authorization | `AdministratorIncidentPostgresTest`, `AdministratorIncidentSecurityTest` |
 | Historical statistics and upgrades | `AdministratorStatisticsPostgresTest`, `AdministratorStatisticsMigrationUpgradePostgresTest` |
 | Frontend draft/review state | `frontend/src/reporter/ReporterAiDescription.test.tsx` |
+| Frontend responder advice state | `frontend/src/responder/ResponderPortal.test.tsx`, `frontend/src/responder/ResponderSessionChange.test.tsx` |
 
 Java tests reside under `src/test/java/com/company/incidentdesk/`. These names
 identify existing coverage; they do not claim every case ran during this update.
