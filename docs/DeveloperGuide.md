@@ -6,741 +6,576 @@ nav_order: 3
 
 # Incident Desk Developer Guide
 
-## MP3 SoCLaaS provider adapter
+Incident Desk MP3 is a React web application served by a Spring Boot backend.
+The backend authenticates users, authorizes incident operations, persists shared
+state in PostgreSQL, and calls SoCLaaS through a secured advisory gateway.
+The retained JavaFX application is a legacy MP2 entry point, not the web client.
 
-Issue #2 adds `infrastructure.soclaas`, a backend-only provider adapter using
-Java 25's HTTP client and the application's existing Jackson JSON dependency.
-It does not add Spring AI, a public AI endpoint, role-specific AI features, or
-database usage controls. Keep `AI_ENABLED=false` until issues #3 and #4 supply
-the required admission, authorization, shared circuits, and audit integration.
+- [Development setup](#development-setup)
+- [Architecture and source map](#architecture-and-source-map)
+- [Persistence, authorization and privacy](#persistence-authorization-and-privacy)
+- [Incident operations and statistics](#incident-operations-and-statistics)
+- [Web security](#web-security)
+- [Advisory AI integration](#advisory-ai-integration)
+- [Verification](#verification)
+- [Deployment and operation](#deployment-and-operation)
+- [Troubleshooting](#troubleshooting)
+- [Specification-driven and multi-agent workflow](#specification-driven-and-multi-agent-workflow)
+- [MP2 reuse and acknowledgements](#mp2-reuse-and-acknowledgements)
 
-Copy only the variable names/placeholders from `.env.example` into a private
-environment configuration. Enabled operation requires `SOCLAAS_API_KEY` and
-`SOCLAAS_MODEL`; the sole allowed `SOCLAAS_BASE_URL` is
-`https://soclaas-api.comp.nus.edu.sg/v1`. No credential file is loaded by the
-adapter. Never place these settings in frontend configuration or committed files.
-The optional numeric limits can be lowered but cannot exceed the specification.
+## Development setup
 
-`SoclaasClient.validateModel()` fetches the authenticated model catalog and
-returns the selected record, including unmodified metadata for subsequent
-price validation. It does not validate prices or budgets. Startup attempts this
-check when enabled; provider failure is contained and does not fail normal web
-startup or its health endpoint. Configuration errors fail before connection.
-Successful catalog access lasts at most 15 minutes; the later gateway must
-refresh it and enforce the separate price/budget freshness policy. Calling
-`complete(system, dataJson)` without a current successful lookup fails closed.
+Use JDK 25, Node.js 24.16.0 and the checked-in Gradle Wrapper. Install Docker
+only if using a local PostgreSQL container or building the deployment image.
+From the repository root:
 
-Only trusted backend code may provide the system instructions and the already
-authorized, allowlisted JSON data object. There is no arbitrary-prompt browser
-endpoint. The client sends one system and one user-data message without tools
-or streaming. It never interprets or persists returned text. Browser integrations
-must display it using normal text escaping and retain separate human actions.
+```powershell
+Copy-Item .env.example .env.local
+```
 
-The 30-second deadline includes the complete response body. Responses are
-cancelled before retaining more than 64 KiB. Error bodies are cancelled and
-discarded; only safe categories, numeric HTTP status, and a validated numeric
-`Retry-After` delay (up to one day) cross the adapter boundary. These internal
-hints are for shared circuits, not browser responses. No generation request is
-automatically retried because provider acceptance may be ambiguous. A catalog
-GET may retry once with jitter for 502/503/504 before accepting a body, within
-the same deadline. Connect failures and interrupted/expired requests do not
-trigger generation retries.
+Run the copy command only when `.env.local` does not already exist. Preserve
+existing private configuration rather than replacing it with empty placeholders.
 
-Without a model-specific tokenizer, input estimation uses UTF-8 byte count plus
-256 message-framing tokens as a conservative bound. This can reject text below
-the 16-KiB byte limit. Output must fit 16 KiB and the configured token cap;
-missing/malformed usage remains unknown and uses a conservative byte-based
-output bound. Numeric usage is not automatically equivalent to validated cost.
-`Completion.toString()` and catalog stringification omit provider content.
+Edit the private `.env.local` before starting. Set `DATABASE_URL` to a dedicated
+development PostgreSQL database. For Neon, use the pooled application URL.
+Supply the storage variables when testing attachment reads. `bootRun` loads
+`.env.local`; existing process environment variables take precedence. A packaged
+JAR reads process environment variables and does not load this file itself.
+For local HTTP only, set `INCIDENT_DESK_SECURE_COOKIES=false`. Production must
+retain secure cookies and HTTPS. Keep real connection strings and credentials
+out of source control, screenshots, issues and shell transcripts.
 
-Run deterministic adapter tests without a real key:
+After editing the environment file, start the backend:
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+Start the frontend in a separate terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173/>. Vite proxies API and health requests to the backend
+on port 8080. A normal Gradle build embeds the frontend production assets in
+`build/libs/incident-desk-web.jar`, which serves the web application at `/`.
+`PORT` overrides the backend's default port.
+
+### Environment configuration
+
+| Variables | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Application PostgreSQL connection; use a development database locally and the pooled Neon endpoint in production |
+| `DATABASE_URL_UNPOOLED` | Direct connection used by the isolated database-test setup; not a replacement for `DATABASE_URL` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` | Private S3-compatible attachment storage |
+| `INCIDENT_DESK_ATTACHMENT_BUCKET` | Storage bucket, default `incident-attachments` |
+| `INCIDENT_DESK_NEON_REQUIRED` | Fail startup when the required production database/storage configuration is missing |
+| `INCIDENT_DESK_SECURE_COOKIES` | Keep `true` for HTTPS; use `false` only for local HTTP |
+| `INCIDENT_DESK_BOOTSTRAP_ADMIN_LOGIN`, `INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD` | One-time first-Administrator provisioning; remove both after successful bootstrap |
+| `AI_ENABLED`, `SOCLAAS_API_KEY`, `SOCLAAS_MODEL` | Enable and configure backend-only AI access; AI defaults to disabled |
+| `AI_CONFIGURATION_REVISION`, `AI_*` limits | Shared configuration fencing and downward-only resource controls; see `.env.example` |
+
+The backend's database-dependent services require a configured data source.
+Opening the frontend or receiving a health response without that configuration
+does not establish a working registration or incident workflow. For attachments,
+configure private storage as well as the database; metadata alone does not
+provide object bytes. Never put secrets in `VITE_*` variables, which are bundled
+into browser assets.
+
+Public registration creates Reporters. To create the first Administrator, follow
+[Administrator bootstrap](AdministratorBootstrap.md). Both bootstrap variables
+must be removed after the first successful startup; replay is rejected. Do not
+remove database markers to recover a privileged account. Ordinary responder
+access is granted through the promotion and administrator category workflows.
+
+## Architecture and source map
+
+```mermaid
+flowchart LR
+    Browser[React browser] --> Web[Spring MVC and Security]
+    Web --> Services[Authorized application operations]
+    Services --> DB[(PostgreSQL)]
+    Services --> Storage[Private attachment storage]
+    Web --> Gateway[Secured AI gateway]
+    Gateway --> DB
+    Gateway --> Provider[SoCLaaS HTTPS API]
+```
+
+| Location | Responsibility |
+| --- | --- |
+| `frontend/src` | Role portals, local form state, API requests and escaped AI output |
+| `web/security` | Registration, authentication, shared sessions, CSRF, password changes and bootstrap |
+| `web/reporter`, `web/responder`, `web/admin` | Role-specific HTTP contracts, services and JDBC projections |
+| `domain`, `application` | Reusable incident rules, lifecycle and application operations |
+| `infrastructure/neon` | PostgreSQL configuration, private S3-compatible storage and smoke checks |
+| `infrastructure/soclaas` | Provider adapter, trusted data selection, admission, budgets and circuits |
+| `src/main/resources/db/migration` | Versioned PostgreSQL schema |
+| `ui`, `startup`, `persistence` | Retained desktop entry points and supporting MP2 code |
+
+The web surface includes Reporter incident submission and tracking, promotion
+requests, Responder incident handling, and Administrator incident, account,
+category, SLO and statistics workflows. Audit records are internal persistence
+and security evidence; there is no user-facing audit viewer. Follow the current controllers and
+[User Guide](UserGuide.md) for the exposed operations; legacy desktop methods do
+not automatically imply a corresponding web endpoint.
+
+### Implemented HTTP contracts
+
+| Controller | Contract examples |
+| --- | --- |
+| `ReporterIncidentController` | `/api/v1/reporter/incidents` for owned incident operations |
+| `SessionController`, `ReporterAccountRegistrationController` | GET `/api/v1/auth/session`; POST `/api/v1/auth/reporter/register` |
+| `WebSecurityConfiguration`, `OwnPasswordController` | POST `/api/v1/auth/{reporter,responder,administrator}/login`, `/api/v1/auth/logout`, `/api/v1/auth/password` |
+| `PromotionRequestController` | GET/POST `/api/v1/reporter/promotion-request`; GET `/api/v1/admin/promotion-requests`; POST `/{requestId}/decision` under the administrator path |
+| `ResponderIncidentController` | POST queue `/query`, GET detail, POST `/{incidentId}/claim` and `/{incidentId}/resolve` under `/api/v1/responder/incidents` |
+| `AdministratorIncidentController` | GET detail; POST comments, assignment, unassign and resolve under `/api/v1/admin/incidents/{incidentId}` |
+| `AdministratorDashboardController` | `/api/v1/admin/dashboard` projections |
+| `AdministratorAccountController` | `/api/v1/admin/accounts` account administration |
+| `AdministratorSloController` | `/api/v1/admin/slo` SLO configuration |
+| `AdministratorStatisticsController` | GET `/api/v1/admin/statistics`, with category, responder, reporter and period filters |
+| `ReporterAiDescriptionController` | POST `/api/v1/reporter/ai/description` advisory draft improvement |
+
+Administrator comments accept a request ID and text. Assignment and unassignment
+carry an expected incident version; resolution carries the version, request ID
+and remarks. These are concurrency/idempotency inputs, not authorization grants.
+The backend validates the authenticated actor and current incident state before
+committing. Responder resolution similarly carries a request ID and remarks.
+Use the controller request records and HTTP tests for complete payload schemas.
+
+Java package paths in this section are relative to
+`src/main/java/com/company/incidentdesk/`. Authentication login requests are
+form-encoded; feature mutation bodies use their controller's JSON contract.
+Do not infer endpoint behavior from retained desktop service methods.
+
+## Persistence, authorization and privacy
+
+Spring Session stores web sessions in PostgreSQL. Security derives the actor
+from the authenticated request, not browser-supplied account or role fields.
+Ownership and category checks apply on the backend. Anonymous incident views
+exclude reporter identity from normal Responder and Administrator projections.
+Attachment reads are authorized and streamed through the backend rather than
+exposing storage credentials or public object links.
+
+Mutations and their success audit records share transaction boundaries.
+Concurrent incident claims must select at most one assignee; denied or failed
+operations must not leave a success audit or partial mutation. SLO calculations
+use persisted UTC lifecycle timestamps. Consult `.agents/incident-lifecycle.md`,
+`.agents/authorization-matrix.md`, `.agents/anonymity-policy.md` and
+`.agents/slo.md` before changing these rules.
+
+Flyway applies the checked-in migrations. V1 establishes identity and sessions;
+V2 adds administrator data; V3 adds Reporter incidents; V4 adds promotions;
+V5 adds AI usage controls; V6 adds AI circuits and audit; V7 adds resolution
+history; V8 adds attachment metadata; V9 adds statistics cycle snapshots; V10
+adds administrator incident comment requests. Preserve applied migrations and
+add a forward migration for subsequent changes. Earlier experimental AI branches
+used different version numbers: never repair a shared database blindly to fit
+an old branch.
+
+### Main persisted records
+
+| Tables | Purpose |
+| --- | --- |
+| `accounts`, `account_credentials` | Identity, roles/account state and password hashes |
+| `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES` | Shared web sessions |
+| `incidents`, `incident_resolutions`, `incident_comments` | Incident lifecycle, resolution history and comments |
+| `incident_attachments` | Metadata for privately stored objects |
+| `responder_promotion_requests` and requested/approved category tables | Promotion review and category choices |
+| `responder_category_access` | Active responder grants |
+| `slo_target_versions` | Persisted SLO configuration versions |
+| `audit_events`, `application_settings` | Internal audit and durable application settings |
+| `ai_usage_control`, `ai_usage_requests` | Shared gateway controls, reservations and request accounting |
+
+## Incident operations and statistics
+
+Reporter submission validates the title, category, description and anonymity,
+then persists the incident and audit in one transaction. Its submission key
+supports safe recognition of a repeated submission. Reporter list reads select
+only the authenticated account's incidents. The web Reporter interface currently
+exposes submission and list tracking rather than the desktop detail/edit flow.
+
+Responder queue and detail reads apply current category grants. A claim uses a
+conditional database update that rechecks incident state, absence of an assignee,
+and the actor's authorization. Competing claims cannot both succeed. Resolution
+uses a request ID, verifies the current assignment and role, records a numbered
+resolution cycle, and writes its audit atomically. A repeated matching request
+can return the recorded result instead of creating another cycle.
+
+Administrator assignment, unassignment and resolution use current incident
+state and version checks. Stale writes return a conflict instead of replacing
+someone else's work. Comment creation has a separate request ID. These backend
+checks remain necessary even when the UI disables an action. The concrete stores
+are `web/responder/JdbcResponderIncidentGateway` and
+`web/admin/JdbcAdministratorIncidentStore`.
+
+SLO targets are versioned and apply prospectively. A target created after an
+incident entered its queue does not retrospectively apply to that incident.
+Operational statistics use persisted lifecycle and resolution-cycle snapshots,
+not elapsed browser time. They distinguish the number of resolved incidents
+from the number of completed cycles. A missing average means no eligible data,
+not a duration of zero. Queue time to claim is not attributed to the eventual
+resolver, so responder-filtered statistics do not provide that queue metric.
+The UI treats selected dates as inclusive UTC dates and sends instant bounds to
+`AdministratorStatisticsController`. See `JdbcAdministratorStatisticsStore` and
+the V9 migration before changing historical metrics.
+
+## Web security
+
+Spring Security protects session-authenticated endpoints. Unsafe browser requests
+send the current `XSRF-TOKEN` cookie value in `X-XSRF-TOKEN`. The frontend refreshes
+a stale security session and retries once only for the designated security-session
+error. It must not retry accepted AI generation after a provider failure.
+Session cookies are HTTP-only, SameSite=Lax and secure by default; the session
+timeout is 30 minutes. Credential hashing, validation and account-state checks
+remain server responsibilities. Do not carry MP2 local-file authentication
+assumptions into the web application.
+
+`WebSecurityConfiguration` uses BCrypt with strength 12 for web credentials.
+The retained desktop authentication implementation is a different entry point;
+its hashing and session assumptions do not describe web authentication. Login
+rotates the session identifier, rejects a portal/account-role mismatch, and
+returns a generic failure. Public registration cannot select a privileged role.
+Temporary credentials restrict the holder to password replacement and logout
+before normal role operations become available.
+
+Promotion approval changes role/category access and invalidates the affected
+account's sessions. Password reset and account administration must preserve the
+corresponding credential/session safeguards in their services. Anonymous identity
+is excluded through explicit projections; it must not be reconstructed from
+audit metadata, logs or whole-entity serialization for normal user responses.
+
+## Advisory AI integration
+
+The implemented Reporter endpoint is `POST /api/v1/reporter/ai/description`.
+It accepts the draft title, category and description, checks the authenticated
+Reporter, and returns a bounded description suggestion. Applying it changes only
+the browser form; submitting the incident remains a separate operation.
+Responder summaries and Administrator aggregate analysis are policy-approved
+feature directions, not evidence of implemented role-specific endpoints.
+
+### Request and review flow
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Endpoint as Reporter endpoint
+    participant Gateway as Secured gateway
+    participant DB as PostgreSQL
+    participant Provider as SoCLaaS
+    Browser->>Endpoint: Draft JSON with session and CSRF header
+    Endpoint->>Endpoint: Validate exact fields and bounded body
+    Endpoint->>Gateway: Allowlisted ReporterDraft
+    Gateway->>DB: Recheck actor and admit shared usage
+    Gateway->>Provider: Trusted instructions and untrusted draft data
+    Provider-->>Gateway: Bounded completion or safe failure
+    Gateway->>DB: Settle usage and content-free audit outcome
+    Gateway-->>Browser: Suggestion text or stable error
+    Note over Browser: Review, then explicitly apply to local form
+    Note over Browser: Incident submission is a separate request
+```
+
+The JSON body contains exactly `title`, `category` and `description`, all strings.
+Categories use `IT`, `HUMAN_RELATIONS` or `FACILITIES`. Unknown or duplicate fields,
+trailing JSON, invalid structure and an over-limit body are rejected. Success
+returns `{"description":"..."}` with `Cache-Control: no-store`. The endpoint
+does not accept an account ID, arbitrary system prompt, model or provider URL.
+
+`SecuredAiGateway` combines trusted actor checks, `AiDataSelector`,
+`AiPromptBuilder`, shared PostgreSQL usage admission and the `SoclaasClient`.
+The client uses Java HTTP and Jackson; Spring AI is not required. No browser
+receives the provider key. The fixed allowed origin is
+`https://soclaas-api.comp.nus.edu.sg/v1`; model and budget metadata must be
+verified before accepting generation. Provider access may require the NUS network
+or VPN, including during development.
+
+AI is disabled by default. To enable it, configure `AI_ENABLED`,
+`SOCLAAS_API_KEY`, `SOCLAAS_MODEL` and the settings in `.env.example` through a
+private runtime environment. `AI_CONFIGURATION_REVISION` fences older instances
+after configuration repair. Never enable it merely to make a health check pass.
+Provider failure leaves normal non-AI incident reporting available.
+
+Default account limits are 5 requests/minute, 30/hour and 100/day. Shared
+admission also limits concurrency and reserves budget against verified provider
+ceilings. Default bounds include a 3-second connection timeout, 30-second request
+deadline, 16-KiB input and output byte limits, 8,000 input tokens and 1,200 output
+tokens. Conservative input estimation can reject a draft below its byte limit.
+The adapter caps provider response bodies at 64 KiB and never automatically
+retries generation. Browser cancellation does not guarantee provider work or
+billing stopped.
+
+`AiUsageLedger` stores admission and reservations in PostgreSQL so limits apply
+across application instances. Reserve resources before dispatch; do not replace
+this with a browser counter or process-local map. Unknown provider usage must
+remain conservatively accounted for rather than being treated as free.
+`AiGatewayControl` persists shared circuit and configuration state. Configuration
+repair and metadata refresh must respect that state rather than bypassing a
+failed provider check. See the specification for exact lease, freshness,
+settlement and circuit-transition rules.
+
+Incident text is untrusted data, separated from trusted instructions. The model
+has no database access, application credentials, mutation tools or callback path.
+Blank, malformed, oversized, refused or tool/function-call results are rejected;
+valid output is displayed as escaped text for human review. These controls do
+not constitute a universal prompt-injection detector. Safe errors and content-free
+audit outcomes must not contain prompts, generated text, keys, cookies or raw
+provider bodies. See [AI specification](../workflow/ai-features.md) for exact
+admission, accounting, circuit and failure contracts.
+
+| HTTP status | Reporter AI error code | Meaning |
+| --- | --- | --- |
+| 400 | `AI_REJECTED` | Invalid draft request body |
+| 403 | `AI_REJECTED` | Request rejected by the AI path; CSRF errors are handled separately |
+| 429 | `AI_RATE_LIMITED` | Account/global rate or budget admission limit |
+| 502 | `AI_INVALID_RESPONSE` or `AI_OUTPUT_TOO_LARGE` | Provider output could not safely be used |
+| 503 | `AI_UNAVAILABLE` | AI disabled, missing gateway or unavailable provider/control state |
+| 504 | `AI_TIMEOUT` | Provider deadline exceeded |
+
+Authentication and authorization can reject the request before this controller
+runs. The frontend maps known error codes to safe messages and keeps the draft.
+It must not display raw provider bodies or exception strings.
+
+### Security controls and their limits
+
+| Boundary | Implemented protection | Remaining limitation |
+| --- | --- | --- |
+| Draft to provider | Three-field allowlist, authorization, separate instructions/data, bounded request | User-supplied text can still influence wording |
+| Provider to browser | Strict completion validation, escaped text, no tools or output interpreter | Advice can be misleading even when structurally valid |
+| Suggestion to saved incident | Explicit local apply and a separate authorized submission | A person can accept an inaccurate suggestion |
+| Shared provider quota | Database admission, reservations, deadlines and shared circuits | Provider ceilings and connectivity can change |
+| Diagnostics | Safe error categories and content-free audits | Infrastructure access and provider retention need separate operational review |
+
+An off-topic or injection-like draft is not proof that a universal detector
+exists. Verify the selected outbound data, absent mutation authority, escaped
+rendering and unchanged incident state in adversarial tests. A plausible-looking
+answer alone is not security evidence.
+
+## Verification
+
+Run the full local verification path:
+
+```powershell
+.\gradlew.bat build
+```
+
+This includes frontend type-checking, lint, component tests and bundling, Java
+checks, and retained JavaFX packaging verification. On headless Linux use
+`xvfb-run --auto-servernum ./gradlew build`. Targeted frontend checks are
+`npm run check` from `frontend/`. Target provider tests without a real key using:
 
 ```powershell
 .\gradlew.bat test --tests 'com.company.incidentdesk.infrastructure.soclaas.*'
 ```
 
-The governing contract is `workflow/ai-features.md`; the implementation plan is
-`workflow/plans/issue-2-soclaas-provider-adapter.md`. Adapter tests alone do not
-satisfy full gateway acceptance or establish production readiness.
+Database tests require an explicitly isolated test database. Copy
+`.env.test.example` to `.env.test.local`, provide a direct test-only connection,
+and confirm isolation before running `registrationDatabaseTest`. The task
+rejects pooled Neon endpoints and protected application database targets, creates
+a random schema, applies migrations, and drops that schema afterwards.
+`neonTestServiceSmoke` checks the separate test database and private storage with
+a synthetic object round trip. Never point these tasks at production data.
 
-## Table of Contents
-
-- [Introduction](#introduction)
-- [Setting up](#setting-up)
-  - [Prerequisites](#prerequisites)
-  - [Common commands](#common-commands)
-  - [Repository layout](#repository-layout)
-- [Architecture](#architecture)
-- [Component design](#component-design)
-- [Implementation](#implementation)
-- [Design considerations](#design-considerations)
-- [Development process and testing](#development-process-and-testing)
-  - [Automated testing strategy](#automated-testing-strategy)
-  - [Change workflow](#change-workflow)
-  - [Adding dependencies](#adding-dependencies)
-- [Instructions for manual testing](#instructions-for-manual-testing)
-  - [Launch, locking, and restart](#launch-locking-and-restart)
-  - [Authentication and password change](#authentication-and-password-change)
-  - [End-to-end incident flow](#end-to-end-incident-flow)
-  - [Authorization denial](#authorization-denial)
-  - [Handoff, reopen, and queue order](#handoff-reopen-and-queue-order)
-  - [Anonymous privacy](#anonymous-privacy)
-  - [Attachments](#attachments-1)
-  - [Audit, SLO, and statistics](#audit-slo-and-statistics)
-  - [Storage failure and corruption](#storage-failure-and-corruption)
-- [Known limitations and planned work](#known-limitations-and-planned-work)
-- [Product requirements summary](#product-requirements-summary)
-  - [Product scope](#product-scope)
-  - [Principal user stories](#principal-user-stories)
-  - [Principal use cases](#principal-use-cases)
-  - [Non-functional requirements](#non-functional-requirements)
-- [Glossary](#glossary)
-- [Acknowledgements](#acknowledgements)
-
-## Introduction
-
-This guide is for developers building, testing, or extending Incident Desk. The
-[User Guide](UserGuide.md) describes current user-facing workflows. Incident
-Desk is a single-process JavaFX desktop application with Reporter, Responder,
-and Administrator roles. It uses local files, not a server or database. Some
-application services support operations that the authenticated UI does not yet
-expose; this guide marks those cases rather than presenting them as complete
-user workflows.
-
-The repository's [`.agents/` documents](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/tree/main/.agents)
-are the authoritative contracts. Read the
-[product requirements](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/requirements.md),
-[MVP scope](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/mvp-scope.md),
-[incident lifecycle](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/incident-lifecycle.md),
-[authorization matrix](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/authorization-matrix.md),
-[anonymity policy](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/anonymity-policy.md),
-[audit policy](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/audit-policy.md),
-[SLO definitions](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/slo.md),
-[persistence contract](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/persistence.md), and
-[testing requirements](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/testing.md)
-before changing related behavior.
-A concise, publishable summary appears in
-[Product requirements summary](#product-requirements-summary), so readers of
-the generated site can understand the product without repository-only files.
-
-## Setting up
-
-### Prerequisites
-
-- JDK 25. The application rejects every other Java feature version at startup
-  so local and packaged behavior remains reproducible.
-- Git. A separate Gradle installation is unnecessary because the repository
-  contains the Gradle wrapper.
-
-Confirm that `java -version` and `javac -version` both report version 25. Open
-the repository root as a Gradle project in the IDE of your choice.
-
-### Common commands
-
-On Windows:
+The corresponding commands are:
 
 ```powershell
-.\gradlew.bat test
-.\gradlew.bat check
-.\gradlew.bat run
-.\gradlew.bat previewAuthenticatedShell
-.\gradlew.bat shadowJar
+.\gradlew.bat registrationDatabaseTest
+.\gradlew.bat neonTestServiceSmoke
 ```
 
-On macOS or Linux, replace `.\gradlew.bat` with `./gradlew`.
+Configure the private test environment first. For non-Neon PostgreSQL, the
+database-test task accepts `INCIDENT_DESK_TEST_DATABASE_URL`; the isolation
+acknowledgement is `INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED=true`.
+A normal test invocation can skip database or opt-in provider cases when their
+required environment is absent. Inspect test reports instead of treating a green
+build as proof those cases ran. Live SoCLaaS tests are opt-in and consume quota;
+use deterministic fake-provider coverage for routine development.
 
-The executable `build/libs/incident-desk.jar` contains JavaFX natives for
-Windows, macOS, and Linux x86_64. JavaFX natives for different CPU architectures
-on one OS share filenames, so one JAR cannot contain both Intel and ARM variants.
-The main JAR therefore requires an x86_64 JVM on Apple Silicon.
+`registrationDatabaseTest` selects specific web database test classes; it does
+not include the AI ledger, control or gateway PostgreSQL suites. Run those through
+the regular `test` task with the isolated-test variables supplied in its process
+environment, using the SoCLaaS package filter above if desired. Do not assume the
+regular task loads `.env.test.local` in the same way as the dedicated database
+task.
 
-For native Apple Silicon packaging, run:
+### Focused test coverage
 
-```sh
-./gradlew shadowJarMacArm64
-java -jar build/libs/incident-desk-mac-aarch64.jar
+| Area | Representative tests |
+| --- | --- |
+| Provider validation and bounded responses | `SoclaasClientTest`, `SoclaasSettingsTest`, `SoclaasBudgetClientTest` |
+| Shared AI admission and concurrency | `AiUsageLedgerPostgresTest`, `AiGatewayConcurrencyPostgresTest` |
+| Circuits, accounting and authorization | `AiGatewayControlPostgresTest`, `SecuredAiGatewayPostgresTest` |
+| Reporter AI HTTP/session/CSRF integration | `ReporterAiDescriptionControllerTest`, `ReporterAiHttpPostgresTest` |
+| Responder claim and resolution | `ResponderIncidentPostgresTest` |
+| Promotion and session effects | `PromotionWorkflowPostgresTest` |
+| Administrator mutations and authorization | `AdministratorIncidentPostgresTest`, `AdministratorIncidentSecurityTest` |
+| Historical statistics and upgrades | `AdministratorStatisticsPostgresTest`, `AdministratorStatisticsMigrationUpgradePostgresTest` |
+| Frontend draft/review state | `frontend/src/reporter/ReporterAiDescription.test.tsx` |
+
+Java tests reside under `src/test/java/com/company/incidentdesk/`. These names
+identify existing coverage; they do not claim every case ran during this update.
+
+Build and smoke-test the packaged web artifact separately:
+
+```powershell
+.\gradlew.bat bootJar
+java -jar build\libs\incident-desk-web.jar
 ```
 
-Use an ARM64 JDK 25 for that launch. `assemble` builds both artifacts;
-`shadowJar` builds the main Intel artifact. Development builds select JavaFX
-for the Gradle JVM's operating system and architecture. Windows development
-currently supports x86_64 only. `verifyJavaFxPlatforms`, included in `check`,
-verifies classifier isolation.
+With its environment configured, check <http://localhost:8080/health> and open
+<http://localhost:8080/>. The health endpoint deliberately hides component details;
+`UP` does not prove every role journey or external AI call works. Record the exact
+commit, commands, failures, skipped tests and manual coverage.
 
-`PackagedApplicationTest` launches the matching JAR with `java -jar` using
-temporary application storage and a separate JavaFX cache. A test-only observer
-requests normal shutdown and is not included in production. CI exercises
-packaged startup on Linux/Windows x86_64, macOS x86_64, and macOS ARM64.
+### Documentation verification snapshot
 
-`previewAuthenticatedShell` exercises login, session, role routing, shell, and
-logout using in-memory accounts named `admin`, `reporter`, and `responder`. The
-preview accepts any password. These accounts exist only in the preview process
-and are neither persisted nor included in production.
+On 23 October 2026, the guides and screenshots were checked against commit
+`aea4f4d5beaee2b6dc5025e737d3dd2a254d4a3e`. `bootJar` passed, including Java
+compilation and the TypeScript/Vite production build. The packaged application
+started against a fresh local PostgreSQL 18 database and validated all ten
+migrations. Browser checks exercised Reporter registration, sign-in, submission
+and promotion request; Administrator promotion approval, comment creation and
+SLO saving; and Responder claim and resolution. The screenshots use fictional
+data from that instance. AI was disabled, so this session did not verify a live
+provider response. The full test suite, public deployment and destructive account
+actions were not verified as part of this documentation update.
 
-### Repository layout
+## Deployment and operation
 
-```text
-CS3227-2610-MP2/
-├── src/main/java/com/company/incidentdesk/
-│   ├── startup/          runtime setup and dependency assembly
-│   ├── ui/               JavaFX pages and shared components
-│   ├── application/      use cases, authorization, and notifications
-│   ├── domain/           incident rules, audit values, and SLO calculations
-│   └── persistence/      repository interfaces and local-file adapters
-├── src/main/resources/   JavaFX styles and other application resources
-├── src/test/java/        JUnit tests mirroring the application packages
-├── src/test/resources/   test fixtures
-├── docs/                 guides, diagrams, and screenshots
-├── .agents/              product and engineering contracts
-├── .github/workflows/    CI and release workflows
-├── logs/                 AI usage and development logs
-├── release/              packaged application JARs
-├── build.gradle          build configuration
-└── gradlew(.bat)         Gradle wrapper scripts
-```
+The Docker build packages React and Spring Boot into one Cloud Run service.
+PostgreSQL and private attachment storage remain external. Follow the
+[Cloud Run runbook](CloudRunDeployment.md) for Artifact Registry, GitHub OIDC,
+Workload Identity Federation and separate deployment/runtime service accounts.
+The routine deployment workflow allows `main` through the protected `production`
+environment; manual runs from other branches perform verification only.
+Google service-account key files are not required.
 
-## Architecture
+The [Dockerfile](../Dockerfile) has separate Node frontend and JDK backend build
+stages, followed by a JRE runtime running as UID 10001. It packages the compiled
+web artifact, not database records or a developer's private environment files.
+Runtime secrets and provider connectivity remain deployment configuration.
+Changing a local `.env.local` does not automatically update another developer's
+environment or the deployed Cloud Run service.
 
-![Incident Desk component architecture](diagrams/architecture.png)
+Production requires the Neon configuration and `INCIDENT_DESK_NEON_REQUIRED=true`.
+Keep development, test and production data separate. Review secret references,
+bootstrap removal, provider connectivity, database migration compatibility,
+monitoring and rollback readiness before deployment. A health response alone is
+not release approval. `/health` exposes aggregate status; retain content-free
+operational logs and inspect hosted CI for the exact release commit.
 
-`ApplicationContext` assembles shared services and storage once. JavaFX views
-call application services; services enforce authorization and domain rules
-before calling persistence interfaces. `LocalApplicationStore` implements the
-incident, account, audit, attachment, and SLO ports. Aggregate state is stored
-in one file and attachment content in separate generated files. Diagram arrows
-show collaboration or interface implementation; they do not grant permission.
+Feature PRs target `main`. `master` is reserved for the assignment submission
+snapshot and must only be replaced on explicit human submission approval after
+verification. Do not infer that a successful local build authorizes deployment
+or final submission.
 
-Dependencies point inward:
+## Troubleshooting
 
-- Domain code is independent of UI, startup, and file storage.
-- Application code depends on domain types and persistence interfaces, not on
-  JavaFX or the local-file implementation.
-- UI code invokes use cases and consumes presentation-safe models.
-- Persistence adapters translate durable data to and from domain types.
-- Startup is the composition root and may depend on every layer to wire it.
-
-This deliberately differs from the UI–Logic–Model–Storage structure common in
-command-driven AddressBook-derived applications. Incident Desk has an explicit
-application layer because authorization, atomic auditing, and session-derived
-actors are use-case concerns rather than UI or entity concerns.
-
-## Component design
-
-### Startup and composition
-
-| Component | Responsibility |
+| Symptom | Inspect |
 | --- | --- |
-| `IncidentDeskLauncher` | Executable entry point. |
-| `IncidentDeskApplication` | Owns JavaFX startup and shutdown. |
-| `ApplicationContext` | Constructs process-wide repositories, services, event bus, and session state. |
-| File store | Acquires the process lock during assembly. |
+| Frontend loads but registration or incident operations fail | Backend `/health`, configured data source, migrations, and the actual API response |
+| Local HTTP login does not retain its session | `INCIDENT_DESK_SECURE_COOKIES=false` locally; retain `true` in HTTPS production |
+| Vite requests reach the wrong backend | `frontend/vite.config.ts` proxy targets port 8080; `PORT` changes require a matching development proxy |
+| Restart fails after bootstrap | Remove both bootstrap variables; preserve the durable marker and existing Administrator |
+| Flyway reports a version/checksum conflict | Identify the database and branch history; use a fresh isolated database for an old experimental branch rather than repairing shared history blindly |
+| AI fails while normal incidents work | AI enablement, selected model, NUS network/VPN access, metadata freshness, shared circuits and quota |
+| Tests pass with database cases skipped | Private isolated-test settings, isolation acknowledgement and the XML test reports |
+| Documentation site still shows MP2 branding | `docs/_config.yml` retains MP2 URL/base-path metadata; website migration is separate from these guide edits |
 
-Keep dependency construction in `ApplicationContext`. Views and services
-receive their collaborators; they do not open files or construct alternate
-repositories.
+Use content-free diagnostics. Never paste passwords, API keys, connection URLs,
+session cookies, provider bodies or real incident text into issue evidence.
 
-### UI and navigation
+## Specification-driven and multi-agent workflow
 
-| Component | Responsibility |
+`AGENTS.md` identifies the canonical specifications. Locate observable acceptance
+criteria before implementation, trace the change and its tests to those criteria,
+and record evidence before ticking a requirement. Agent-generated text cannot
+establish human approval. Separate analyst, architecture/security, implementation,
+test and review roles exchange bounded handoffs with scope, files, risks, checks
+and unresolved decisions. Their proposed roles and outstanding human gates are
+recorded in the workflow artifacts, not assumed complete by this guide.
+
+For a gateway change, the specification handoff identifies the allowed draft
+fields, quota/failure rules and excluded actions. The implementation handoff names
+the changed gateway/controller files and unresolved provider assumptions. The test
+handoff supplies captured synthetic provider payloads, database concurrency results
+and denied-path evidence. The reviewer checks those artifacts against the approved
+contract rather than accepting the implementer's summary as proof.
+
+Keep security design and approval with the responsible owner. A bounded agent can
+inspect a file, update documentation or add an agreed test fixture; it must not
+silently expand provider data selection, relax authorization or invent approval.
+When evidence contradicts a handoff, record the disagreement and resolve it against
+the governing specification and source. Outstanding human ownership and review gates
+remain visible in `workflow/agent-workflow.md` and the relevant ADRs.
+
+| Workflow artifact | Purpose |
 | --- | --- |
-| `ApplicationNavigator` | Owns the authentication boundary and switches between `AuthenticationPage` and `AuthenticatedShell`. |
-| `DefaultViewFactory` | Creates role dashboards and incident-detail views from `ApplicationContext` services. |
-| Reporter dashboard | Opens owned incidents through `ReporterIncidentPage`. |
-| `ReporterIncidentPage` | Wraps the shared `IncidentDetailView` and supplies Reporter-specific edit, withdrawal, and reopen callbacks. |
-| Shared components under `ui.shared.components` | Consume presentation models rather than unrestricted domain objects. |
+| `README.md` | Workflow rules, approval gates and evidence conventions |
+| `acceptance-criteria.md` | Index into feature-specific observable criteria |
+| `product-requirements.md` | Product requirements and scope context |
+| `architecture.md` | Architecture direction and unresolved design sections |
+| `threat-model.md` | Assets, trust boundaries, threats and mitigations |
+| `agent-workflow.md` | Agent roles, handoffs, isolation and disagreement handling |
+| `reporter-vertical-slice.md` | Reporter contracts and acceptance criteria |
+| `responder-vertical-slice.md` | Responder contracts and acceptance criteria |
+| `administrator-vertical-slice.md` | Administrator contracts and acceptance criteria |
+| `promotion-journey.md` | Promotion decisions, category access and session effects |
+| `ai-features.md` | Provider contract, advisory features and resource safeguards |
+| `neon-services.md` | Database and private object-storage configuration |
+| `cloud-run-deployment.md` | Deployment contracts and verification gates |
+| `interaction-summaries.md` | Index of development interaction summaries |
+| `decisions/` | Numbered ADRs and their individual approval status |
+| `plans/` | Issue-scoped implementation plans |
+| `reviews/` | Review findings and decisions |
+| `test-evidence/` | Dated commands, outcomes, limitations and acceptance evidence |
 
-Shared components include `IncidentTable`, `IncidentDetailView`,
-`IncidentFilterBar`, `AttachmentPane`, `IncidentCommentThread`,
-`NotificationCenter`, and `SloProgressBar`.
+Paths in the table are relative to `workflow/`. Consult each artifact's current
+status: several retain pending reviews or manual gates. Detailed development
+interaction summaries also live under `logs/`; they are not runtime application
+logs. Do not publish secrets or user data as workflow evidence.
 
-- Storage and image-decoding work runs away from the JavaFX thread.
-- Views discard stale results when detached, logged out, or superseded by newer requests.
-- Hiding a control is usability behavior, not authorization. Application services recheck every operation when it executes.
+## MP2 reuse and acknowledgements
 
-### Application services
+This repository continues the team's
+[MP2 Incident Desk](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2).
+It retains the Java
+package structure, domain concepts, lifecycle and SLO rules, existing application
+services, tests and the JavaFX entry point. MP3 adds a React interface, HTTP
+contracts, shared PostgreSQL persistence and sessions, private object-storage
+integration, web authorization and the advisory SoCLaaS gateway. Reuse is selective:
+legacy local storage and desktop UI do not define production web behavior.
 
-The application layer coordinates use cases and returns stable success/error
-results to the UI:
+The following measurement compares the MP2 baseline `2d936043d15028efd41d0609b81649977b6c5848`
+(the parent of the first MP3 requirements commit) with MP3 snapshot
+`aea4f4d5beaee2b6dc5025e737d3dd2a254d4a3e`:
 
-| Responsibility | Rule |
+| Source measurement | Result |
 | --- | --- |
-| Actor | Obtain it from `SessionProvider`, never from form input. |
-| Access | Apply ownership, role, assignee, and category policies. |
-| Validation | Validate input and invoke legal domain transitions. |
-| Audit | Create redacted audit evidence. |
-| Commit | Commit related state and audit changes atomically. |
-| Events | Publish in-process events only after durable commit. |
-| Presentation | Map domain data to privacy-safe presentation models. |
-
-Principal services include `IncidentService`, `IncidentDetailService`,
-`IncidentCommentService`, `AttachmentService`, account and responder-access
-services, `AuditLogService`, `SloConfigurationService`, and
-`IncidentStatisticsService`.
-
-### Domain model
-
-| Domain element | Responsibility |
-| --- | --- |
-| `IncidentLifecycle` | Owns transitions among `DRAFT`, `SUBMITTED`, `ASSIGNED`, `RESOLVED`, and `WITHDRAWN`. |
-| `Incident` | Retains lifecycle timestamps, assignment history, resolution cycles, and the queue key required for stable ordering. |
-| Value types | Validate identifiers, remarks, reopen explanations, comments, accounts, and audit evidence. |
-| `SloCalculator` and statistics calculators | Provide deterministic domain calculations from persisted UTC timestamps and versioned targets; they do not read a UI clock or JavaFX state. |
-
-### Persistence
-
-| Element | Responsibility |
-| --- | --- |
-| Persistence interfaces | Application services depend on `IncidentStore`, `AccountRepository`, `AuditRepository`, `AttachmentStore`, and `SloConfigurationStore`. |
-| In-memory implementations | Support focused tests. |
-| `LocalApplicationStore` and its facets | Provide production local-file storage. |
-| `LocalApplicationStateCodec` | Encodes accounts, credentials, incidents, comments, audit records, promotion requests, SLO history, and attachment metadata in `incident-desk.dat`. |
-
-Attachment bytes live separately under the same data directory. The persisted
-schema version is 1.
-
-### Events and notifications
-
-1. Application events are published only after a successful durable mutation.
-2. `NotificationService` updates the in-memory `NotificationInbox`.
-3. `NotificationCenter` presents the inbox.
-
-Notifications are convenience state, not the audit trail or source of truth.
-Persistent notification history is out of scope.
-
-## Implementation
-
-### Authentication, accounts, and sessions
-
-- **Credentials:** Login names are case-sensitive. Password code stores salted
-  hashes and never exposes plaintext passwords, hashes, reset credentials, or
-  session identifiers through presentation models, audit changes, or logs.
-- **Session:** `SessionService` holds the one active account. Login replaces the
-  session, logout clears it, and every privileged use case reads the actor when
-  it executes.
-- **Account changes:** Self-service password replacement requires the current
-  password and commits the new credential with its audit event. Administrator
-  account, promotion, reset, and category-access operations enforce separate
-  policies and preserve audit references when an account is disabled.
-- **UI boundary:** The UI exposes only a subset of account services. Service
-  availability is not proof of a complete end-to-end workflow.
-
-### Authorization and privacy-safe reads
-
-- **Role scope:** Authorization is deny-by-default. Reporters access only
-  incidents they submitted. Responders access unassigned incidents in permitted
-  categories and incidents assigned to them. Administrators may inspect all
-  incidents, subject to anonymous-identity redaction. Mutations add state and
-  eligibility conditions.
-- **Current access:** List filtering is never reused as authorization. Detail
-  reads and mutations re-evaluate current permissions. Missing and inaccessible
-  incidents map to the same presentation-safe result.
-- **Privacy:** `IncidentPresentationMapper` removes anonymous identity before
-  data reaches tables, details, filters, statistics, audit labels,
-  notifications, or attachment display names.
-
-### Incident lifecycle
-
-| From | Action | To | Authorized actor and conditions |
-| --- | --- | --- | --- |
-| none | Save draft | `DRAFT` | Reporter |
-| none or `DRAFT` | Submit | `SUBMITTED` | Owning reporter; required content is valid |
-| `DRAFT` or unassigned `SUBMITTED` | Edit | unchanged | Owning reporter |
-| unassigned `SUBMITTED` | Withdraw | `WITHDRAWN` | Owning reporter |
-| `SUBMITTED` | Claim | `ASSIGNED` | Responder permitted for the category |
-| `SUBMITTED` | Assign | `ASSIGNED` | Administrator; responder is eligible |
-| `ASSIGNED` | Resolve | `RESOLVED` | Assigned responder or administrator; non-blank remarks |
-| `ASSIGNED` | Hand off | `SUBMITTED` | Assigned responder or administrator; queue key retained |
-| `ASSIGNED` | Reassign | `ASSIGNED` | Administrator; replacement is eligible |
-| `RESOLVED` | Reopen with follow-up | `SUBMITTED` | Owning reporter; non-blank explanation |
-
-Every successful transition produces one incident audit event:
-
-- Reopening commits its explanatory comment, transition, and audit event
-  together and starts a new queue cycle.
-- Handoff retains the current cycle's original queue position.
-- Resolution history remains append-only across reopen cycles.
-
-### Incident submission and atomic audit
-
-![Reporter incident submission sequence](diagrams/incident-submission.png)
-
-- **Submit:** `ReporterPage` submits asynchronously through
-  `IncidentService.submit(...)`, passing the form's anonymous selection. The
-  service derives the actor, authorizes and validates the request, and asks
-  `IncidentLifecycle` to create a submitted incident.
-- **Commit:** The service creates `INCIDENT_CREATED` evidence and calls
-  `IncidentStore.commit(new AuditedMutation<>(...))`. The store builds the next
-  state with the incident and audit event, saves it, and only then replaces
-  in-memory state.
-- **Outcome:** `IncidentChangedEvent` is published after commit. Validation,
-  authorization, or storage failure retains the form input and produces no
-  success event.
-
-### Reporter incident actions
-
-- **Route:** `ReporterPage` reads the authenticated user's incident rows;
-  opening a row routes through `DefaultViewFactory` to
-  `ReporterIncidentPage`. That page composes the shared detail and attachment
-  components and supplies callbacks for editing, withdrawing, and reopening.
-- **Action boundary:** The forms perform required-field feedback, then
-  delegate mutations to `IncidentService`. The service remains responsible for
-  authorization, lifecycle validation, audit evidence, and persistence.
-- **Stale state:** A stale action rejected after an incident changes triggers a
-  detail refresh. If the Reporter can still view the incident but can no longer
-  perform the action, the form retains its text as read-only until dismissed.
-- **Attachments:** The page uses the shared `AttachmentPane` and existing
-  PNG/JPEG rules; video and audio are unsupported.
-
-### Queue reads, claim, resolution, and handoff
-
-- **Queues:** `ResponderPage` reads eligible and assigned queues in
-  deterministic order. Refresh and navigation recheck the session and category
-  access; detaching the page clears content and invalidates outstanding reads.
-- **Actions:** `ResponderIncidentPage` invokes claim, resolution, and handoff
-  and refreshes from committed state.
-- **Changed access:** A responder who loses category access immediately loses
-  unassigned incidents in that category but retains incidents already assigned
-  to them until resolution, handoff, or reassignment. Claim and reassignment
-  check eligibility at mutation time, so a stale list cannot grant access.
-  An incident has at most one assignee.
-
-### Search, filtering, and presentation
-
-- **Query types:** `IncidentSearchCriteria`, `IncidentQuery`, and
-  `IncidentSort` describe queries.
-- **Matching:** Text search trims input and matches identifier, title, or
-  description case-insensitively. Values within one category/status group use
-  OR; groups combine with AND. Empty selections mean all values. Date bounds
-  are inclusive and default ordering is deterministic.
-- **Privacy boundary:** Identity filters operate only on identities the actor
-  may see. Anonymous reporters are excluded rather than recoverable through
-  counts or labels. Shared tables receive already authorized
-  `IncidentRowModel` values.
-
-### Comments, reopening, and notifications
-
-- **Comments:** `IncidentCommentService` authorizes incident access before
-  returning or adding comments. Anonymous Reporter comments use a neutral
-  author label for other roles.
-- **Reopening:** Reopening is not a separate comment followed by a transition:
-  its explanation, new queue cycle, and audit event commit together.
-- **Events:** After successful changes, the event bus lets UI and notification
-  components refresh without treating events as durable state. A failed save
-  produces no success notification or event.
-
-### Attachments
-
-- **Composition:** Use `ApplicationContext.attachments()` and compose
-  `AttachmentPane(service, savedIncidentId)` into a page. The pane is used by
-  Administrator, Reporter, and Responder incident-detail pages and must receive
-  an already persisted incident.
-- **Reading:** File reads run off the JavaFX thread. The viewer clears content
-  when session or permission changes. `AttachmentService.list/add/open` enforce
-  current authorization; `AttachmentRead` rechecks access before exposing bytes
-  and never exposes a storage URI.
-- **Adding:** Only the owning Reporter may add files to a draft or unassigned
-  submitted incident. Upload does not change lifecycle or SLO timestamps.
-  Metadata and `ATTACHMENT_ADDED` evidence commit together.
-- **Validation:** Attachments are PNG/JPEG only: at most 10 MiB each, five files
-  and 100 MiB per incident, and 40 million decoded pixels. Content is verified
-  rather than names or extensions. Generated UUID filenames are stored under
-  the data directory.
-- **Privacy and recovery:** Anonymous display models use generic names and no
-  local paths. Original bytes and metadata are preserved, so uploaders are
-  warned about possible identity leakage through image content or metadata.
-  Pending-upload markers enable targeted restart cleanup. Failed validation or
-  persistence leaves no committed metadata, success audit, or valid orphan.
-
-### Internal audit records
-
-- **Record:** Audit events contain a generated ID, application UTC timestamp,
-  actor ID and role, action, target, outcome where applicable, and structured
-  change summary. They exclude credentials, sessions, unnecessary incident
-  text, and anonymous Reporter identity.
-- **Access and history:** Account deletion preserves the actor reference and
-  normal operations cannot update or delete audit records. The web application
-  deliberately exposes no audit-history endpoint, navigation item, page, or
-  download; verification reads use repository and integration-test fixtures.
-- **Trust limit:** Recovery-safe local storage is not claimed to be
-  tamper-proof against the machine owner.
-
-### SLOs and statistics
-
-Administrators configure per-category average time-to-claim,
-time-in-progress, and reopen-rate targets. `SloConfigurationHistory` versions
-targets so later changes do not rewrite historical evaluation.
-
-- Time to claim: first assignment minus queue entry for a queue cycle.
-- Time in progress: resolution minus first assignment for a completed cycle.
-- Reopen rate: incidents reopened at least once divided by incidents resolved
-  for the selected population and period.
-
-- **Cycle handling:** Handoff retains queue-entry and first-assignment timing;
-  reopening starts a new cycle.
-- **Calculation and access:** Calculators use persisted UTC instants and handle
-  empty populations and zero durations deterministically. Statistics services
-  authorize scope and apply anonymity rules before returning results.
-
-### Local-file persistence and recovery
-
-- **Location:** The packaged JAR and classpath are read-only. Runtime data is
-  resolved through one configurable directory. `ApplicationDataDirectory`
-  checks the `incidentdesk.dataDir` system property, then
-  `INCIDENT_DESK_DATA_DIR`, then `.incident-desk` under the user's home
-  directory.
-- **Write safety:** `LocalApplicationStore` holds `incident-desk.lock` while
-  open. `RecoverySafeFile` writes and validates a temporary file, retains one
-  bounded `.bak`, and atomically replaces the canonical file where supported.
-  In-memory state changes only after durable save. Corruption or an unsupported
-  newer schema stops startup; the app does not silently reset or overwrite user
-  data.
-- **Recovery boundary:** The store exposes explicit backup restoration for
-  controlled recovery, but it is not yet an authenticated, audited application
-  workflow. Do not expose it to users until the required authorization,
-  confirmation, and audit operation are implemented. Persistence tests always
-  use fresh temporary directories.
-
-## Design considerations
-
-| Decision | Selected approach | Benefit | Trade-off or rejected alternative |
-| --- | --- | --- | --- |
-| Deployment | One desktop process and local files | Matches offline, single-user scope | No cross-device synchronization; server/database complexity is outside scope |
-| Durable state | Versioned aggregate plus attachment blobs | Cross-entity state and audit commit together | Each logical mutation rewrites the aggregate |
-| Write safety | Validated temporary file, backup, atomic replace, lock | Avoids partial canonical state and concurrent writers | More recovery logic than direct overwrite |
-| Authorization | Application policies using active session | Protects direct calls and stale screens | Repeated checks are intentional; UI-only checks were rejected |
-| Audit | Same commit as domain mutation | No successful required change without evidence | Separate append-after-save could create unaudited changes |
-| SLO targets | Versioned, prospective configuration | Historical measures retain meaning | Latest-target retroactivity is simpler but rewrites history |
-| Attachments | Verified original bytes under generated names | No lossy conversion or path disclosure | Metadata remains, requiring a privacy warning |
-| Notifications | In-memory event-driven inbox | Keeps convenience state separate from truth | History does not survive restart |
-| UI reuse | Shared typed components and presentation models | Consistency without unrestricted entities | Role pages still compose workflow-specific behavior |
-
-## Development process and testing
-
-### Automated testing strategy
-
-Tests mirror production packages. Domain, authorization, validation, lifecycle,
-audit, and SLO behavior should run without JavaFX. Use deterministic clocks and
-IDs. Persistence tests use isolated storage and verify durable state and audit
-evidence rather than returned messages.
-
-Every authorization change needs allowed and denied tests. Every lifecycle
-change needs successful and invalid states, persistence failure, audit effect,
-anonymity impact, and SLO timestamp effect where applicable.
-
-`./gradlew check` runs JUnit, `verifyShadowJar`, and
-`verifyJavaFxPlatforms`; no Checkstyle plugin is currently applied. Linux CI
-runs the full build under Xvfb. Windows and macOS jobs exercise attachments,
-startup, and packaged behavior. Automated checks do not replace interactive
-verification on a supported target platform.
-
-### Change workflow
-
-1. Read applicable `.agents/` contracts and inspect existing code.
-2. Make the smallest coherent change without moving domain rules into UI or
-   persistence code.
-3. Add success, denial, failure, and persistence tests.
-4. Run focused tests, then `check` where appropriate.
-5. Review the diff for unrelated changes, generated output, runtime data, and
-   sensitive information.
-6. Update the User Guide for observable behavior and this guide for design.
-7. Report commands run, results, skipped checks, format effects, assumptions,
-   and remaining risks.
-
-### Adding dependencies
-
-Production dependencies require approval. Record the need, prefer a maintained
-narrow-purpose library, pin its version, and verify its license.
-
-## Instructions for manual testing
-
-Use an empty disposable directory through `INCIDENT_DESK_DATA_DIR`, never real
-user data. Record OS, architecture, JDK, JAR, launch command, and result. These
-cases are a baseline, not a substitute for exploratory testing.
-
-### Launch, locking, and restart
-
-1. Launch the matching JAR. Expected: sign-in opens and runtime files appear
-   only beneath the disposable directory.
-2. Start a second process against that directory. Expected: it is refused
-   without altering canonical data.
-3. Create accounts and an incident, close, and relaunch. Expected: authorized
-   state, audit evidence, and attachments remain available.
-
-### Authentication and password change
-
-1. Register a Reporter and sign in. Expected: the Reporter shell opens.
-2. Try duplicate registration and invalid credentials. Expected: a non-secret
-   error and no session.
-3. Change the password first with an incorrect, then correct current password.
-   Expected: the first changes nothing; the second succeeds, the old password
-   fails, and no secret appears in diagnostics or audit details.
-
-### End-to-end incident flow
-
-1. As Reporter, submit a Facilities incident. Expected: it appears in the
-   Reporter's list as submitted.
-2. As Administrator, promote an account to Responder and grant Facilities.
-   Expected: the access change is effective and audited.
-3. As Responder, claim the incident. Expected: it leaves the eligible queue,
-   enters the assigned queue, and cannot be claimed by another Responder.
-4. Resolve first with blank, then non-blank remarks. Expected: blank input is
-   rejected without change; valid input resolves and is audited.
-5. As Reporter, inspect it. Expected: status and resolution are visible.
-
-### Authorization denial
-
-1. As another Reporter, locate or open the first Reporter's incident. Expected:
-   it is absent and direct access matches a missing identifier.
-2. As a Responder without Facilities, list/open/claim it. Expected: all fail.
-3. Remove a category from a Responder with an assigned incident. Expected: no
-   new claims, but the assigned incident remains resolvable or handoff-capable.
-
-### Handoff, reopen, and queue order
-
-1. Submit two incidents, claim the older, then hand it off. Expected: assignee
-   clears and the incident returns to its original relative queue position.
-2. Try reopening a resolved incident with blank, then non-blank explanation.
-   Expected: blank input changes nothing; valid input appends the comment and
-   starts a new queue cycle at reopen time.
-
-### Anonymous privacy
-
-Use the production Reporter form's **Submit anonymously** checkbox to create a
-test report. The application retains the owner's internal reference so the
-reporter can track it, but normal incident views must not reveal that identity.
-
-1. Inspect an anonymous incident as owner, eligible Responder, and Administrator.
-   Expected: the owner has access; other roles see `Anonymous reporter` and
-   cannot recover identity through details, comments, filters, statistics,
-   audit labels, notifications, or attachment names.
-2. Reopen with a follow-up. Expected: other roles see its text with a neutral
-   anonymous author label.
-
-### Attachments
-
-1. Add a valid PNG/JPEG through an exposed workflow. Expected: only currently
-   authorized users can list and open it.
-2. Try an oversized image, renamed video, unsupported type, excessive pixels,
-   sixth attachment, and aggregate overflow. Expected: rejection without
-   metadata, success audit, or visible orphan.
-3. Log out while viewing an image. Expected: the viewer clears and prior access
-   cannot expose bytes in the new session.
-
-### Internal audit verification, SLOs, and statistics
-
-1. Run the audit persistence tests for registration, access change, submission,
-   claim, handoff, and resolution. Expected: deterministic records, required
-   changes, and no secrets or duplicated anonymous display identity.
-2. Configure SLOs, complete a cycle, change targets, and complete another.
-   Expected: each cycle uses its applicable target version; display time zones
-   do not alter elapsed durations.
-3. Filter statistics containing an anonymous incident. Expected: no identity
-   or identifying breakdown is exposed.
-
-### Storage failure and corruption
-
-Use disposable copies only.
-
-1. Simulate save failure during a mutation. Expected: failure, unchanged
-   in-memory/canonical state, and no success audit or event.
-2. Corrupt the canonical aggregate and restart. Expected: startup stops with a
-   recovery-oriented error and does not reset or overwrite the file.
-3. Exercise `restoreLastKnownGoodBackup()` only in a disposable developer test.
-   Expected: the validated backup replaces canonical state. Do not present this
-   as a production user workflow until authorization and audit are added.
-
-## Known limitations and planned work
-
-- The Reporter form can submit anonymously, but this is application-level
-  confidentiality, not cryptographic anonymity against the local data owner.
-- Responder dashboard lacks the full filters, interactive sorting, and SLO
-  column.
-- Notification history is in-memory and does not survive restart.
-- Backup restoration exists at the storage layer but is not yet an
-  authenticated, audited application workflow.
-- The attachment-compatibility subsection of the
-  [persistence contract](https://github.com/CS3227-2610-MP2-IncidentAssistant/CS3227-2610-MP2/blob/main/.agents/persistence.md)
-  still
-  describes a schema-2 migration, while the current codec and attachment
-  implementation keep the aggregate at schema version 1. Resolve that
-  authoritative-contract mismatch before changing the persisted format.
-- Windows development supports x86_64 only. Apple Silicon uses a separate JAR.
-- The build does not enforce Checkstyle or another Java static-style plugin.
-- Server/database deployment, concurrent writers, cross-device sync,
-  deanonymization, and video/audio attachments are outside approved scope.
-
-Before implementing a planned item, update its authoritative contract,
-implementation, tests, User Guide, and this guide together. This list does not
-grant new permissions.
-
-## Product requirements summary
-
-### Product scope
-
-Incident Desk provides a local workflow for reporting and resolving company
-incidents. Reporters track their cases, Responders work within permitted
-categories, and Administrators govern access and operational oversight. It is a
-privacy-aware, auditable desktop system that requires no server deployment.
-
-### Principal user stories
-
-| Role | Need |
-| --- | --- |
-| Reporter | Register, sign in, submit, and track only incidents they submitted |
-| Reporter | Add permitted images before assignment and understand privacy risks |
-| Reporter | Withdraw an unassigned incident or reopen an inadequate resolution |
-| Responder | See and claim unassigned incidents only in permitted categories |
-| Responder | Resolve or hand off incidents assigned to them |
-| Administrator | Review incidents and accounts, and manage SLOs and statistics |
-| Administrator | Approve promotion and control Responder category access |
-
-### Principal use cases
-
-**Submit:** an authenticated Reporter supplies required content; the application
-derives the actor, validates it, and commits the incident and audit together.
-Failure leaves no partial incident or success audit.
-
-**Claim and resolve:** an eligible Responder selects an incident; eligibility is
-rechecked before assignment. The assigned Responder supplies non-blank remarks,
-and resolution plus audit commit together. Stale screens grant no authority.
-
-**Administer access:** an Administrator approves/rejects promotion or changes
-categories. State and audit commit together, and subsequent operations use the
-new permissions immediately.
-
-### Non-functional requirements
-
-- Run as a Java 25 desktop application distributed as executable Shadow JARs.
-- Preserve canonical state and required audit evidence across restart.
-- Refuse concurrent writers to one data directory.
-- Keep JavaFX responsive during storage and attachment work.
-- Enforce authorization outside UI controls.
-- Preserve anonymous confidentiality across all presentation paths.
-- Use application UTC timestamps and deterministic calculations.
-- Recover from interrupted writes without silently destroying user data.
-- Isolate tests from real data and keep secrets out of logs and audit details.
-
-## Glossary
-
-| Term | Meaning |
-| --- | --- |
-| Application-data directory | Configurable directory containing canonical state, lock, backup, attachments, and recovery files |
-| Assignment | The single Responder currently responsible for an incident |
-| Audit event | Append-only evidence of a sensitive or incident-changing operation |
-| Canonical file | `incident-desk.dat`, the authoritative aggregate-state file |
-| Handoff | Clear an assignee and return an incident to its original queue position |
-| Presentation model | Role-appropriate, privacy-safe data supplied to UI components |
-| Queue cycle | Submission/reopen to first assignment; handoff does not start a new cycle |
-| Resolution cycle | Assignment-through-resolution history for one handling cycle |
-| SLO | Service-level objective calculated from persisted timestamps and versioned targets |
-| Tombstoned account | Disabled account whose ID remains for historical references |
-| UTC instant | Time-zone-independent persisted time, converted only for display |
-
-## Acknowledgements
-
-Diagrams use [PlantUML](https://plantuml.com/). The project uses
-[JavaFX](https://openjfx.io/), [Gradle](https://gradle.org/), the
-[Shadow plugin](https://gradleup.com/shadow/),
-[JUnit 5](https://junit.org/junit5/), and
-[GitHub Actions](https://docs.github.com/actions). Add any further reused ideas,
-code, assets, or documentation before submission.
+| MP2 Java production source files | 278 |
+| MP3 Java and frontend production source files | 373 |
+| Files unchanged at the same path, by Git blob identity | 271 (72.7% of MP3 files) |
+| Bytes in those unchanged files | 672,438 of 1,410,226 bytes (47.7%) |
+
+Scope: `.java` files under `src/main/java/` and `.ts`, `.tsx` and `.css` files
+under `frontend/src/`, excluding frontend test files and its test directory.
+Use `git ls-tree -r -l <commit>` to obtain each path, blob ID and byte size;
+match paths and identical blob IDs between the two snapshots. Percentages divide
+unchanged file counts or bytes by the corresponding MP3 total. Tests, resources,
+dependencies, generated output and documentation are excluded. This measures
+exactly retained source, including legacy desktop code; it is not a percentage
+of the deployed web execution path. Modified files can also reuse MP2 logic,
+which this conservative measurement does not count as unchanged.
+
+The implementation depends on Spring Boot/Security/Session, PostgreSQL, Flyway,
+Jackson, AWS SDK, React, Vite, TypeScript, Vitest, Testing Library, JUnit, JavaFX,
+Gradle and Shadow, as declared in [build.gradle](../build.gradle) and
+[frontend/package.json](../frontend/package.json). Neon provides external
+database/storage integration; Google Cloud Run hosts the container; SoCLaaS supplies
+LLM access. Course AI-security and SDD guidance informs the workflow and safeguards.
+The team's canonical requirements and policies are under [`.agents/`](../.agents/),
+and development interaction summaries are retained under [`logs/`](../logs/).
+Record any additional reused code, assets or external ideas with their actual
+source and licence when introducing them. Retained MP2 website assets and links
+must not be represented as screenshots of the MP3 web client.
