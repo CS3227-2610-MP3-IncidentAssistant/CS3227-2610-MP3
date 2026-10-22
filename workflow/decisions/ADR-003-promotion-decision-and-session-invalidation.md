@@ -1,13 +1,14 @@
 # ADR-003: Promotion Decision Persistence and Session Invalidation
 
-Status: **Proposed — product-owner approved on 2026-10-22; independent
-security/architecture review remains pending. Existing implementation is
-provisional until verified against this decision.**
+Status: **Accepted — product-owner and independent security/architecture
+approval recorded on 2026-10-22. Implementation verification remains governed
+by the promotion journey acceptance criteria.**
 
 - Date: 2026-10-19
 - Product owner: repository user, approved in the current Codex chat on
   2026-10-22
-- Independent security/architecture decider: pending
+- Independent security/architecture decider: repository user, approved in the
+  current Codex chat on 2026-10-22
 
 ## Context
 

@@ -1,8 +1,8 @@
 # Reporter-to-Responder Promotion Journey
 
-Status: **Product-owner approved on 2026-10-22 — implementation exists on
-`main`, but independent security/architecture approval remains pending.
-Existing code and tests are provisional until verified against this revision.**
+Status: **Product-owner, security/architecture, and implementation review
+approved by the repository user on 2026-10-22. Verification evidence and the
+remaining acceptance criteria are still pending.**
 
 This specification governs the complete Reporter-to-Responder promotion
 journey across Reporter request and history, Administrator review and decision,
@@ -290,8 +290,12 @@ Current record:
   current Codex chat on 2026-10-22 and recorded in
   [`reviews/2026-10-22-promotion-journey-specification.md`](reviews/2026-10-22-promotion-journey-specification.md).
 - Independent security/architecture approval of this revision and ADR-003:
-  pending.
-- Independent implementation review: pending.
+  repository user, approved in the current Codex chat on 2026-10-22 and
+  recorded in
+  [`reviews/2026-10-22-promotion-journey-specification.md`](reviews/2026-10-22-promotion-journey-specification.md).
+- Independent implementation review of commit `c146284`: repository user,
+  approved in the current Codex chat on 2026-10-22 and recorded in the same
+  review record.
 
 No acceptance criterion is checked until reproducible evidence is recorded and
 linked here. Agent-authored specification text does not satisfy a human
