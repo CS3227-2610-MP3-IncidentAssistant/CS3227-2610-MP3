@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -61,7 +62,9 @@ public final class SecuredAiGateway implements AutoCloseable {
             }
             var ticket = control.admit(actor, request.feature(), settings.model(), (int) input,
                     settings.maxOutputTokens(), settings.revision());
-            Suggestion result = dispatch(ticket, prepared);
+            BooleanSupplier deliveryAllowed = request instanceof AiRequest.ResponderIncident target
+                    ? () -> selector.responderMayView(actor, target.incidentId()) : () -> true;
+            Suggestion result = dispatch(ticket, prepared, deliveryAllowed);
             outcome = "SUCCESS";
             return result;
         } catch (AiUsageException safe) {
@@ -91,7 +94,8 @@ public final class SecuredAiGateway implements AutoCloseable {
         return actors.getFirst();
     }
 
-    private Suggestion dispatch(AiGatewayControl.Ticket ticket, AiPromptBuilder.Prepared prepared) {
+    private Suggestion dispatch(AiGatewayControl.Ticket ticket, AiPromptBuilder.Prepared prepared,
+            BooleanSupplier deliveryAllowed) {
         Future<SoclaasClient.Completion> pending = null;
         SoclaasClient.Completion completion = null;
         SoclaasException error = null;
@@ -115,6 +119,11 @@ public final class SecuredAiGateway implements AutoCloseable {
         // Persist a terminal audit even on caller interruption, then restore cancellation for the enclosing web request.
         interrupted |= Thread.interrupted();
         try {
+            if (completion != null && error == null) {
+                try {
+                    if (!deliveryAllowed.getAsBoolean()) { error = failure(SoclaasException.Category.AI_REJECTED); }
+                } catch (RuntimeException unsafe) { error = failure(SoclaasException.Category.AI_UNAVAILABLE); }
+            }
             var terminal = control.finish(ticket, completion == null ? null : completion.usage(), error);
             if (terminal != null) { throw failure(terminal); }
             if (completion == null) { throw failure(SoclaasException.Category.AI_UNAVAILABLE); }

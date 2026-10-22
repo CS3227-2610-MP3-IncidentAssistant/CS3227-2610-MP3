@@ -13,6 +13,7 @@ import {
   loadResponderIncidentDetail,
   claimResponderIncident,
   resolveResponderIncident,
+  requestResponderAdvice,
   ResponderQueueError,
   type ResponderIncidentDetail,
   type ResponderQueuePage,
@@ -642,6 +643,7 @@ function ResponderDetailContent({ state, claimState, resolveState, onRetry, onCl
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>
       </section>
+      <ResponderAdvice key={detail.id} incidentId={detail.id} />
       <AttachmentList
         attachments={detail.attachments ?? []}
         prefix="responder"
@@ -695,6 +697,7 @@ function AssignedIncidentDetail({ detail, resolveState, onResolve }: {
         <h3 id="responder-description-heading">Description</h3>
         <p>{detail.description}</p>
       </section>
+      <ResponderAdvice key={detail.id} incidentId={detail.id} />
       <AttachmentList
         attachments={detail.attachments ?? []}
         prefix="responder"
@@ -719,6 +722,49 @@ function AssignedIncidentDetail({ detail, resolveState, onResolve }: {
     </section>
   )
 }
+
+function ResponderAdvice({ incidentId }: { incidentId: string }) {
+  const [state, setState] = useState<{ kind: 'idle' | 'pending' | 'ready' | 'error'; text?: string }>({ kind: 'idle' })
+  const pending = useRef<AbortController | null>(null)
+  useEffect(() => () => { pending.current?.abort() }, [])
+
+  async function requestAdvice() {
+    if (pending.current) return
+    const controller = new AbortController()
+    pending.current = controller
+    setState({ kind: 'pending' })
+    try {
+      const text = await requestResponderAdvice(incidentId, controller.signal)
+      if (!controller.signal.aborted) setState({ kind: 'ready', text })
+    } catch {
+      if (!controller.signal.aborted) setState({ kind: 'error' })
+    } finally {
+      if (pending.current === controller) pending.current = null
+    }
+  }
+
+  function cancel() {
+    pending.current?.abort()
+    pending.current = null
+    setState({ kind: 'idle' })
+  }
+
+  return <section className="responder-detail__advice" aria-labelledby="responder-advice-heading">
+    <h3 id="responder-advice-heading">AI incident assistance</h3>
+    <p>Request an AI-generated summary and suggested investigation steps. Review the advice before acting.</p>
+    <button className="secondary-button" type="button" aria-disabled={state.kind === 'pending'} onClick={() => void requestAdvice()}>
+      {state.kind === 'pending' ? 'Preparing advice…' : state.kind === 'error' ? 'Try again' : 'Request AI advice'}
+    </button>
+    {state.kind === 'pending' && <><p role="status">Preparing advice…</p>
+      <button className="secondary-button" type="button" onClick={cancel}>Cancel request</button></>}
+    {state.kind === 'error' && <p role="alert">AI advice is unavailable. You can continue handling this incident.</p>}
+    {state.kind === 'ready' && <div role="status">
+      <p><strong>AI-generated suggestion</strong> · Advisory only</p>
+      <p className="responder-detail__advice-text">{state.text}</p>
+    </div>}
+  </section>
+}
+
 
 function toggleValue<T extends string>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((current) => current !== value) : [...values, value]

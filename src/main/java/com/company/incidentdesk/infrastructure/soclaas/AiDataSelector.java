@@ -11,14 +11,21 @@ import com.company.incidentdesk.domain.incident.IncidentStatus;
 /** Trusted role integrations must authorize and select consistently from canonical data. Defaults deny. */
 public interface AiDataSelector {
     default Optional<ResponderData> responder(UUID actor, UUID incident) { return Optional.empty(); }
+    default boolean responderMayView(UUID actor, UUID incident) { return false; }
     default Optional<List<Trend>> administrator(UUID actor, Instant from, Instant until) { return Optional.empty(); }
 
     record ResponderData(UUID incidentId, IncidentCategory category, String title, String description,
-            IncidentStatus state, Instant createdAt, long assignmentAgeSeconds, boolean sloOverdue) {
+            IncidentStatus state, Instant createdAt, Stage stage, long stageElapsedSeconds, SloState sloState) {
+        public enum Stage { QUEUE, IN_PROGRESS }
+        public enum SloState { WITHIN_TARGET, OVERDUE, NOT_APPLICABLE }
         public ResponderData {
             AiRequest.text(title, 200);
             AiRequest.text(description, 10000);
-            if (incidentId == null || category == null || state == null || createdAt == null || assignmentAgeSeconds < 0) {
+            if (incidentId == null || category == null || state == null || createdAt == null
+                    || stage == null || sloState == null || stageElapsedSeconds < 0
+                    || (state == IncidentStatus.SUBMITTED && stage != Stage.QUEUE)
+                    || (state == IncidentStatus.ASSIGNED && stage != Stage.IN_PROGRESS)
+                    || (state != IncidentStatus.SUBMITTED && state != IncidentStatus.ASSIGNED)) {
                 throw new SoclaasException(SoclaasException.Category.AI_REJECTED);
             }
         }

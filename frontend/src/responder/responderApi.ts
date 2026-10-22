@@ -79,6 +79,28 @@ export class ResponderQueueError extends Error {
   }
 }
 
+export async function requestResponderAdvice(incidentId: string, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted()
+  const headers = new Headers({ Accept: 'application/json' })
+  const csrfToken = readCsrfToken()
+  if (csrfToken) headers.set('X-XSRF-TOKEN', csrfToken)
+  const response = await fetch(`/api/v1/responder/incidents/${encodeURIComponent(incidentId)}/ai/advice`, {
+    method: 'POST', credentials: 'same-origin', cache: 'no-store', headers, signal,
+  })
+  signal.throwIfAborted()
+  if (response.ok) {
+    const result = await response.json() as { advice?: unknown }
+    if (typeof result.advice === 'string' && result.advice.length > 0 && result.advice.length <= 16384) {
+      return result.advice
+    }
+    throw new ResponderQueueError('service')
+  }
+  const error = await response.json().catch(() => null) as { code?: unknown } | null
+  if (response.status === 401 || error?.code === 'SECURITY_SESSION_EXPIRED') throw new ResponderQueueError('session')
+  if (response.status === 403 || response.status === 404) throw new ResponderQueueError('denied')
+  throw new ResponderQueueError('service')
+}
+
 export async function loadResponderQueue(
   query: ResponderQueueQuery,
   signal: AbortSignal,
