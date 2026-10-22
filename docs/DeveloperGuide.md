@@ -75,7 +75,7 @@ on port 8080. A normal Gradle build embeds the frontend production assets in
 | `INCIDENT_DESK_NEON_REQUIRED` | Fail startup when the required production database/storage configuration is missing |
 | `INCIDENT_DESK_SECURE_COOKIES` | Keep `true` for HTTPS; use `false` only for local HTTP |
 | `INCIDENT_DESK_BOOTSTRAP_ADMIN_LOGIN`, `INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD` | One-time first-Administrator provisioning; remove both after successful bootstrap |
-| `AI_ENABLED`, `SOCLAAS_API_KEY`, `SOCLAAS_MODEL` | Enable and configure backend-only AI access; AI defaults to disabled |
+| `AI_ENABLED`, `SOCLAAS_API_KEY`, `SOCLAAS_MODEL` | Enable and configure backend-only AI access; AI defaults to disabled. In production the key is a Google Secret Manager reference, while the switch and model are Cloud Run settings, not GitHub configuration |
 | `AI_CONFIGURATION_REVISION`, `AI_*` limits | Shared configuration fencing and downward-only resource controls; see `.env.example` |
 
 The backend's database-dependent services require a configured data source.

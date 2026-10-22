@@ -45,6 +45,15 @@ The checked-in deployment workflow does not provision the first Administrator
 bootstrap secrets. Production bootstrap therefore requires a separately
 approved secret-store procedure; see `docs/AdministratorBootstrap.md`.
 
+Application runtime configuration is owned by Cloud Run, not by the GitHub
+Actions workflow. Store credential-bearing values such as `SOCLAAS_API_KEY` in
+Google Secret Manager and expose them to the runtime service account through a
+Cloud Run secret reference. Configure non-secret AI settings such as
+`AI_ENABLED`, `SOCLAAS_MODEL`, `AI_CONFIGURATION_REVISION`, and approved
+downward-only limits directly on Cloud Run. GitHub environment variables remain
+limited to non-secret deployment identifiers; neither GitHub variables nor
+GitHub secrets are the source of production application configuration.
+
 ## Operations
 
 - Production logs go to the hosting platform or another approved store and

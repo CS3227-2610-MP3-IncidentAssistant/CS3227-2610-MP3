@@ -157,15 +157,87 @@ short-lived credential only for an eligible job.
 ## 7. Configure runtime secrets separately
 
 Before the first real application deployment, store the production
-`DATABASE_URL` and Object Storage credentials in Google Secret Manager and
-configure Cloud Run to reference them. Do not put these values in the GitHub
-environment. Set these non-secret production values directly on Cloud Run as
-well:
+`DATABASE_URL`, Object Storage credentials, and `SOCLAAS_API_KEY` in Google
+Secret Manager and configure Cloud Run to reference them. Do not put these
+values in the GitHub environment. Set non-secret production values directly on
+Cloud Run as well:
 
 - `INCIDENT_DESK_NEON_REQUIRED=true`
 - `INCIDENT_DESK_SECURE_COOKIES=true`
 - `INCIDENT_DESK_ATTACHMENT_BUCKET=incident-attachments`
 - `AI_ENABLED=false` until the AI production gate is approved
+- `SOCLAAS_MODEL` to the approved production model
+- `AI_CONFIGURATION_REVISION=1`, incremented after a key/model repair or
+  rotation
+
+The split is intentional: GitHub knows how to deploy, Secret Manager owns
+credentials, and Cloud Run owns application runtime configuration. The workflow
+deploys a new image without passing any of these values, so later revisions
+inherit the service configuration unless an operator explicitly changes it.
+
+### Configure the SoCLaaS key and AI settings
+
+Create `incidentdesk-soclaas-api-key` in **Google Cloud Console → Security →
+Secret Manager** and add the production key as its first version. Do not reuse a
+development/test credential, paste the key into a shell argument, or capture the
+value in screenshots. Record only the numeric enabled version shown by Secret
+Manager.
+
+Then attach that version and the non-secret settings from the authenticated
+administrator workstation. These commands deliberately leave AI disabled:
+
+```powershell
+$AiSecretName = 'incidentdesk-soclaas-api-key'
+$AiSecretVersion = 'REPLACE_WITH_NUMERIC_ENABLED_VERSION'
+$SoclaasModel = 'REPLACE_WITH_APPROVED_MODEL'
+$AiConfigurationRevision = '1'
+
+gcloud secrets add-iam-policy-binding $AiSecretName `
+  --project=$GcpProjectId `
+  --member="serviceAccount:$RuntimeServiceAccount" `
+  --role='roles/secretmanager.secretAccessor'
+
+gcloud run services update $CloudRunService `
+  --project=$GcpProjectId `
+  --region=$GcpRegion `
+  --update-secrets="SOCLAAS_API_KEY=$AiSecretName`:$AiSecretVersion" `
+  --update-env-vars="AI_ENABLED=false,SOCLAAS_MODEL=$SoclaasModel,AI_CONFIGURATION_REVISION=$AiConfigurationRevision"
+```
+
+Read the service back without accessing the secret value:
+
+```powershell
+gcloud run services describe $CloudRunService `
+  --project=$GcpProjectId `
+  --region=$GcpRegion `
+  --format='yaml(spec.template.spec.serviceAccountName,spec.template.spec.containers[0].env)'
+```
+
+Confirm that `SOCLAAS_API_KEY` is a secret reference to the intended numeric
+version, the runtime service account is correct, and `AI_ENABLED` is still
+`false`. Never put the describe output in public evidence if it contains other
+configuration that has not been reviewed for disclosure.
+
+Only after the AI specification/security approvals, production model and quota
+checks, and release authorization are recorded should an operator enable it:
+
+```powershell
+gcloud run services update $CloudRunService `
+  --project=$GcpProjectId `
+  --region=$GcpRegion `
+  --update-env-vars='AI_ENABLED=true'
+```
+
+Verify startup, `/health`, one authorized AI path per role, denial paths, safe
+logs/audit metadata, and the non-AI fallback before recording deployed evidence.
+If verification fails, set `AI_ENABLED=false` immediately; do not remove or
+alter incident-management configuration to make AI start.
+
+For rotation, add a new Secret Manager version, update the Cloud Run reference
+to that numeric version, and increment `AI_CONFIGURATION_REVISION`. Verify the
+new revision before disabling the old secret version. Google recommends Secret
+Manager for Cloud Run credentials and recommends pinning environment-variable
+secret references to a version rather than `latest`.
 
 Do not paste secret values into `gcloud` command arguments, GitHub variables,
 tickets, screenshots, or evidence. The first Administrator bootstrap remains a

@@ -39,13 +39,16 @@ The GitHub `production` environment supplies these non-secret variables:
 - `GCP_DEPLOY_SERVICE_ACCOUNT`
 - `GCP_RUNTIME_SERVICE_ACCOUNT`
 
-Sensitive runtime database and Object Storage values are stored in Google
-Secret Manager and exposed to Cloud Run through secret references. Non-secret
-runtime settings are configured directly on Cloud Run. They are not GitHub
-environment variables or secrets. AI stays disabled, and bootstrap values
-remain a separate procedure. The deployment workflow changes the image and
-declared deployment metadata without printing, copying, or replacing runtime
-values.
+Sensitive runtime database, Object Storage, and SoCLaaS credential values are
+stored in Google Secret Manager and exposed to Cloud Run through secret
+references. Secret-backed environment variables pin a numeric enabled secret
+version rather than `latest`. Non-secret runtime settings, including
+`AI_ENABLED`, `SOCLAAS_MODEL`, `AI_CONFIGURATION_REVISION`, and any approved
+downward-only AI limits, are configured directly on Cloud Run. They are not
+GitHub environment variables or secrets. AI stays disabled until its separate
+production enablement gate is approved, and bootstrap values remain a separate
+procedure. The deployment workflow changes the image and declared deployment
+metadata without printing, copying, or replacing runtime values.
 
 ## Failure and recovery
 
@@ -69,6 +72,7 @@ values.
 | `.agents/deployment.md` CI/CD 6 | CR-CD-04 | `deploy.yml` health step | Successful deployed check |
 | `.agents/security.md` configuration | CR-CD-02, CR-CD-05 | OIDC, environment variables, runbook | Settings review without values |
 | `.agents/testing.md` deployment | CR-CD-01, CR-CD-04, CR-CD-06 | build, health, later role smoke tests | Automated and manual evidence |
+| `.agents/ai-policy.md` provider configuration | CR-CD-05, CR-CD-08 | Secret Manager reference, Cloud Run settings, runbook | Sanitized service configuration and runtime-IAM review |
 
 ## Acceptance criteria
 
@@ -93,13 +97,19 @@ values.
 - [ ] **CR-CD-07:** A failed candidate revision preserves the last working
   revision and production data; rollback/forward-fix follows the documented
   operator decision and does not reverse database migrations.
+- [ ] **CR-CD-08:** The deployed service obtains `SOCLAAS_API_KEY` from a
+  numeric-version Google Secret Manager reference accessible only to the
+  runtime identity. Its non-secret AI switch, model, configuration revision,
+  and approved limits are Cloud Run runtime settings, while GitHub contains
+  neither the key nor application runtime configuration.
 
 ## Verification evidence
 
 - Repository-only: pending after workflow and documentation validation.
 - GitHub Actions: pending authenticated run.
-- Manual/deployed: runtime secret references are configured; application image,
-  Neon connectivity, `/health`, rollback, and three-role smoke verification are
-  pending.
+- Manual/deployed: database and Object Storage runtime secret references are
+  configured. The SoCLaaS secret reference and non-secret AI runtime settings,
+  application image, Neon connectivity, `/health`, rollback, and three-role
+  smoke verification are pending.
 - Architecture/security reviewer: pending.
 - Release approver/date: pending.
