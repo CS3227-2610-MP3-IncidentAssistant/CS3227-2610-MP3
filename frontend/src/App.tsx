@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminDashboard } from './admin/AdminDashboard'
+import { AdministratorIncidentDetail } from './admin/AdministratorIncidentDetail'
 import { AdminShell } from './admin/AdminShell'
 import { AdministratorAccounts } from './admin/AdministratorAccounts'
 import { AdministratorSloConfiguration } from './admin/AdministratorSloConfiguration'
@@ -9,6 +10,7 @@ import {
   logout,
   registerAccount,
   roleLogin,
+  type SessionRefresher,
   type SessionState,
 } from './api'
 import { useServiceHealth } from './health/useServiceHealth'
@@ -54,7 +56,7 @@ export function App() {
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
       >
-        <AdminDashboard />
+        <AdministratorIncidentWorkspace refreshSession={sessionState.refresh} />
       </AdminShell>
     )
   }
@@ -332,6 +334,28 @@ function SessionFailure({ onRetry }: { onRetry: () => void }) {
         <p>The service could not check your session. No protected data was loaded.</p>
         <button className="primary-button" type="button" onClick={onRetry}>Try again</button>
       </section>
+    </main>
+  )
+}
+
+/**
+ * Switches the Administrator workspace between the incident list and one
+ * incident's detail. Selecting an incident carries only its identifier; the
+ * detail view loads its own authorized representation from the server.
+ */
+function AdministratorIncidentWorkspace({ refreshSession }: { refreshSession: SessionRefresher }) {
+  const [openIncidentId, setOpenIncidentId] = useState<string | null>(null)
+
+  if (openIncidentId === null) {
+    return <AdminDashboard onOpenIncident={setOpenIncidentId} />
+  }
+  return (
+    <main id="main-content" className="content">
+      <AdministratorIncidentDetail
+        incidentId={openIncidentId}
+        onBack={() => setOpenIncidentId(null)}
+        refreshSession={refreshSession}
+      />
     </main>
   )
 }

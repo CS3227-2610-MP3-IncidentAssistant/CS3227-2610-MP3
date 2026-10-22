@@ -1,4 +1,10 @@
 import { readCsrfToken } from './shared/csrf'
+import type {
+  IncidentAttachmentEntry,
+  IncidentCommentEntry,
+  IncidentResolutionEntry,
+  IncidentSloProgress,
+} from './shared/incident/incidentDetail'
 
 export type SessionState = {
   authenticated: boolean
@@ -298,6 +304,117 @@ export async function loadDashboard(search: string, page: number, signal: AbortS
 
 export async function loadSloConfiguration(signal?: AbortSignal): Promise<SloConfiguration> {
   return requestJson<SloConfiguration>('/api/v1/admin/slo', { signal })
+}
+
+export type AdministratorIncidentDetail = {
+  id: string
+  version: number
+  title: string
+  description: string
+  category: IncidentCategory
+  status: string
+  anonymous: boolean
+  reporterLabel: string
+  assigneeLabel: string | null
+  createdAt: string | null
+  submittedAt: string | null
+  withdrawnAt: string | null
+  queueEnteredAt: string | null
+  firstAssignedAt: string | null
+  latestAssignedAt: string | null
+  slo: IncidentSloProgress | null
+  resolutionHistory: IncidentResolutionEntry[]
+  comments: IncidentCommentEntry[]
+  attachments: IncidentAttachmentEntry[]
+  eligibleResponders: EligibleResponder[]
+}
+
+export type EligibleResponder = {
+  id: string
+  loginName: string
+}
+
+export async function loadAdministratorIncidentDetail(
+  incidentId: string,
+  signal?: AbortSignal,
+): Promise<AdministratorIncidentDetail> {
+  return requestJson<AdministratorIncidentDetail>(
+    `/api/v1/admin/incidents/${encodeURIComponent(incidentId)}`,
+    { signal, cache: 'no-store' },
+  )
+}
+
+/**
+ * The mutation helpers below send an `expectedVersion` the server rechecks
+ * under lock, plus a caller-generated `requestId` the server uses as an
+ * idempotency key. A repeated request with the same id adds no second record.
+ */
+export async function addAdministratorIncidentComment(
+  incidentId: string,
+  requestId: string,
+  text: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/comments`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId, text }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The comment could not be added. Refresh and try again.',
+  })
+}
+
+export async function assignAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  responderId: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/assignment`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion, responderId }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The assignment could not be saved. Refresh and try again.',
+  })
+}
+
+export async function unassignAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/unassign`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The incident could not be unassigned. Refresh and try again.',
+  })
+}
+
+export async function resolveAdministratorIncident(
+  incidentId: string,
+  expectedVersion: number,
+  requestId: string,
+  remarks: string,
+  refreshSession: SessionRefresher,
+): Promise<void> {
+  await csrfRequest(`/api/v1/admin/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion, requestId, remarks }),
+  }, refreshSession, {
+    authenticationRequired: true,
+    fallbackMessage: 'The incident could not be resolved. Refresh and try again.',
+  })
 }
 
 export async function loadAdministratorStatistics(

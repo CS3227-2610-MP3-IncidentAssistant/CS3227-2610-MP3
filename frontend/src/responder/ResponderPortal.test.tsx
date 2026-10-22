@@ -198,7 +198,7 @@ describe('Responder incident queue', () => {
     expect(screen.getByRole('link', { name: 'Attachment 1 (PNG)' })).toHaveAttribute(
       'href', `/api/v1/responder/incidents/${detail.id}/attachments/60000000-0000-0000-0000-000000000002`,
     )
-    expect(screen.getByRole('heading', { name: 'Previous resolutions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Resolution history' })).toBeInTheDocument()
     expect(screen.getByText('Previous resolution text is rendered as text.')).toBeInTheDocument()
     expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/v1/responder/incidents/${detail.id}`)
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' })

@@ -106,6 +106,65 @@ describe('web authentication and administrator slice', () => {
     expect(await screen.findByText('No incidents match')).toBeInTheDocument()
   })
 
+  it('opens an incident detail from the administrator dashboard and returns to the list', async () => {
+    const incidentId = '30000000-0000-0000-0000-000000000009'
+    const populatedDashboard = {
+      ...emptyDashboard,
+      incidents: [{
+        id: incidentId,
+        title: 'Lift stuck between floors',
+        category: 'FACILITIES',
+        status: 'SUBMITTED',
+        reporterLabel: 'Anonymous reporter',
+        assigneeLabel: null,
+        createdAt: '2026-10-20T08:00:00Z',
+      }],
+      totalElements: 1,
+    }
+    const detail = {
+      id: incidentId,
+      version: 3,
+      title: 'Lift stuck between floors',
+      description: 'Trapped between two and three.',
+      category: 'FACILITIES',
+      status: 'SUBMITTED',
+      anonymous: true,
+      reporterLabel: 'Anonymous reporter',
+      assigneeLabel: null,
+      createdAt: '2026-10-20T08:00:00Z',
+      submittedAt: '2026-10-20T08:01:00Z',
+      withdrawnAt: null,
+      queueEnteredAt: '2026-10-20T08:01:00Z',
+      firstAssignedAt: null,
+      latestAssignedAt: null,
+      slo: null,
+      resolutionHistory: [],
+      comments: [],
+      attachments: [],
+      eligibleResponders: [],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/health') return response({ status: 'UP' })
+      if (url === '/api/v1/auth/session') return response(administratorSession)
+      if (url.startsWith('/api/v1/admin/dashboard')) return response(populatedDashboard)
+      if (url === `/api/v1/admin/incidents/${incidentId}`) return response(detail)
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Lift stuck between floors' }))
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Lift stuck between floors' })).toBeInTheDocument()
+    expect(screen.getByText('Trapped between two and three.')).toBeInTheDocument()
+    // The anonymous reporter is never deanonymized in the detail view.
+    expect(screen.getAllByText('Anonymous reporter').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Company incident overview' })).toBeInTheDocument()
+  })
+
   it('uses a generic message when administrator authentication is rejected', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
