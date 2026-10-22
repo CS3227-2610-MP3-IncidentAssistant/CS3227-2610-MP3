@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** PostgreSQL implementation that aggregates persisted lifecycle-cycle snapshots. */
 @Repository
 @ConditionalOnBean(DataSource.class)
-final class JdbcAdministratorStatisticsStore implements AdministratorStatisticsStore {
+class JdbcAdministratorStatisticsStore implements AdministratorStatisticsStore {
     private static final String DELETED_ACCOUNT_LABEL = "Deleted account";
     private static final System.Logger LOGGER = System.getLogger(JdbcAdministratorStatisticsStore.class.getName());
 

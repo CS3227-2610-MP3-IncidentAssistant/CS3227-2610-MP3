@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AdminShell } from './AdminShell'
 
@@ -13,6 +13,7 @@ describe('Administrator shell navigation', () => {
         onLogout={vi.fn(async () => undefined)}
         serviceHealth="available"
         sloContent={<div>SLO content</div>}
+        statisticsContent={<div>Statistics content</div>}
       >
         <div>Dashboard content</div>
       </AdminShell>,
@@ -20,5 +21,7 @@ describe('Administrator shell navigation', () => {
 
     expect(screen.getByRole('navigation')).toHaveTextContent('Dashboard')
     expect(screen.queryByRole('button', { name: /audit/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Statistics' }))
+    expect(screen.getByText('Statistics content')).toBeInTheDocument()
   })
 })
