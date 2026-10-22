@@ -108,6 +108,84 @@ class AdministratorAccountControllerTest {
     }
 
     @Test
+    void temporaryPasswordResetRequiresAdministratorAndCsrfBeforeMutation() throws Exception {
+        UUID target = UUID.randomUUID();
+        String path = resetPath(target);
+
+        mvc.perform(post(path).with(csrf())).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).with(user("reporter").roles("REPORTER")).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(path).with(user("responder").roles("RESPONDER")).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(path).with(user("admin").roles("ADMINISTRATOR")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SECURITY_SESSION_EXPIRED"));
+
+        verifyNoInteractions(accounts);
+    }
+
+    @Test
+    void temporaryPasswordResetRevealsSecretOnceWithNoStoreOnSuccess() throws Exception {
+        UUID target = UUID.randomUUID();
+        when(accounts.resetTemporaryPassword("admin", target))
+                .thenReturn(TemporaryPasswordResetOutcome.reset("Generated-Temp-Secret-1"));
+
+        mvc.perform(post(resetPath(target)).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.temporaryPassword").value("Generated-Temp-Secret-1"))
+                .andExpect(jsonPath("$.expiresInHours").value(24));
+
+        verify(accounts).resetTemporaryPassword("admin", target);
+    }
+
+    @Test
+    void temporaryPasswordResetMapsSelfDenialConflictAndFailureWithoutSecret() throws Exception {
+        UUID self = UUID.randomUUID();
+        UUID unavailable = UUID.randomUUID();
+        UUID conflict = UUID.randomUUID();
+        UUID failed = UUID.randomUUID();
+        when(accounts.resetTemporaryPassword("admin", self)).thenReturn(
+                TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.INVALID_STATE));
+        when(accounts.resetTemporaryPassword("admin", unavailable)).thenReturn(
+                TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.RESOURCE_UNAVAILABLE));
+        when(accounts.resetTemporaryPassword("admin", conflict)).thenReturn(
+                TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.CONFLICT));
+        when(accounts.resetTemporaryPassword("admin", failed)).thenReturn(
+                TemporaryPasswordResetOutcome.failure(TemporaryPasswordResetOutcome.Status.PERSISTENCE_FAILURE));
+
+        mvc.perform(post(resetPath(self)).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_STATE"))
+                .andExpect(jsonPath("$.temporaryPassword").doesNotExist());
+        mvc.perform(post(resetPath(unavailable)).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.temporaryPassword").doesNotExist());
+        mvc.perform(post(resetPath(conflict)).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"))
+                .andExpect(jsonPath("$.temporaryPassword").doesNotExist());
+        mvc.perform(post(resetPath(failed)).with(user("admin").roles("ADMINISTRATOR")).with(csrf()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("PERSISTENCE_FAILURE"))
+                .andExpect(jsonPath("$.temporaryPassword").doesNotExist());
+    }
+
+    @Test
+    void temporaryPasswordResetOutcomeRevealsSecretAtMostOnceAndNeverInToString() {
+        TemporaryPasswordResetOutcome outcome = TemporaryPasswordResetOutcome.reset("Generated-Temp-Secret-1");
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                java.util.Optional.of("Generated-Temp-Secret-1"), outcome.takeTemporaryPassword());
+        org.junit.jupiter.api.Assertions.assertEquals(
+                java.util.Optional.empty(), outcome.takeTemporaryPassword());
+        org.junit.jupiter.api.Assertions.assertFalse(
+                TemporaryPasswordResetOutcome.reset("Generated-Temp-Secret-1").toString()
+                        .contains("Generated-Temp-Secret-1"));
+    }
+
+    @Test
     void responderCategoryReplacementRequiresAdministratorAndCsrf() throws Exception {
         UUID target = UUID.randomUUID();
         String path = categoryPath(target);
@@ -190,6 +268,10 @@ class AdministratorAccountControllerTest {
 
     private static String path(UUID accountId) {
         return "/api/v1/admin/accounts/" + accountId + "/tombstone";
+    }
+
+    private static String resetPath(UUID accountId) {
+        return "/api/v1/admin/accounts/" + accountId + "/temporary-password";
     }
 
     private static String categoryPath(UUID accountId) {

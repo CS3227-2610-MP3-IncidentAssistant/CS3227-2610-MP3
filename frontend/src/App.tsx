@@ -18,6 +18,7 @@ import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
 import { PromotionPanel } from './reporter/PromotionPanel'
 import { ResponderPortal } from './responder/ResponderPortal'
+import { PasswordChangeDialog } from './shared/PasswordChangeDialog'
 
 type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
@@ -25,6 +26,7 @@ export function App() {
   const serviceHealth = useServiceHealth()
   const sessionState = useSession()
   const [portal, setPortal] = useState<Portal | null>(null)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
 
   if (sessionState.failed) {
     return <SessionFailure onRetry={sessionState.reload} />
@@ -43,9 +45,30 @@ export function App() {
     sessionState.clear()
     setPortal(null)
   }
+  if (session.authenticated && session.credentialTemporary) {
+    return <PasswordChangeDialog
+      open
+      required
+      onCancel={() => undefined}
+      onChanged={sessionState.refresh}
+      onRequiredDismiss={() => void signOut()}
+      refreshSession={sessionState.refresh}
+    />
+  }
+  const passwordDialog = <PasswordChangeDialog
+    open={passwordDialogOpen}
+    required={false}
+    onCancel={() => setPasswordDialogOpen(false)}
+    onChanged={async () => {
+      await sessionState.refresh()
+      setPasswordDialogOpen(false)
+    }}
+    onRequiredDismiss={() => undefined}
+    refreshSession={sessionState.refresh}
+  />
   if (session.authenticated && session.role === 'ADMINISTRATOR') {
     return (
-      <AdminShell
+      <><AdminShell
         accountsContent={<AdministratorAccounts
           currentLoginName={session.loginName ?? ''}
           onRefreshSession={sessionState.refresh}
@@ -55,31 +78,34 @@ export function App() {
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
       >
         <AdministratorIncidentWorkspace refreshSession={sessionState.refresh} />
-      </AdminShell>
+      </AdminShell>{passwordDialog}</>
     )
   }
   if (session.authenticated && session.role === 'REPORTER') {
     return (
-      <ReporterShell
+      <><ReporterShell
         promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
         serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
       >
         <ReporterDashboard key={session.loginName} onRefreshSession={sessionState.refresh} />
-      </ReporterShell>
+      </ReporterShell>{passwordDialog}</>
     )
   }
   if (session.authenticated && session.role === 'RESPONDER') {
     return (
-      <ResponderPortal
+      <><ResponderPortal
         categories={session.responderCategories ?? []}
         loginName={session.loginName ?? 'Responder'}
         onLogout={signOut}
+        onUpdatePassword={() => setPasswordDialogOpen(true)}
         serviceHealth={serviceHealth}
-      />
+      />{passwordDialog}</>
     )
   }
   if (!portal) {

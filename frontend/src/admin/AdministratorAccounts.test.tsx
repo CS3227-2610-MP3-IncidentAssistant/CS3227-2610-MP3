@@ -13,6 +13,70 @@ afterEach(() => {
 })
 
 describe('Administrator account directory', () => {
+  it('confirms reset, reveals the temporary password once, and clears it without browser persistence', async () => {
+    const storageWrites = vi.spyOn(Storage.prototype, 'setItem')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/v1/admin/accounts?')) return response({
+        accounts: [
+          { id: 'admin-id', loginName: 'admin', role: 'ADMINISTRATOR', status: 'ENABLED', version: 0, categories: [] },
+          { id: 'target-id', loginName: '<script>target</script>', role: 'REPORTER', status: 'ENABLED', version: 0, categories: [] },
+        ],
+        page: 0, size: 25, totalElements: 2, totalPages: 1,
+      })
+      if (url.startsWith('/api/v1/admin/promotion-requests')) {
+        return response({ requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url === '/api/v1/admin/accounts/target-id/temporary-password' && init?.method === 'POST') {
+        return response({ temporaryPassword: 'one-time-super-secret', expiresInHours: 24 })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AdministratorAccounts currentLoginName="admin"
+      onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+
+    const target = await screen.findByText('<script>target</script>')
+    expect(target.querySelector('script')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password for <script>target</script>' }))
+    const confirmation = screen.getByRole('dialog', { name: 'The temporary password expires in 24 hours.' })
+    expect(within(confirmation).getByText(/Any earlier password will stop working immediately/)).toBeInTheDocument()
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Generate temporary password' }))
+
+    const reveal = await screen.findByRole('dialog', { name: 'Copy this password now — it will not be shown again' })
+    expect(within(reveal).getByLabelText('Temporary password')).toHaveValue('one-time-super-secret')
+    expect(storageWrites).not.toHaveBeenCalled()
+    fireEvent.click(within(reveal).getByRole('button', { name: 'Done' }))
+    expect(screen.queryByDisplayValue('one-time-super-secret')).not.toBeInTheDocument()
+    expect(localStorage.getItem('temporaryPassword')).toBeNull()
+    expect(sessionStorage.getItem('temporaryPassword')).toBeNull()
+  })
+
+  it('shows a reset failure without revealing any secret', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/v1/admin/accounts?')) return response({
+        accounts: [{ id: 'target-id', loginName: 'target', role: 'REPORTER', status: 'ENABLED', version: 0, categories: [] }],
+        page: 0, size: 25, totalElements: 1, totalPages: 1,
+      })
+      if (url.startsWith('/api/v1/admin/promotion-requests')) {
+        return response({ requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url.endsWith('/temporary-password') && init?.method === 'POST') {
+        return response({ code: 'CONFLICT', message: 'Conflict' }, 409)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+    render(<AdministratorAccounts currentLoginName="admin"
+      onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset password for target' }))
+    const confirmation = screen.getByRole('dialog', { name: 'The temporary password expires in 24 hours.' })
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Generate temporary password' }))
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent('account changed or cannot be reset')
+    expect(screen.queryByLabelText('Temporary password')).not.toBeInTheDocument()
+  })
+
   it('requires an explicit destructive confirmation and never offers self-deletion', async () => {
     const accounts = [
       { id: 'admin-id', loginName: 'operations-admin', role: 'ADMINISTRATOR', status: 'ENABLED', version: 0, categories: [] },

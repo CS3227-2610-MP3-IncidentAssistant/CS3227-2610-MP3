@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Administrator-only account directory and tombstone HTTP operations. */
+/** Administrator-only account directory, credential-reset, and tombstone HTTP operations. */
 @RestController
 @RequestMapping("/api/v1/admin/accounts")
 @ConditionalOnBean(DataSource.class)
@@ -59,6 +59,29 @@ final class AdministratorAccountController {
                 "The account changed. Refresh before trying again");
         case PERSISTENCE_FAILURE -> error(HttpStatus.SERVICE_UNAVAILABLE, "PERSISTENCE_FAILURE",
                 "The account could not be deleted");
+        };
+    }
+
+    @PostMapping("/{accountId}/temporary-password")
+    ResponseEntity<?> resetTemporaryPassword(Principal principal, @PathVariable UUID accountId) {
+        if (principal == null) return unavailable();
+        TemporaryPasswordResetOutcome outcome = accounts.resetTemporaryPassword(principal.getName(), accountId);
+        return switch (outcome.status()) {
+        case RESET -> outcome.takeTemporaryPassword()
+                .<ResponseEntity<?>>map(password -> ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        .body(Map.of(
+                                "temporaryPassword", password,
+                                "expiresInHours", 24)))
+                .orElseGet(() -> error(HttpStatus.SERVICE_UNAVAILABLE, "PERSISTENCE_FAILURE",
+                        "The temporary password could not be issued"));
+        case RESOURCE_UNAVAILABLE -> unavailable();
+        case INVALID_STATE -> error(HttpStatus.CONFLICT, "INVALID_STATE",
+                "The current account cannot be reset");
+        case CONFLICT -> error(HttpStatus.CONFLICT, "CONFLICT",
+                "The account changed. Refresh before trying again");
+        case PERSISTENCE_FAILURE -> error(HttpStatus.SERVICE_UNAVAILABLE, "PERSISTENCE_FAILURE",
+                "The temporary password could not be issued");
         };
     }
 

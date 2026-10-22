@@ -51,11 +51,15 @@ public class SessionController {
                                 .sorted().map(Enum::name).toList())
                         .orElseGet(List::of)
                 : List.of();
+        boolean credentialTemporary = authenticated && authentication.getAuthorities().stream()
+                .anyMatch(authority -> DatabaseAccountDetailsService.TEMPORARY_CREDENTIAL_AUTHORITY
+                        .equals(authority.getAuthority()));
         SessionRepresentation body = new SessionRepresentation(
                 authenticated,
                 authenticated ? Optional.of(authentication.getName()) : Optional.empty(),
                 Optional.ofNullable(role),
-                responderCategories);
+                responderCategories,
+                credentialTemporary);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
@@ -63,6 +67,7 @@ public class SessionController {
             boolean authenticated,
             Optional<String> loginName,
             Optional<String> role,
-            List<String> responderCategories) {
+            List<String> responderCategories,
+            boolean credentialTemporary) {
     }
 }

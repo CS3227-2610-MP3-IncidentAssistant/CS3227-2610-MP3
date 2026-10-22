@@ -43,6 +43,14 @@ final class AdministratorAccountService {
                 clock.instant());
     }
 
+    TemporaryPasswordResetOutcome resetTemporaryPassword(String administratorLoginName, UUID targetAccountId) {
+        return store.resetTemporaryPassword(
+                requireActor(administratorLoginName),
+                Objects.requireNonNull(targetAccountId, "targetAccountId"),
+                Objects.requireNonNull(identifiers.get(), "generated audit event identifier"),
+                clock.instant());
+    }
+
     ResponderCategoryAccessOutcome replaceResponderCategories(
             String administratorLoginName,
             UUID targetAccountId,
