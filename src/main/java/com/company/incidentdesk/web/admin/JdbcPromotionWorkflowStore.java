@@ -280,6 +280,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
         if (change.request().isPresent()) {
             ResponderPromotionRequest request = change.request().orElseThrow();
             if (request.status() == PromotionRequestStatus.PENDING) {
+                requireCurrentReporter(mutation.auditEvent(), request);
                 insertRequest(request);
             } else {
                 requireCurrentAdministrator(mutation.auditEvent(), request);
@@ -291,20 +292,34 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
         insertAudit(mutation.auditEvent());
     }
 
+    private void requireCurrentReporter(
+            AuditEvent audit,
+            ResponderPromotionRequest request) {
+        if (audit.actor().role() != Role.REPORTER
+                || !request.requesterId().equals(audit.actor().accountId())) {
+            throw stalePromotionConflict();
+        }
+        requireEnabledRole(audit.actor().accountId(), Role.REPORTER);
+    }
+
     private void requireCurrentAdministrator(
             AuditEvent audit,
             ResponderPromotionRequest request) {
         if (audit.actor().role() != Role.ADMINISTRATOR
                 || request.decidedBy().filter(audit.actor().accountId()::equals).isEmpty()) {
-            throw staleDecision();
+            throw stalePromotionConflict();
         }
+        requireEnabledRole(audit.actor().accountId(), Role.ADMINISTRATOR);
+    }
+
+    private void requireEnabledRole(AccountId accountId, Role role) {
         List<AccountSecurityState> actorState = jdbc.query(
                 "SELECT role, status FROM accounts WHERE id = ? FOR SHARE",
                 (result, row) -> new AccountSecurityState(result.getString("role"), result.getString("status")),
-                audit.actor().accountId().value());
-        if (actorState.size() != 1 || !Role.ADMINISTRATOR.name().equals(actorState.getFirst().role())
+                accountId.value());
+        if (actorState.size() != 1 || !role.name().equals(actorState.getFirst().role())
                 || !AccountStatus.ENABLED.name().equals(actorState.getFirst().status())) {
-            throw staleDecision();
+            throw stalePromotionConflict();
         }
     }
 
@@ -327,7 +342,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
         ResponderPromotionRequest persisted = loadPendingForUpdate(request.id());
         if (!persisted.requesterId().equals(request.requesterId())
                 || !persisted.requestedCategories().equals(request.requestedCategories())) {
-            throw staleDecision();
+            throw stalePromotionConflict();
         }
         int updated = jdbc.update("""
                 UPDATE responder_promotion_requests
@@ -335,7 +350,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
                  WHERE id = ? AND status = 'PENDING'
                 """, request.status().name(), request.decidedBy().orElseThrow().value(),
                 Timestamp.from(request.decidedAt().orElseThrow()), request.id().value());
-        if (updated != 1) throw staleDecision();
+        if (updated != 1) throw stalePromotionConflict();
 
         for (IncidentCategory category : request.approvedCategories().orElse(Set.of()).stream().sorted().toList()) {
             jdbc.update("""
@@ -360,7 +375,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
                 result.getObject("decided_by", UUID.class),
                 result.getObject("decided_at", OffsetDateTime.class)), requestId.value())
                 .stream().filter(request -> request.status() == PromotionRequestStatus.PENDING)
-                .findFirst().orElseThrow(JdbcPromotionWorkflowStore::staleDecision);
+                .findFirst().orElseThrow(JdbcPromotionWorkflowStore::stalePromotionConflict);
     }
 
     private void updateAccountAndAccess(Account account, boolean promotion) {
@@ -370,7 +385,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
         int changed = promotion
                 ? jdbc.update(sql, account.id().value())
                 : jdbc.update(sql, account.loginName(), account.role().name(), account.status().name(), account.id().value());
-        if (changed != 1) throw staleDecision();
+        if (changed != 1) throw stalePromotionConflict();
         if (promotion) {
             jdbc.update("DELETE FROM responder_category_access WHERE account_id = ?", account.id().value());
             for (IncidentCategory category : account.responderAccess().categories().stream().sorted().toList()) {
@@ -458,7 +473,7 @@ public class JdbcPromotionWorkflowStore implements AccountRepository, PromotionW
         }
     }
 
-    private static RepositoryException staleDecision() {
+    private static RepositoryException stalePromotionConflict() {
         return new RepositoryException(StorageFailureCode.ALREADY_EXISTS,
                 "promotion request is no longer pending or account state changed");
     }

@@ -188,6 +188,55 @@ class PromotionRequestServiceTest {
     }
 
     @Test
+    void rejectionRetainsReporterRoleAndAccessAndCreatesOneRedactedAudit() {
+        PromotionRequestId requestId = new PromotionRequestId(new UUID(0, 21));
+        try (LocalApplicationStore store = initializedStore()) {
+            MutableSession sessions = new MutableSession(store, REPORTER_ID);
+            PromotionRequestService service = service(store, sessions, requestId, new ArrayList<>());
+            assertTrue(service.submit(Set.of(IncidentCategory.IT),
+                    Optional.of("private rationale that must not enter audit details")).isSuccess());
+            sessions.accountId = ADMIN_ID;
+
+            var rejected = service.decide(requestId, false, Set.of());
+
+            assertTrue(rejected.isSuccess());
+            assertEquals(PromotionRequestStatus.REJECTED, rejected.value().orElseThrow().status());
+            assertEquals(Role.REPORTER, store.findById(REPORTER_ID).orElseThrow().role());
+            assertEquals(ResponderAccess.NONE, store.findById(REPORTER_ID).orElseThrow().responderAccess());
+            var audits = store.find(AuditQuery.all(), AuditSortDirection.OLDEST_FIRST);
+            assertEquals(List.of(AuditAction.RESPONDER_PROMOTION_REQUESTED,
+                    AuditAction.RESPONDER_PROMOTION_REJECTED), audits.stream().map(event -> event.action()).toList());
+            assertFalse(audits.stream().flatMap(event -> event.changes().stream())
+                    .anyMatch(change -> change.toString().contains("private rationale")));
+        }
+    }
+
+    @Test
+    void disabledReporterCannotSubmitAndStaleAdministratorCannotDecide() {
+        PromotionRequestId requestId = new PromotionRequestId(new UUID(0, 22));
+        try (LocalApplicationStore store = initializedStore()) {
+            MutableSession sessions = new MutableSession(store, REPORTER_ID);
+            PromotionRequestService service = service(store, sessions, requestId, new ArrayList<>());
+            Account reporter = store.findById(REPORTER_ID).orElseThrow();
+            store.update(new Account(reporter.id(), reporter.loginName(), reporter.role(),
+                    AccountStatus.DISABLED, reporter.responderAccess()));
+            assertFalse(service.submitAs(reporter, Set.of(IncidentCategory.IT), Optional.empty()).isSuccess());
+            assertTrue(store.findPromotionRequests().isEmpty());
+
+            store.update(reporter);
+            assertTrue(service.submitAs(reporter, Set.of(IncidentCategory.IT), Optional.empty()).isSuccess());
+            Account administrator = store.findById(ADMIN_ID).orElseThrow();
+            store.update(new Account(administrator.id(), administrator.loginName(), Role.RESPONDER,
+                    administrator.status(), ResponderAccess.to(Set.of(IncidentCategory.IT))));
+
+            assertFalse(service.decideAs(administrator, requestId, true, Set.of(IncidentCategory.IT)).isSuccess());
+            assertEquals(PromotionRequestStatus.PENDING,
+                    store.findPromotionRequest(requestId).orElseThrow().status());
+            assertEquals(Role.REPORTER, store.findById(REPORTER_ID).orElseThrow().role());
+        }
+    }
+
+    @Test
     void nonReporterCannotSubmitAndDeniedPathChangesNothing() {
         try (LocalApplicationStore store = initializedStore()) {
             MutableSession sessions = new MutableSession(store, RESPONDER_ID);

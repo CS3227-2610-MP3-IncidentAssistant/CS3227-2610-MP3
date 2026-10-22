@@ -165,6 +165,110 @@ class PromotionWorkflowPostgresTest {
     }
 
     @Test
+    void concurrentDuplicateSubmissionsCreateOnePendingRequestAndOneSuccessAudit() throws Exception {
+        Account reporter = account(Role.REPORTER, "concurrent-requester");
+        store.create(reporter);
+        int attempts = 2;
+        CountDownLatch ready = new CountDownLatch(attempts);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+        try (ExecutorService executor = Executors.newFixedThreadPool(attempts)) {
+            for (int index = 0; index < attempts; index++) {
+                results.add(executor.submit(() -> {
+                    ready.countDown();
+                    assertTrue(start.await(10, TimeUnit.SECONDS));
+                    return service(UUID::randomUUID).submitAs(
+                            reporter, Set.of(IncidentCategory.IT), Optional.empty()).isSuccess();
+                }));
+            }
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+        }
+
+        assertEquals(1, results.stream().filter(PromotionWorkflowPostgresTest::get).count());
+        assertEquals(1, store.countPendingPromotionRequests());
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_PROMOTION_REQUESTED'",
+                Integer.class));
+    }
+
+    @Test
+    void concurrentReporterDisableWinsBeforeRequestCommit() throws Exception {
+        Account reporter = account(Role.REPORTER, "stale-requester");
+        store.create(reporter);
+        CountDownLatch disableLocked = new CountDownLatch(1);
+        CountDownLatch allowDisableCommit = new CountDownLatch(1);
+        CountDownLatch submissionStarted = new CountDownLatch(1);
+        TransactionTemplate transaction = new TransactionTemplate(new DataSourceTransactionManager(testDataSource));
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> disable = executor.submit(() -> transaction.executeWithoutResult(status -> {
+                jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", reporter.id().value());
+                disableLocked.countDown();
+                await(allowDisableCommit);
+            }));
+            assertTrue(disableLocked.await(10, TimeUnit.SECONDS));
+            Future<Boolean> submission = executor.submit(() -> {
+                submissionStarted.countDown();
+                return service(UUID::randomUUID).submitAs(
+                        reporter, Set.of(IncidentCategory.IT), Optional.empty()).isSuccess();
+            });
+            assertTrue(submissionStarted.await(10, TimeUnit.SECONDS));
+            allowDisableCommit.countDown();
+            disable.get(10, TimeUnit.SECONDS);
+
+            assertFalse(submission.get(10, TimeUnit.SECONDS));
+            assertEquals(0, store.countPromotionRequestsByRequester(reporter.id()));
+            assertEquals(0, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_PROMOTION_REQUESTED'",
+                    Integer.class));
+        } finally {
+            allowDisableCommit.countDown();
+        }
+    }
+
+    @Test
+    void requestAuditFailureRollsBackThePendingRequest() {
+        Account reporter = account(Role.REPORTER, "request-rollback-reporter");
+        store.create(reporter);
+        UUID conflictingAuditId = UUID.randomUUID();
+        insertAuditWithId(conflictingAuditId, reporter);
+
+        var result = service(() -> conflictingAuditId).submitAs(
+                reporter, Set.of(IncidentCategory.FACILITIES), Optional.of("not retained after rollback"));
+
+        assertFalse(result.isSuccess());
+        assertEquals(0, store.countPromotionRequestsByRequester(reporter.id()));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events", Integer.class));
+    }
+
+    @Test
+    void rejectionRetainsReporterRoleAccessAndSessionsWithOneDecisionAudit() {
+        Account reporter = account(Role.REPORTER, "rejected-reporter");
+        Account administrator = account(Role.ADMINISTRATOR, "rejecting-admin");
+        store.create(reporter);
+        store.create(administrator);
+        ResponderPromotionRequest pending = submit(reporter, Set.of(IncidentCategory.IT));
+        addSession(reporter.loginName());
+        addSession(reporter.loginName());
+
+        var result = service(UUID::randomUUID).decideAs(administrator, pending.id(), false, Set.of());
+
+        assertTrue(result.isSuccess());
+        assertEquals(PromotionRequestStatus.REJECTED,
+                store.findPromotionRequest(pending.id()).orElseThrow().status());
+        assertEquals(Role.REPORTER, store.findById(reporter.id()).orElseThrow().role());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM responder_category_access WHERE account_id = ?",
+                Integer.class, reporter.id().value()));
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?",
+                Integer.class, reporter.loginName()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_PROMOTION_REJECTED'",
+                Integer.class));
+    }
+
+    @Test
     void concurrentAdministratorRevocationWinsBeforeDecisionCommit() throws Exception {
         Account reporter = account(Role.REPORTER, "stale-reporter");
         Account administrator = account(Role.ADMINISTRATOR, "stale-admin");
@@ -203,6 +307,46 @@ class PromotionWorkflowPostgresTest {
                     Integer.class));
         } finally {
             allowRevocationCommit.countDown();
+        }
+    }
+
+    @Test
+    void concurrentRequesterDisableWinsBeforeDecisionCommit() throws Exception {
+        Account reporter = account(Role.REPORTER, "ineligible-requester");
+        Account administrator = account(Role.ADMINISTRATOR, "eligibility-admin");
+        store.create(reporter);
+        store.create(administrator);
+        ResponderPromotionRequest pending = submit(reporter, Set.of(IncidentCategory.IT));
+        CountDownLatch disableLocked = new CountDownLatch(1);
+        CountDownLatch allowDisableCommit = new CountDownLatch(1);
+        CountDownLatch decisionStarted = new CountDownLatch(1);
+        TransactionTemplate transaction = new TransactionTemplate(new DataSourceTransactionManager(testDataSource));
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> disable = executor.submit(() -> transaction.executeWithoutResult(status -> {
+                jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", reporter.id().value());
+                disableLocked.countDown();
+                await(allowDisableCommit);
+            }));
+            assertTrue(disableLocked.await(10, TimeUnit.SECONDS));
+            Future<Boolean> decision = executor.submit(() -> {
+                decisionStarted.countDown();
+                return service(UUID::randomUUID).decideAs(
+                        administrator, pending.id(), true, Set.of(IncidentCategory.IT)).isSuccess();
+            });
+            assertTrue(decisionStarted.await(10, TimeUnit.SECONDS));
+            allowDisableCommit.countDown();
+            disable.get(10, TimeUnit.SECONDS);
+
+            assertFalse(decision.get(10, TimeUnit.SECONDS));
+            assertEquals(PromotionRequestStatus.PENDING,
+                    store.findPromotionRequest(pending.id()).orElseThrow().status());
+            assertEquals("DISABLED", jdbc.queryForObject(
+                    "SELECT status FROM accounts WHERE id = ?", String.class, reporter.id().value()));
+            assertEquals(0, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_PROMOTION_APPROVED'",
+                    Integer.class));
+        } finally {
+            allowDisableCommit.countDown();
         }
     }
 
