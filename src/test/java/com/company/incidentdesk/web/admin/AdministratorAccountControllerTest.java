@@ -111,7 +111,7 @@ class AdministratorAccountControllerTest {
     void responderCategoryReplacementRequiresAdministratorAndCsrf() throws Exception {
         UUID target = UUID.randomUUID();
         String path = categoryPath(target);
-        String body = "{\"categories\":[\"IT\"]}";
+        String body = "{\"expectedVersion\":0,\"categories\":[\"IT\"]}";
 
         mvc.perform(put(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
@@ -129,17 +129,17 @@ class AdministratorAccountControllerTest {
     @Test
     void responderCategoryReplacementUsesTrustedActorAndValidatedFullSet() throws Exception {
         UUID target = UUID.randomUUID();
-        when(accounts.replaceResponderCategories("admin", target,
+        when(accounts.replaceResponderCategories("admin", target, 3,
                 Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES)))
                 .thenReturn(ResponderCategoryAccessOutcome.UPDATED);
 
         mvc.perform(put(categoryPath(target)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categories\":[\"IT\",\"FACILITIES\"]}"))
+                        .content("{\"expectedVersion\":3,\"categories\":[\"IT\",\"FACILITIES\"]}"))
                 .andExpect(status().isNoContent())
                 .andExpect(header().string("Cache-Control", "no-store"));
 
-        verify(accounts).replaceResponderCategories("admin", target,
+        verify(accounts).replaceResponderCategories("admin", target, 3,
                 Set.of(IncidentCategory.IT, IncidentCategory.FACILITIES));
     }
 
@@ -148,14 +148,15 @@ class AdministratorAccountControllerTest {
         UUID target = UUID.randomUUID();
         for (String body : List.of(
                 "{}",
-                "{\"categories\":[\"UNKNOWN\"]}",
-                "{\"categories\":[\"IT\",\"IT\"]}")) {
+                "{\"expectedVersion\":-1,\"categories\":[]}",
+                "{\"expectedVersion\":0,\"categories\":[\"UNKNOWN\"]}",
+                "{\"expectedVersion\":0,\"categories\":[\"IT\",\"IT\"]}")) {
             mvc.perform(put(categoryPath(target)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest())
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                    .andExpect(jsonPath("$.fieldErrors.categories").exists());
+                    .andExpect(jsonPath("$.fieldErrors").isMap());
         }
 
         verifyNoInteractions(accounts);
@@ -165,19 +166,26 @@ class AdministratorAccountControllerTest {
     void responderCategoryReplacementMapsSafeResourceAndPersistenceFailures() throws Exception {
         UUID unavailable = UUID.randomUUID();
         UUID failed = UUID.randomUUID();
-        when(accounts.replaceResponderCategories("admin", unavailable, Set.of()))
+        UUID conflict = UUID.randomUUID();
+        when(accounts.replaceResponderCategories("admin", unavailable, 0, Set.of()))
                 .thenReturn(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE);
-        when(accounts.replaceResponderCategories("admin", failed, Set.of()))
+        when(accounts.replaceResponderCategories("admin", failed, 0, Set.of()))
                 .thenReturn(ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE);
+        when(accounts.replaceResponderCategories("admin", conflict, 0, Set.of()))
+                .thenReturn(ResponderCategoryAccessOutcome.CONFLICT);
 
         mvc.perform(put(categoryPath(unavailable)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"categories\":[]}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(emptyCategoriesBody()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("UNAVAILABLE"));
         mvc.perform(put(categoryPath(failed)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"categories\":[]}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(emptyCategoriesBody()))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_UPDATE_UNAVAILABLE"));
+        mvc.perform(put(categoryPath(conflict)).with(user("admin").roles("ADMINISTRATOR")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(emptyCategoriesBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
     }
 
     private static String path(UUID accountId) {
@@ -186,6 +194,10 @@ class AdministratorAccountControllerTest {
 
     private static String categoryPath(UUID accountId) {
         return "/api/v1/admin/accounts/" + accountId + "/responder-categories";
+    }
+
+    private static String emptyCategoriesBody() {
+        return "{\"expectedVersion\":0,\"categories\":[]}";
     }
 
     @Configuration(proxyBeanMethods = false)

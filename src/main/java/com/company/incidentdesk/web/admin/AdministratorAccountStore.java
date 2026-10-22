@@ -20,6 +20,7 @@ interface AdministratorAccountStore {
     ResponderCategoryAccessOutcome replaceResponderCategories(
             String administratorLoginName,
             UUID targetAccountId,
+            long expectedVersion,
             Set<IncidentCategory> categories,
             UUID auditEventId,
             Instant occurredAt);
@@ -34,7 +35,13 @@ interface AdministratorAccountStore {
         }
     }
 
-    record AccountDirectoryEntry(UUID id, String loginName, String role, String status, List<String> categories) {
+    record AccountDirectoryEntry(
+            UUID id,
+            String loginName,
+            String role,
+            String status,
+            long version,
+            List<String> categories) {
         public AccountDirectoryEntry {
             categories = List.copyOf(categories);
         }

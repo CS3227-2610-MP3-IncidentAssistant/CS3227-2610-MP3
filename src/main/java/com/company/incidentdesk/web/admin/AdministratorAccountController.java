@@ -68,13 +68,19 @@ final class AdministratorAccountController {
             @PathVariable UUID accountId,
             @RequestBody ResponderCategoriesBody body) {
         if (principal == null) return unavailable();
-        if (body == null || body.categories() == null) return validation();
+        if (body == null || body.expectedVersion() == null || body.expectedVersion() < 0) {
+            return validation("expectedVersion");
+        }
+        if (body.categories() == null) return validation("categories");
         List<String> invalidFields = new ArrayList<>();
         Set<IncidentCategory> categories = parseCategories(body.categories(), invalidFields);
-        if (!invalidFields.isEmpty()) return validation();
+        if (!invalidFields.isEmpty()) return validation("categories");
 
-        return switch (accounts.replaceResponderCategories(principal.getName(), accountId, categories)) {
+        return switch (accounts.replaceResponderCategories(
+                principal.getName(), accountId, body.expectedVersion(), categories)) {
         case UPDATED, UNCHANGED -> ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+        case CONFLICT -> error(HttpStatus.CONFLICT, "CONFLICT",
+                "The account changed. Refresh before trying again");
         case RESOURCE_UNAVAILABLE -> unavailable();
         case PERSISTENCE_FAILURE -> error(HttpStatus.SERVICE_UNAVAILABLE, "ACCOUNT_UPDATE_UNAVAILABLE",
                 "Responder access could not be updated");
@@ -93,10 +99,10 @@ final class AdministratorAccountController {
         return Set.copyOf(categories);
     }
 
-    private static ResponseEntity<Map<String, Object>> validation() {
+    private static ResponseEntity<Map<String, Object>> validation(String field) {
         return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).body(Map.of(
                 "code", "VALIDATION_FAILED",
-                "fieldErrors", Map.of("categories", "Invalid value.")));
+                "fieldErrors", Map.of(field, "Invalid value.")));
     }
 
     private static ResponseEntity<Map<String, String>> unavailable() {
@@ -108,5 +114,5 @@ final class AdministratorAccountController {
                 .body(Map.of("code", code, "message", message));
     }
 
-    record ResponderCategoriesBody(List<String> categories) { }
+    record ResponderCategoriesBody(Long expectedVersion, List<String> categories) { }
 }

@@ -4,6 +4,7 @@ package com.company.incidentdesk.web.admin;
 enum ResponderCategoryAccessOutcome {
     UPDATED,
     UNCHANGED,
+    CONFLICT,
     RESOURCE_UNAVAILABLE,
     PERSISTENCE_FAILURE
 }

@@ -81,7 +81,7 @@ class AdministratorAccountPostgresTest {
                 responder, Timestamp.from(NOW));
 
         ResponderCategoryAccessOutcome outcome = store().replaceResponderCategories(
-                "admin", responder, Set.of(IncidentCategory.FACILITIES, IncidentCategory.HUMAN_RELATIONS),
+                "admin", responder, 0, Set.of(IncidentCategory.FACILITIES, IncidentCategory.HUMAN_RELATIONS),
                 UUID.randomUUID(), NOW);
 
         assertEquals(ResponderCategoryAccessOutcome.UPDATED, outcome);
@@ -114,10 +114,10 @@ class AdministratorAccountPostgresTest {
                 responder, Timestamp.from(NOW));
 
         assertEquals(ResponderCategoryAccessOutcome.UPDATED,
-                store().replaceResponderCategories("admin", responder, Set.of(), UUID.randomUUID(), NOW));
+                store().replaceResponderCategories("admin", responder, 0, Set.of(), UUID.randomUUID(), NOW));
         session("responder");
         assertEquals(ResponderCategoryAccessOutcome.UNCHANGED,
-                store().replaceResponderCategories("admin", responder, Set.of(), UUID.randomUUID(), NOW));
+                store().replaceResponderCategories("admin", responder, 1, Set.of(), UUID.randomUUID(), NOW));
 
         assertEquals(0, count("SELECT COUNT(*) FROM responder_category_access WHERE account_id = ?", responder));
         assertEquals(1L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
@@ -134,14 +134,14 @@ class AdministratorAccountPostgresTest {
 
         assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
                 store().replaceResponderCategories("reporter-actor", responder,
-                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+                        0, Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
         assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
                 store().replaceResponderCategories("admin", reporterTarget,
-                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+                        0, Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
         jdbc.update("UPDATE accounts SET status = 'DISABLED' WHERE id = ?", responder);
         assertEquals(ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE,
                 store().replaceResponderCategories("admin", responder,
-                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
+                        0, Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW));
 
         assertEquals(0, count("SELECT COUNT(*) FROM responder_category_access"));
         assertEquals(0, count("SELECT COUNT(*) FROM audit_events"));
@@ -162,7 +162,7 @@ class AdministratorAccountPostgresTest {
                 """, duplicateAudit, Timestamp.from(NOW));
 
         ResponderCategoryAccessOutcome outcome = store().replaceResponderCategories(
-                "admin", responder, Set.of(IncidentCategory.FACILITIES), duplicateAudit, NOW);
+                "admin", responder, 0, Set.of(IncidentCategory.FACILITIES), duplicateAudit, NOW);
 
         assertEquals(ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE, outcome);
         assertEquals(List.of("IT"), jdbc.queryForList(
@@ -170,6 +170,34 @@ class AdministratorAccountPostgresTest {
         assertEquals(0L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
         assertEquals(1, count("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = 'responder'"));
         assertEquals(0, count("SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_ACCESS_CHANGED'"));
+    }
+
+    @Test
+    void concurrentCategoryReplacementsFromTheSameVersionHaveOneWinner() throws Exception {
+        account("admin", "ADMINISTRATOR");
+        UUID responder = account("responder", "RESPONDER");
+        CyclicBarrier start = new CyclicBarrier(2);
+
+        List<ResponderCategoryAccessOutcome> outcomes;
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<ResponderCategoryAccessOutcome> first = executor.submit(() -> {
+                await(start);
+                return store().replaceResponderCategories("admin", responder, 0,
+                        Set.of(IncidentCategory.IT), UUID.randomUUID(), NOW);
+            });
+            Future<ResponderCategoryAccessOutcome> second = executor.submit(() -> {
+                await(start);
+                return store().replaceResponderCategories("admin", responder, 0,
+                        Set.of(IncidentCategory.FACILITIES), UUID.randomUUID(), NOW);
+            });
+            outcomes = List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS));
+        }
+
+        assertTrue(outcomes.contains(ResponderCategoryAccessOutcome.UPDATED));
+        assertTrue(outcomes.contains(ResponderCategoryAccessOutcome.CONFLICT));
+        assertEquals(1L, jdbc.queryForObject("SELECT version FROM accounts WHERE id = ?", Long.class, responder));
+        assertEquals(1, count("SELECT COUNT(*) FROM responder_category_access WHERE account_id = ?", responder));
+        assertEquals(1, count("SELECT COUNT(*) FROM audit_events WHERE action = 'RESPONDER_ACCESS_CHANGED'"));
     }
 
     @Test

@@ -173,6 +173,7 @@ export type AdministratorAccount = {
   loginName: string
   role: 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
   status: 'ENABLED' | 'DISABLED'
+  version: number
   categories: IncidentCategory[]
 }
 
@@ -207,6 +208,7 @@ export async function tombstoneAdministratorAccount(
 
 export async function replaceResponderCategories(
   accountId: string,
+  expectedVersion: number,
   categories: IncidentCategory[],
   refreshSession: SessionRefresher,
 ): Promise<void> {
@@ -216,7 +218,7 @@ export async function replaceResponderCategories(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ categories }),
+    body: JSON.stringify({ expectedVersion, categories }),
   }, refreshSession, {
     authenticationRequired: true,
     fallbackMessage: 'Responder categories could not be updated. Refresh and try again.',

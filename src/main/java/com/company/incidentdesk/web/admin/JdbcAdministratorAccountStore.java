@@ -48,7 +48,7 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
             return transactions.execute(status -> {
                 if (!lockEnabledAdministrator(administratorLoginName)) return AccountDirectoryResult.unavailable();
                 List<AccountDirectoryEntry> entries = jdbc.query("""
-                        SELECT id, login_name, role, status
+                        SELECT id, login_name, role, status, version
                           FROM accounts
                          WHERE status <> 'DELETED'
                          ORDER BY login_name ASC, id ASC
@@ -58,6 +58,7 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
                         result.getString("login_name"),
                         result.getString("role"),
                         result.getString("status"),
+                        result.getLong("version"),
                         categories(result.getObject("id", UUID.class))), limit, offset);
                 Long total = jdbc.queryForObject(
                         "SELECT COUNT(*) FROM accounts WHERE status <> 'DELETED'", Long.class);
@@ -89,12 +90,13 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
     public ResponderCategoryAccessOutcome replaceResponderCategories(
             String administratorLoginName,
             UUID targetAccountId,
+            long expectedVersion,
             Set<IncidentCategory> categories,
             UUID auditEventId,
             Instant occurredAt) {
         try {
             ResponderCategoryAccessOutcome outcome = transactions.execute(status -> replaceResponderCategoriesInTransaction(
-                    administratorLoginName, targetAccountId, categories, auditEventId, occurredAt));
+                    administratorLoginName, targetAccountId, expectedVersion, categories, auditEventId, occurredAt));
             return outcome == null ? ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE : outcome;
         } catch (DataAccessException exception) {
             return ResponderCategoryAccessOutcome.PERSISTENCE_FAILURE;
@@ -104,6 +106,7 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
     private ResponderCategoryAccessOutcome replaceResponderCategoriesInTransaction(
             String administratorLoginName,
             UUID targetAccountId,
+            long expectedVersion,
             Set<IncidentCategory> categories,
             UUID auditEventId,
             Instant occurredAt) {
@@ -121,17 +124,19 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
         ActorState actor = actors.getFirst();
 
         List<TargetState> targets = jdbc.query("""
-                SELECT login_name, role, status
+                SELECT login_name, role, status, version
                   FROM accounts
                  WHERE id = ?
                  FOR UPDATE
                 """, (result, row) -> new TargetState(
-                result.getString("login_name"), result.getString("role"), result.getString("status")),
+                result.getString("login_name"), result.getString("role"), result.getString("status"),
+                result.getLong("version")),
                 targetAccountId);
         if (targets.size() != 1 || !targets.getFirst().isEnabledResponder()) {
             return ResponderCategoryAccessOutcome.RESOURCE_UNAVAILABLE;
         }
         TargetState target = targets.getFirst();
+        if (target.version() != expectedVersion) return ResponderCategoryAccessOutcome.CONFLICT;
         Set<IncidentCategory> current = categorySet(targetAccountId);
         if (current.equals(categories)) return ResponderCategoryAccessOutcome.UNCHANGED;
 
@@ -182,12 +187,13 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
 
         actorLockedHook.run();
         List<TargetState> targets = jdbc.query("""
-                SELECT login_name, role, status
+                SELECT login_name, role, status, version
                   FROM accounts
                  WHERE id = ?
                  FOR UPDATE
                 """, (result, row) -> new TargetState(
-                result.getString("login_name"), result.getString("role"), result.getString("status")),
+                result.getString("login_name"), result.getString("role"), result.getString("status"),
+                result.getLong("version")),
                 targetAccountId);
         if (targets.size() != 1 || !AccountStatus.ENABLED.name().equals(targets.getFirst().status())) {
             return AccountTombstoneOutcome.RESOURCE_UNAVAILABLE;
@@ -255,7 +261,7 @@ class JdbcAdministratorAccountStore implements AdministratorAccountStore {
         }
     }
 
-    private record TargetState(String loginName, String role, String status) {
+    private record TargetState(String loginName, String role, String status, long version) {
         boolean isEnabledResponder() {
             return Role.RESPONDER.name().equals(role) && AccountStatus.ENABLED.name().equals(status);
         }

@@ -97,14 +97,14 @@ function AccountDirectory({ currentLoginName, onRefreshSession }: {
     setFeedback('')
     setActionError('')
     try {
-      await replaceResponderCategories(account.id, selectedCategories, onRefreshSession)
+      await replaceResponderCategories(account.id, account.version, selectedCategories, onRefreshSession)
       setConfiguringAccount(null)
       setFeedback(`${account.loginName}'s responder categories were updated.`)
       reload()
     } catch (error) {
-      setActionError(error instanceof Error
-        ? error.message
-        : 'Responder categories could not be updated.')
+      setActionError(error instanceof ApiError && error.status === 409
+        ? 'The account changed. Refresh the directory before trying again.'
+        : error instanceof Error ? error.message : 'Responder categories could not be updated.')
     } finally {
       setSubmittingId(null)
     }
@@ -233,6 +233,8 @@ function ConfigureCategoriesDialog({ account, error, submitting, onCancel, onCon
       : [...current, category])
   }
 
+  const unchanged = sameCategorySet(selectedCategories, account?.categories ?? [])
+
   return <dialog
     aria-describedby="configure-categories-description"
     aria-labelledby="configure-categories-title"
@@ -264,9 +266,9 @@ function ConfigureCategoriesDialog({ account, error, submitting, onCancel, onCon
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="confirmation-dialog__actions">
         <button className="ghost-button" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
-        <button className="primary-button" type="button" disabled={submitting}
+        <button className="primary-button" type="button" disabled={submitting || unchanged}
           onClick={() => onConfirm(selectedCategories)}>
-          {submitting ? 'Saving…' : 'Save categories'}
+          {submitting ? 'Saving…' : unchanged ? 'No changes' : 'Save categories'}
         </button>
       </div>
     </div>}
@@ -323,4 +325,8 @@ function DeleteAccountDialog({ account, error, submitting, onCancel, onConfirm }
 
 function displayEnum(value: string) {
   return value.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+}
+
+function sameCategorySet(left: IncidentCategory[], right: IncidentCategory[]) {
+  return left.length === right.length && left.every((category) => right.includes(category))
 }

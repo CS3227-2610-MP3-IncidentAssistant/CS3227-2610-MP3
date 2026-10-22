@@ -661,6 +661,36 @@ The administrator slice is acceptable when:
 - [ ] The required automated, accessibility, and deployed checks below are
   recorded against the exact release commit under `workflow/test-evidence/`.
 
+### ADM-ACC-03 acceptance criteria — Responder category access
+
+- [x] `ADM-ACC-03-A`: The account directory and Administrator API expose an
+  enabled Responder's current category set and opaque account version; the UI
+  can replace the full set, including clearing it, and preserves recoverable
+  failure feedback. Automated component and MVC evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-B`: Missing CSRF, signed-out, wrong-role, malformed-version,
+  unknown-category, and duplicate-category requests are rejected before the
+  account mutation service is invoked, using privacy-safe errors. Automated
+  MVC evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-C`: PostgreSQL reauthorizes the actor and enabled Responder
+  under lock; a successful change atomically replaces access, increments the
+  account version, invalidates affected sessions, and writes a redacted audit
+  event, while unchanged input writes no misleading audit and audit failure
+  rolls back every effect. Automated evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-D`: Two replacements submitted from the same account version
+  produce one committed winner and one recoverable `CONFLICT`, with one access
+  set, version increment, and success audit. The isolated concurrency test
+  evidence is recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+- [x] `ADM-ACC-03-E`: Deployed verification proves revocation immediately
+  removes unassigned queue and future-claim access while preserving access to
+  incidents already assigned to the Responder. The repository user confirmed
+  the end-to-end check in the current Codex chat on 2026-10-22; the result is
+  recorded in
+  [the 2026-10-22 verification record](test-evidence/2026-10-22-administrator-responder-category-access.md).
+
 ### Required verification
 
 The following suites are required before the slice can be called complete:

@@ -15,8 +15,8 @@ afterEach(() => {
 describe('Administrator account directory', () => {
   it('requires an explicit destructive confirmation and never offers self-deletion', async () => {
     const accounts = [
-      { id: 'admin-id', loginName: 'operations-admin', role: 'ADMINISTRATOR', status: 'ENABLED', categories: [] },
-      { id: 'reporter-id', loginName: 'case-reporter', role: 'REPORTER', status: 'ENABLED', categories: [] },
+      { id: 'admin-id', loginName: 'operations-admin', role: 'ADMINISTRATOR', status: 'ENABLED', version: 0, categories: [] },
+      { id: 'reporter-id', loginName: 'case-reporter', role: 'REPORTER', status: 'ENABLED', version: 0, categories: [] },
     ]
     let deleted = false
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -72,7 +72,7 @@ describe('Administrator account directory', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.startsWith('/api/v1/admin/accounts?')) return response({
-        accounts: [{ id: 'target-id', loginName: 'target', role: 'RESPONDER', status: 'ENABLED', categories: ['IT'] }],
+        accounts: [{ id: 'target-id', loginName: 'target', role: 'RESPONDER', status: 'ENABLED', version: 0, categories: ['IT'] }],
         page: 0, size: 25, totalElements: 1, totalPages: 1,
       })
       if (url.startsWith('/api/v1/admin/promotion-requests')) {
@@ -102,8 +102,8 @@ describe('Administrator account directory', () => {
       const url = String(input)
       if (url.startsWith('/api/v1/admin/accounts?')) return response({
         accounts: [
-          { id: 'responder-id', loginName: 'triage-responder', role: 'RESPONDER', status: 'ENABLED', categories: responderCategories },
-          { id: 'reporter-id', loginName: 'case-reporter', role: 'REPORTER', status: 'ENABLED', categories: [] },
+          { id: 'responder-id', loginName: 'triage-responder', role: 'RESPONDER', status: 'ENABLED', version: 4, categories: responderCategories },
+          { id: 'reporter-id', loginName: 'case-reporter', role: 'REPORTER', status: 'ENABLED', version: 0, categories: [] },
         ],
         page: 0, size: 25, totalElements: 2, totalPages: 1,
       })
@@ -129,6 +129,7 @@ describe('Administrator account directory', () => {
     const dialog = screen.getByRole('dialog', { name: 'Configure categories' })
     expect(within(dialog).getByRole('checkbox', { name: 'IT' })).toBeChecked()
     expect(within(dialog).getByRole('checkbox', { name: 'Human relations' })).not.toBeChecked()
+    expect(within(dialog).getByRole('button', { name: 'No changes' })).toBeDisabled()
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'IT' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Facilities' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save categories' }))
@@ -137,7 +138,7 @@ describe('Administrator account directory', () => {
       '/api/v1/admin/accounts/responder-id/responder-categories',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ categories: ['FACILITIES'] }),
+        body: JSON.stringify({ expectedVersion: 4, categories: ['FACILITIES'] }),
         headers: expect.any(Headers),
       }),
     ))
@@ -150,7 +151,7 @@ describe('Administrator account directory', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/api/v1/admin/accounts?')) return response({
-        accounts: [{ id: 'responder-id', loginName: 'responder', role: 'RESPONDER', status: 'ENABLED', categories: ['IT'] }],
+        accounts: [{ id: 'responder-id', loginName: 'responder', role: 'RESPONDER', status: 'ENABLED', version: 2, categories: ['IT'] }],
         page: 0, size: 25, totalElements: 1, totalPages: 1,
       })
       if (url.startsWith('/api/v1/admin/promotion-requests')) {
@@ -172,17 +173,56 @@ describe('Administrator account directory', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/admin/accounts/responder-id/responder-categories',
-      expect.objectContaining({ body: JSON.stringify({ categories: [] }) }),
+      expect.objectContaining({ body: JSON.stringify({ expectedVersion: 2, categories: [] }) }),
     ))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('could not be updated')
     expect(screen.getByRole('dialog', { name: 'Configure categories' })).toBeInTheDocument()
+  })
+
+  it('keeps the popup open and explains how to recover from a stale account version', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/v1/admin/accounts?')) return response({
+        accounts: [{
+          id: 'responder-id', loginName: 'responder', role: 'RESPONDER', status: 'ENABLED',
+          version: 7, categories: ['IT'],
+        }],
+        page: 0, size: 25, totalElements: 1, totalPages: 1,
+      })
+      if (url.startsWith('/api/v1/admin/promotion-requests')) {
+        return response({ requests: [], page: 0, size: 25, totalElements: 0, totalPages: 1 })
+      }
+      if (url.endsWith('/responder-categories') && init?.method === 'PUT') {
+        return response({ code: 'CONFLICT', message: 'The account changed. Refresh before trying again' }, 409)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AdministratorAccounts currentLoginName="admin"
+      onRefreshSession={async () => ({ authenticated: true, role: 'ADMINISTRATOR' })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Configure categories for responder' }))
+    const dialog = screen.getByRole('dialog', { name: 'Configure categories' })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Facilities' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save categories' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/accounts/responder-id/responder-categories',
+      expect.objectContaining({
+        body: JSON.stringify({ expectedVersion: 7, categories: ['IT', 'FACILITIES'] }),
+      }),
+    ))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'The account changed. Refresh the directory before trying again.',
+    )
+    expect(dialog).toBeInTheDocument()
   })
 
   it('keeps the popup open when deletion is rejected', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/api/v1/admin/accounts?')) return response({
-        accounts: [{ id: 'target-id', loginName: 'target', role: 'REPORTER', status: 'ENABLED', categories: [] }],
+        accounts: [{ id: 'target-id', loginName: 'target', role: 'REPORTER', status: 'ENABLED', version: 0, categories: [] }],
         page: 0, size: 25, totalElements: 1, totalPages: 1,
       })
       if (url.startsWith('/api/v1/admin/promotion-requests')) {

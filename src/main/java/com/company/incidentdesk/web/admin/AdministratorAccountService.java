@@ -46,10 +46,13 @@ final class AdministratorAccountService {
     ResponderCategoryAccessOutcome replaceResponderCategories(
             String administratorLoginName,
             UUID targetAccountId,
+            long expectedVersion,
             Set<IncidentCategory> categories) {
+        if (expectedVersion < 0) throw new IllegalArgumentException("expectedVersion must not be negative");
         return store.replaceResponderCategories(
                 requireActor(administratorLoginName),
                 Objects.requireNonNull(targetAccountId, "targetAccountId"),
+                expectedVersion,
                 Set.copyOf(Objects.requireNonNull(categories, "categories")),
                 Objects.requireNonNull(identifiers.get(), "generated audit event identifier"),
                 clock.instant());
