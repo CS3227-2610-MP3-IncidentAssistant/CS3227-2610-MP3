@@ -126,7 +126,7 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 .responder-detail > .section-heading h2,
 .incident-detail > .section-heading h2 { margin-top: 5px; overflow-wrap: anywhere; }
 .responder-detail__metadata,
-.incident-detail__metadata { display: flex; flex-wrap: wrap; gap: 24px 48px; margin: 0; padding: 0 22px 20px; border-bottom: 1px solid var(--color-border); }
+.incident-detail__metadata { display: flex; flex-wrap: wrap; gap: 24px 48px; margin: 0; padding: 20px 22px; border-bottom: 1px solid var(--color-border); }
 .responder-detail__metadata div,
 .incident-detail__metadata div { min-width: 150px; }
 .responder-detail__metadata dt,
@@ -265,7 +265,7 @@ tbody th small { display: block; margin-top: 4px; color: var(--color-text-muted)
 
 /* Shared incident detail sections (used by every role portal). */
 .incident-detail { display: grid; }
-.incident-detail > .ghost-button { justify-self: start; margin: 18px 22px 0; }
+.incident-detail > .ghost-button { justify-self: start; margin: 18px 22px 0; padding: 0; }
 /* Deliberate reporter, comment, and resolution whitespace is preserved. */
 .incident-detail__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .incident-detail__attachments,
