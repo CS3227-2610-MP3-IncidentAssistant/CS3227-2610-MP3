@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import type { HealthState } from '../health/useServiceHealth'
 import { RoleShell, type RoleNavigationItem } from '../shared/RoleShell'
 
-export function ReporterShell({ children, promotionContent, loginName, serviceHealth, onLogout, onUpdatePassword }: {
+export function ReporterShell({ children, promotionContent, loginName, onLogout, onUpdatePassword }: {
   children: ReactNode
   promotionContent: ReactNode
   loginName: string
-  serviceHealth: HealthState
   onLogout: () => Promise<void>
   onUpdatePassword?: () => void
 }) {
@@ -27,7 +25,6 @@ export function ReporterShell({ children, promotionContent, loginName, serviceHe
       onLogout={onLogout}
       onUpdatePassword={onUpdatePassword}
       roleLabel="Reporter"
-      serviceHealth={serviceHealth}
     >
       <main className="content">{activePage === 'incidents' ? children : promotionContent}</main>
     </RoleShell>

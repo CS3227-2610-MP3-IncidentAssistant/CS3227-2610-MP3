@@ -1,5 +1,4 @@
 import { type ReactNode, useState } from 'react'
-import type { HealthState } from '../health/useServiceHealth'
 
 export type RoleNavigationItem = {
   label: string
@@ -19,13 +18,6 @@ type RoleShellProps = {
   onLogout: () => Promise<void>
   onUpdatePassword?: () => void
   roleLabel: string
-  serviceHealth: HealthState
-}
-
-const healthLabels: Record<HealthState, string> = {
-  checking: 'Checking service',
-  available: 'Service available',
-  unavailable: 'Service unavailable',
 }
 
 export function RoleShell({
@@ -39,7 +31,6 @@ export function RoleShell({
   onLogout,
   onUpdatePassword,
   roleLabel,
-  serviceHealth,
 }: RoleShellProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -105,13 +96,6 @@ export function RoleShell({
           </div>
           {onUpdatePassword && <button className="sidebar__account-action" type="button" onClick={onUpdatePassword}>Update password</button>}
           <button className="sidebar__sign-out" type="button" onClick={signOut}>Sign out</button>
-          <div className="sidebar__status">
-            <span className={`status-dot status-dot--${serviceHealth}`} aria-hidden="true" />
-            <span>
-              <strong>{healthLabels[serviceHealth]}</strong>
-              <small>Spring Boot health</small>
-            </span>
-          </div>
         </div>
       </aside>
 

@@ -99,7 +99,7 @@ describe('Responder incident queue', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View details for Responder detail' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Request AI advice' }))
     view.rerender(<ResponderPortal categories={['IT']} loginName="second-responder"
-      onLogout={async () => {}} serviceHealth="available" />)
+      onLogout={async () => {}} />)
     await act(async () => { finishAdvice?.(response({ advice: 'Previous actor advice' })) })
     expect(screen.queryByText('Previous actor advice')).not.toBeInTheDocument()
   })
@@ -684,7 +684,6 @@ function portal(onLogout: () => Promise<void> = async () => {}) {
       categories={['IT', 'FACILITIES']}
       loginName="responder-account"
       onLogout={onLogout}
-      serviceHealth="available"
     />
   )
 }

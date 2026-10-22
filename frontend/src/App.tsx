@@ -13,7 +13,6 @@ import {
   type SessionRefresher,
   type SessionState,
 } from './api'
-import { useServiceHealth } from './health/useServiceHealth'
 import { ReporterDashboard } from './reporter/ReporterDashboard'
 import { ReporterShell } from './reporter/ReporterShell'
 import { PromotionPanel } from './reporter/PromotionPanel'
@@ -23,7 +22,6 @@ import { PasswordChangeDialog } from './shared/PasswordChangeDialog'
 type Portal = 'REPORTER' | 'RESPONDER' | 'ADMINISTRATOR'
 
 export function App() {
-  const serviceHealth = useServiceHealth()
   const sessionState = useSession()
   const [portal, setPortal] = useState<Portal | null>(null)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
@@ -75,7 +73,6 @@ export function App() {
         />}
         sloContent={<AdministratorSloConfiguration onRefreshSession={sessionState.refresh} />}
         statisticsContent={<AdministratorStatistics onRefreshSession={sessionState.refresh} />}
-        serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Administrator'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
@@ -88,7 +85,6 @@ export function App() {
     return (
       <><ReporterShell
         promotionContent={<PromotionPanel onRefreshSession={sessionState.refresh} />}
-        serviceHealth={serviceHealth}
         loginName={session.loginName ?? 'Reporter'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
@@ -104,7 +100,6 @@ export function App() {
         loginName={session.loginName ?? 'Responder'}
         onLogout={signOut}
         onUpdatePassword={() => setPasswordDialogOpen(true)}
-        serviceHealth={serviceHealth}
       />{passwordDialog}</>
     )
   }

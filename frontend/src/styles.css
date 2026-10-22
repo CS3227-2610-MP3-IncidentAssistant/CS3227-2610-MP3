@@ -41,17 +41,12 @@ button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2p
 .nav-link:disabled { cursor: not-allowed; opacity: .72; }
 .nav-link__soon { color: #9ea9c0; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .sidebar__footer { display: grid; gap: 12px; margin-top: auto; padding: 16px 10px 2px; border-top: 1px solid rgb(255 255 255 / 22%); }
-.sidebar__actor, .sidebar__status { display: flex; gap: 10px; align-items: center; }
-.sidebar__identity strong, .sidebar__identity small, .sidebar__status strong, .sidebar__status small { display: block; }
+.sidebar__actor { display: flex; gap: 10px; align-items: center; }
+.sidebar__identity strong, .sidebar__identity small { display: block; }
 .sidebar__identity strong { font-size: 13px; }
 .sidebar__identity small { margin-top: 2px; color: #b7c1d7; font-size: 12px; }
 .sidebar__sign-out, .sidebar__account-action { justify-self: start; min-height: 40px; padding: 0; border: 0; color: #fff; background: transparent; font-weight: 700; cursor: pointer; }
 .sidebar__sign-out:hover, .sidebar__account-action:hover { color: #cbd7ff; }
-.sidebar__status strong { font-size: 12px; }
-.sidebar__status small { margin-top: 2px; color: #aeb8ce; font-size: 11px; }
-.status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #d59a43; box-shadow: 0 0 0 4px rgb(213 154 67 / 15%); }
-.status-dot--available { background: #63d0a4; box-shadow: 0 0 0 4px rgb(99 208 164 / 15%); }
-.status-dot--unavailable { background: #e47d7d; box-shadow: 0 0 0 4px rgb(228 125 125 / 15%); }
 .workspace { min-width: 0; }
 .topbar { display: none; }
 .menu-button { display: none; min-height: 40px; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); background: #fff; }
