@@ -1,16 +1,16 @@
 # Issue #23 responder AI implementation verification
 
 - Approved specification: `workflow/ai-features.md` SHA-256 `c0f15be532786f2123a743c2be6352bc36293888080b229862c166b8d8be200c`, section 4.2, `AI-RES-02..08` and applicable `AI-FEAT-02/04..06`.
-- Base commit: `88ec5cd`. Verification covers the uncommitted issue #23 worktree diff at the time of this record. No provider key or production incident data was used.
+- Rebased base commit: `aea4f4d`; approved specification commit: `5ca0cc3`; implementation commit: `3d48cd3`. No provider key or production incident data was used. The approved specification SHA-256 remains unchanged after the rebase.
 - Environment: Java 25, Gradle 9.6.1, Node 25.6.1; temporary isolated PostgreSQL 18 database with synthetic accounts/incidents and a local fake SoCLaaS HTTP provider. The database fixture created and dropped a unique schema.
 
 ## Checks
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| `INCIDENT_DESK_TEST_DATABASE_URL=<isolated test URI> INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED=true ./gradlew build --quiet` | **Passed before the final frontend-only actor-change assertion was added** | Exit 0. Gradle XML: 694 Java tests, 0 failures/errors, 2 skipped live-provider smoke tests. Embedded frontend check: 6 files, 74 tests passed; typecheck and lint passed. No backend source changed afterward. |
+| `INCIDENT_DESK_TEST_DATABASE_URL=<isolated test URI> INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED=true ./gradlew build --quiet` after rebase | **Passed** | Exit 0. Gradle XML: 780 Java tests, 0 failures/errors, 2 skipped live-provider smoke tests. Embedded frontend check: 14 files, 139 tests passed; typecheck and lint passed. |
 | Focused `./gradlew test --tests ...ResponderAiHttpPostgresTest --tests ...JdbcResponderAiSelectorPostgresTest --tests ...ResponderAiIncidentControllerTest` with the same isolated database configuration | **Passed** | Real Spring route, security filter, selector bean, gateway, fake provider, audit/usage ledger, and persisted incident state were exercised. |
-| `npm run check` in `frontend/` | **Passed** | Typecheck, lint, 75 tests in 6 files; this later run includes the actor-change stale-result case. |
+| `npm run check` in `frontend/` after conflict resolution | **Passed** | Typecheck, lint, 139 tests in 14 files, including actor-change stale-result coverage. |
 | `git diff --check` | **Passed** | No whitespace errors. |
 | Live SoCLaaS smoke tests | **Skipped** | Live-provider credentials and production enablement are outside this implementation task. |
 | Narrow viewport browser verification | **Unavailable** | CSS includes wrapping for long unbroken advice, but no rendered mobile viewport was inspected. `AI-RES-08` remains open. |
