@@ -18,9 +18,16 @@ Components consume tokens rather than repeating literal colors.
 | `--color-canvas` | `#F5F7FB` | Application background |
 | `--color-surface` | `#FFFFFF` | Cards, forms, panels, dialogs |
 | `--color-text` | `#18243A` | Headings and body text |
-| `--color-text-muted` | `#6E788A` | Supporting text and table headers |
+| `--color-text-muted` | `#5D6678` | Supporting text and table headers |
 | `--color-border` | `#DCE2EC` | Cards, controls, and separators |
 | `--color-focus` | `#8EAAFF` | Visible keyboard focus |
+
+Text tokens must satisfy the WCAG 2.2 AA contrast minimum in the accessibility
+baseline below against both `--color-surface` and `--color-canvas`. Normal-size
+text needs 4.5:1. `--color-text-muted` is the tightest of these and measures
+5.77:1 on `#FFFFFF` and 5.38:1 on `#F5F7FB`; it carries most of the supporting
+copy, so re-measure both ratios before changing it. The automated axe scan in
+the administrator browser suite fails on any regression here.
 
 | Semantic tone | Foreground | Soft background | Use |
 | --- | --- | --- | --- |

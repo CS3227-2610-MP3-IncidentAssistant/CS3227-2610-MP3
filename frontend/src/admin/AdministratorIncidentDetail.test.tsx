@@ -242,6 +242,27 @@ describe('AdministratorIncidentDetail', () => {
       .toHaveValue('Following up with facilities.')
   })
 
+  it('clears the comment field once the comment is accepted', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(assignedDetail))
+      .mockResolvedValueOnce(jsonResponse({}, 200))
+      .mockResolvedValueOnce(jsonResponse(assignedDetail))
+    vi.stubGlobal('fetch', fetchMock)
+    renderDetail()
+
+    await screen.findByRole('heading', { name: assignedDetail.title })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Add a comment' }), {
+      target: { value: 'Following up with facilities.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
+
+    // The reload after a successful mutation remounts the composer empty, so a
+    // reload cannot resubmit the same text.
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Add a comment' })).toHaveValue('')
+    })
+  })
+
   it('reports a stale mutation as a conflict and reloads the latest detail', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse(assignedDetail))

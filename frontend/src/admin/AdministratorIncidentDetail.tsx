@@ -135,7 +135,11 @@ export function AdministratorIncidentDetail({ incidentId, onBack, refreshSession
           'The incident was unassigned and returned to its category queue.',
         )}
       />,
+      // Keyed on the revision so a successful mutation, which reloads, remounts
+      // the composer empty. A failure does not reload, so the unsent text stays
+      // available for another attempt.
       commentComposer: <CommentComposer
+        key={`comment:${revision}`}
         busy={busy}
         onSubmit={(text, requestId) => void runMutation(
           () => addAdministratorIncidentComment(detail.id, requestId, text, refreshSession),
