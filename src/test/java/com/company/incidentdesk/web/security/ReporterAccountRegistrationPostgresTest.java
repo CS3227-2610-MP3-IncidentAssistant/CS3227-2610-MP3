@@ -39,6 +39,7 @@ import com.company.incidentdesk.web.security.ReporterAccountRegistrationService.
 @EnabledIfEnvironmentVariable(named = "INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED", matches = "(?i:true)")
 class ReporterAccountRegistrationPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-18T09:00:00Z");
+    private static final String VALID_PASSWORD = "database-secret";
     private static final String SCHEMA = "registration_test_" + UUID.randomUUID().toString().replace("-", "");
 
     private static DataSource administrativeDataSource;
@@ -88,29 +89,29 @@ class ReporterAccountRegistrationPostgresTest {
         ReporterAccountRegistrationService service = service(encoder, accountId, auditId);
 
         assertEquals(RegistrationOutcome.CREATED,
-                service.register("CaseSensitive", "database-secret", "database-secret"));
+                service.register("CaseSensitive", VALID_PASSWORD, VALID_PASSWORD));
 
         assertEquals("REPORTER", jdbc.queryForObject(
                 "SELECT role FROM accounts WHERE login_name = 'CaseSensitive'", String.class));
         String hash = jdbc.queryForObject(
                 "SELECT password_hash FROM account_credentials WHERE account_id = ?", String.class, accountId);
-        assertTrue(encoder.matches("database-secret", hash));
-        assertFalse(hash.contains("database-secret"));
+        assertTrue(encoder.matches(VALID_PASSWORD, hash));
+        assertFalse(hash.contains(VALID_PASSWORD));
         assertEquals("ACCOUNT_REGISTERED", jdbc.queryForObject(
                 "SELECT action FROM audit_events WHERE id = ?", String.class, auditId));
         String auditDetails = jdbc.queryForObject(
                 "SELECT CAST(details AS text) FROM audit_events WHERE id = ?", String.class, auditId);
-        assertFalse(auditDetails.contains("database-secret"));
+        assertFalse(auditDetails.contains(VALID_PASSWORD));
     }
 
     @Test
     void treatsNamesAsCaseSensitiveAndAllowsExactlyOneConcurrentExactDuplicate() throws Exception {
         assertEquals(RegistrationOutcome.CREATED,
                 service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                        .register("ConcurrentName", "secret", "secret"));
+                        .register("ConcurrentName", VALID_PASSWORD, VALID_PASSWORD));
         assertEquals(RegistrationOutcome.CREATED,
                 service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                        .register("concurrentname", "secret", "secret"));
+                        .register("concurrentname", VALID_PASSWORD, VALID_PASSWORD));
 
         int attempts = 6;
         CountDownLatch ready = new CountDownLatch(attempts);
@@ -122,7 +123,7 @@ class ReporterAccountRegistrationPostgresTest {
                     ready.countDown();
                     assertTrue(start.await(10, TimeUnit.SECONDS));
                     return service(new BCryptPasswordEncoder(4), UUID.randomUUID(), UUID.randomUUID())
-                            .register("ExactDuplicate", "secret", "secret");
+                            .register("ExactDuplicate", VALID_PASSWORD, VALID_PASSWORD);
                 }));
             }
             assertTrue(ready.await(10, TimeUnit.SECONDS));
@@ -157,7 +158,7 @@ class ReporterAccountRegistrationPostgresTest {
 
         UUID accountId = UUID.fromString("20000000-0000-0000-0000-000000000011");
         RegistrationOutcome outcome = service(new BCryptPasswordEncoder(4), accountId, conflictingAuditId)
-                .register("rollback-user", "secret", "secret");
+                .register("rollback-user", VALID_PASSWORD, VALID_PASSWORD);
 
         assertEquals(RegistrationOutcome.UNAVAILABLE, outcome);
         assertEquals(0, jdbc.queryForObject(
