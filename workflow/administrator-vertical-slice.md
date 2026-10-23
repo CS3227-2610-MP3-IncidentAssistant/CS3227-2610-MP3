@@ -653,22 +653,33 @@ The administrator slice is acceptable when:
 
 - [ ] Only an enabled authenticated Administrator can load an administrator
   route or API representation; denied and missing resources do not leak data.
+  The MVC denial tests and the nine-test browser denial sweep both pass in
+  [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed per-role verification.
 - [ ] The Administrator portal shares the backend identity store, accepts only
   the persisted Administrator role, uses generic failures, rotates the session
   on success, and exposes no public registration or role-selection path. A
   missing or stale CSRF token refreshes the anonymous security session and
-  retries login at most once without weakening CSRF protection.
+  retries login at most once without weakening CSRF protection. The earlier
+  partial evidence of 2026-10-18 was taken on commit `541825c`; the generic
+  sign-in failure, wrong-portal refusal, and missing-CSRF rejection paths are
+  re-proved against an exact commit in
+  [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending the deployed HTTPS leg.
 - [ ] The dashboard provides server-paginated company incidents with the
   specified search, filters, sorting, stable tie-breaker, privacy-safe identity
-  options, SLO overview, and stale-response protection.
+  options, SLO overview, and stale-response protection. React, MVC, and browser
+  evidence is recorded in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed verification.
 - [ ] Incident detail renders privacy-safe lifecycle, resolution, SLO, comment,
   and image-attachment data without exposing an anonymous identity.
   Backend automated evidence is recorded in
   [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md)
   and React automated evidence in
   [the 2026-10-22 administrator incident detail React verification](test-evidence/2026-10-22-administrator-incident-detail-react.md).
-  The criterion remains open pending interaction/accessibility, browser
-  end-to-end, and deployed verification.
+  Interaction/accessibility and browser end-to-end evidence is now recorded in
+  [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed verification.
 - [ ] Assign/reassign, unassign, resolve, and comment operations reauthorize at
   execution, reject stale or invalid state, prevent duplicate mutation, and
   commit required audit evidence atomically.
@@ -676,21 +687,32 @@ The administrator slice is acceptable when:
   [the 2026-10-22 administrator incident detail verification](test-evidence/2026-10-22-administrator-incident-detail-backend.md)
   and React automated evidence in
   [the 2026-10-22 administrator incident detail React verification](test-evidence/2026-10-22-administrator-incident-detail-react.md).
-  The criterion remains open pending interaction/accessibility, browser
-  end-to-end, and deployed verification.
+  Interaction/accessibility and browser end-to-end evidence is now recorded in
+  [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed verification.
 - [ ] The account directory supports pending-promotion review, approval and
   rejection, Responder category replacement, one-time temporary-password
   reset, eligible account tombstoning, and controlled Administrator
-  provisioning with the specified session effects.
+  provisioning with the specified session effects. Browser evidence for
+  promotion review, approval and cancellation, category replacement,
+  temporary-password reset, and tombstoning is recorded in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md);
+  that sweep also fixed two harness defects which had silently skipped both
+  promotion-decision paths. The criterion remains open on two counts:
+  `ADM-ACC-06-G` gates Administrator provisioning behind independent security
+  and architecture approval that is not recorded, so no provisioning endpoint
+  or UI may ship, and deployed verification is outstanding.
 - [ ] SLO target changes validate all fields, create prospective append-only
-  versions, preserve history, and commit audit evidence atomically.
+  versions, preserve history, and commit audit evidence atomically. Backend,
+  React, and browser evidence is recorded in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed verification.
 - [ ] Statistics use persisted lifecycle timestamps, apply the specified
   filters and formulas, handle empty populations, and include anonymous
   incidents only in non-identifying aggregates.
-  Backend-only automated evidence is recorded in
-  [the 2026-10-22 administrator statistics verification](test-evidence/2026-10-22-administrator-statistics-backend.md).
-  The criterion remains open pending the React page, interaction/accessibility,
-  browser end-to-end, and deployed verification.
+  Backend automated evidence is recorded in
+  [the 2026-10-22 administrator statistics verification](test-evidence/2026-10-22-administrator-statistics-backend.md),
+  and React page, interaction/accessibility, and browser end-to-end evidence in
+  [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed verification.
 - [ ] The operational-trend AI request is reauthorized and rebuilt server-side,
   sends only allowlisted aggregate data, renders escaped advisory text, has no
   mutation path, and fails without blocking statistics.
@@ -698,6 +720,12 @@ The administrator slice is acceptable when:
   criterion in `admin-ai-insights.md`; provider interpretation is limited to a
   closed plan and every factual value is computed and rendered by the
   application without exposing identities or statistics to the provider.
+  Sixteen of the eighteen `AI-ADM-*` criteria are now ticked; `AI-ADM-SAFE-06`
+  (load/concurrency) and `AI-ADM-SAFE-07` (complete constraint disclosure)
+  remain open. The
+  latest automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+  This criterion remains open until every `AI-ADM-*` criterion is satisfied.
 - [x] Audit records remain internal-only with no HTTP read endpoint or React
   destination, while required mutation-plus-audit atomicity remains verified by
   [the 2026-10-22 internal-audit-only verification](test-evidence/2026-10-22-internal-audit-only-scope.md).
@@ -707,12 +735,23 @@ The administrator slice is acceptable when:
   not retry an authenticated mutation after the refreshed session is anonymous.
   Password-change React and focused Spring evidence is recorded in the
   [2026-10-22 password-management verification](test-evidence/2026-10-22-password-management-frontend.md).
-  The criterion remains open pending browser client-memory/session verification,
-  exact-commit evidence, and deployed HTTPS verification.
+  Browser session and logout evidence against an exact commit is now recorded
+  in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open pending deployed HTTPS verification of the
+  authenticated paths.
 - [ ] All pages meet the responsive, keyboard, focus, semantic HTML, error,
-  reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`.
+  reflow, and safe-rendering requirements in `.agents/STYLE_GUIDE.md`. The
+  fifteen-test axe, keyboard, and reflow run against an exact commit is
+  recorded in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md),
+  and the human visual review that requirement 4's exception permits in
+  `reviews/2026-10-23-admin-contrast-and-comment-visual-review.md`.
+  The criterion remains open pending deployed verification.
 - [ ] The required automated, accessibility, and deployed checks below are
   recorded against the exact release commit under `workflow/test-evidence/`.
+  Seven of the eight required suites pass against `df9af7d` in [the 2026-10-23 release-candidate verification sweep](test-evidence/2026-10-23-release-candidate-verification-sweep.md).
+  The criterion remains open: that commit is not on `main`, the deployed
+  service runs a different commit (`870a59c`), and the deployed leg covers only
+  unauthenticated paths.
 
 ### ADM-ACC-03 acceptance criteria — Responder category access
 

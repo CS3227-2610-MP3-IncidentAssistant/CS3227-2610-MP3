@@ -304,6 +304,8 @@ tasks.register('registrationDatabaseTest', Test) {
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorStatisticsMigrationUpgradePostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorInsightPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.infrastructure.soclaas.AiMigrationUpgradePostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.infrastructure.soclaas.AiGatewayControlPostgresTest'
+        includeTestsMatching 'com.company.incidentdesk.infrastructure.soclaas.AdministratorInsightAuditPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.admin.AdministratorIncidentPostgresTest'
         includeTestsMatching 'com.company.incidentdesk.web.responder.ResponderIncidentPostgresTest'
     }
@@ -541,3 +543,107 @@ tasks.named('check') {
 
 // The distribution tasks create archives for local testing.
 // Native .msi, .dmg, and .deb installers can be added later with jpackage.
+
+// --- Administrator browser and accessibility harness -----------------------
+// Required verification 5 and 7 of workflow/administrator-vertical-slice.md.
+// The suite drives the packaged application against an isolated, seeded
+// PostgreSQL schema so server-side authentication, CSRF, session, and
+// authorization behaviour is exercised in a real browser.
+
+def browserTestSchema = (providers.gradleProperty('browserTestSchema').orNull
+        ?: System.getenv('INCIDENT_DESK_E2E_SCHEMA')
+        ?: 'e2e_browser_suite')
+
+// Resolves and validates the isolated test database exactly as
+// registrationDatabaseTest does: a direct endpoint, explicitly confirmed
+// isolated, and never the same target as the application's own database.
+def resolveBrowserTestDatabase = {
+    Map<String, String> fileValues = readEnvironmentFile(
+            layout.projectDirectory.file('.env.test.local').asFile,
+            neonTestEnvironmentNames)
+    String testUrl = System.getenv('INCIDENT_DESK_TEST_DATABASE_URL')
+            ?: fileValues.INCIDENT_DESK_TEST_DATABASE_URL
+            ?: fileValues.DATABASE_URL_UNPOOLED
+    String confirmation = System.getenv('INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED')
+            ?: fileValues.INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED
+
+    if (testUrl == null || testUrl.isBlank()) {
+        throw new GradleException(
+                'INCIDENT_DESK_TEST_DATABASE_URL must be set before the browser suite can run. '
+                + 'Copy .env.test.example to .env.test.local and supply test-only values.')
+    }
+    if (confirmation == null || !confirmation.equalsIgnoreCase('true')) {
+        throw new GradleException(
+                'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED must be true before the browser suite can run.')
+    }
+    if (testUrl.toLowerCase(Locale.ROOT).contains('-pooler.')) {
+        throw new GradleException(
+                'The browser suite requires a direct PostgreSQL endpoint, not a pooled endpoint.')
+    }
+
+    Map<String, String> localApplicationValues = readEnvironmentFile(
+            layout.projectDirectory.file('.env.local').asFile, null)
+    Set<String> protectedTargets = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
+            .collect { name ->
+                System.getenv().containsKey(name) ? System.getenv(name) : localApplicationValues[name]
+            }
+            .findAll { it != null && !it.isBlank() }
+            .collect(databaseTarget)
+            .toSet()
+    if (protectedTargets.contains(databaseTarget(testUrl))) {
+        throw new GradleException(
+                'The browser test database URL must differ from DATABASE_URL and DATABASE_URL_UNPOOLED.')
+    }
+    return [url: testUrl, confirmation: 'true']
+}
+
+def seedBrowserTestSchema = tasks.register('seedBrowserTestSchema', JavaExec) {
+    group = 'verification'
+    description = 'Creates and seeds the isolated PostgreSQL schema for the browser suite.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.company.incidentdesk.support.BrowserTestDataSeeder'
+    doFirst {
+        def database = resolveBrowserTestDatabase()
+        environment 'INCIDENT_DESK_TEST_DATABASE_URL', database.url
+        environment 'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED', database.confirmation
+        args 'create', browserTestSchema
+    }
+}
+
+def dropBrowserTestSchema = tasks.register('dropBrowserTestSchema', JavaExec) {
+    group = 'verification'
+    description = 'Drops the isolated PostgreSQL schema used by the browser suite.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.company.incidentdesk.support.BrowserTestDataSeeder'
+    doFirst {
+        def database = resolveBrowserTestDatabase()
+        environment 'INCIDENT_DESK_TEST_DATABASE_URL', database.url
+        environment 'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED', database.confirmation
+        args 'drop', browserTestSchema
+    }
+}
+
+def installBrowsers = tasks.register('installPlaywrightBrowsers', Exec) {
+    group = 'verification'
+    description = 'Installs the Playwright browser binaries.'
+    dependsOn frontendInstall
+    workingDir frontendDirectory
+    commandLine npmExecutable, 'exec', '--', 'playwright', 'install', '--with-deps', 'chromium'
+}
+
+tasks.register('administratorBrowserTest', Exec) {
+    group = 'verification'
+    description = 'Runs the administrator browser and accessibility suite against the packaged application.'
+    dependsOn bootJar, seedBrowserTestSchema, installBrowsers
+    finalizedBy dropBrowserTestSchema
+    workingDir frontendDirectory
+    commandLine npmExecutable, 'run', 'test:e2e'
+    doFirst {
+        def database = resolveBrowserTestDatabase()
+        environment 'INCIDENT_DESK_TEST_DATABASE_URL', database.url
+        environment 'INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED', database.confirmation
+        environment 'INCIDENT_DESK_E2E_SCHEMA', browserTestSchema
+    }
+}

@@ -314,10 +314,12 @@ statistics-unavailable result and never retries the provider.
 
 ### Authorization and query planning (`AI-ADM-AUTH`)
 
-- [ ] `AI-ADM-AUTH-01` — A currently enabled Administrator can submit a valid
+- [x] `AI-ADM-AUTH-01` — A currently enabled Administrator can submit a valid
   bounded question; Reporter, Responder, unauthenticated, disabled, and stale
   Administrator sessions receive a non-enumerating denial with no provider or
   analytics call.
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 - [x] `AI-ADM-AUTH-02` — The server derives actor, role, request instant, model,
   and capability catalog from trusted application state and ignores or rejects
   browser attempts to supply them.
@@ -343,41 +345,56 @@ statistics-unavailable result and never retries the provider.
 - [x] `AI-ADM-QUERY-02` — Deterministic-clock tests prove every relative and UTC
   calendar period boundary, inclusive/exclusive behavior, comparison interval,
   future-date rejection, and 366-day maximum.
-- [ ] `AI-ADM-QUERY-03` — Ranking tests prove metric attribution, direction,
+- [x] `AI-ADM-QUERY-03` — Ranking tests prove metric attribution, direction,
   preservation and display of every first-place tie within the ten-row response
   ceiling, stable ordering, sample counts, division-by-zero behavior, inclusion of
   every responder with a qualifying cycle regardless of sample size, explicit
   zero-sample rows for selected-responder comparisons, and
   no-qualifying-data behavior.
-- [ ] `AI-ADM-QUERY-04` — Category trend, period comparison, backlog snapshot,
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+- [x] `AI-ADM-QUERY-04` — Category trend, period comparison, backlog snapshot,
   and operational overview tests prove their metric definitions, bounds, row
   limits, and empty-result behavior against isolated persisted lifecycle data.
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 - [x] `AI-ADM-QUERY-05` — Responder names and factual values are resolved and
   rendered only from the post-provider application result; fabricated names or
   values in provider output cannot enter the answer.
-- [ ] `AI-ADM-QUERY-06` — A read-consistent snapshot and application-generated
+- [x] `AI-ADM-QUERY-06` — A read-consistent snapshot and application-generated
   timestamp produce a coherent result while concurrent incident mutations
   remain non-blocking and become visible only according to database isolation.
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 
 ### Privacy, output, and failure (`AI-ADM-SAFE`)
 
-- [ ] `AI-ADM-SAFE-01` — Anonymous incidents contribute only to allowed
+- [x] `AI-ADM-SAFE-01` — Anonymous incidents contribute only to allowed
   aggregates; responder ranking, category filtering, repeated comparisons,
   errors, logs, metrics, audits, and evidence reveal no reporter identity.
-- [ ] `AI-ADM-SAFE-02` — Comparative responder output applies no hidden
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+- [x] `AI-ADM-SAFE-02` — Comparative responder output applies no hidden
   minimum-sample threshold, reports each result's sample size and ties, states
   the metric and exact period, and carries the operational-indicator notice.
+  Automated React evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 - [x] `AI-ADM-SAFE-03` — The browser renders only escaped deterministic text and
   structured rows; provider HTML, Markdown, URLs, tool calls, and instructions
   are rejected and cannot execute, fetch, persist, or mutate anything.
-- [ ] `AI-ADM-SAFE-04` — Each admitted request writes one content-free audit
+- [x] `AI-ADM-SAFE-04` — Each admitted request writes one content-free audit
   outcome and safe bounded observability metadata; the question, plan, result,
   identities, selections, prompt, and provider response are absent from logs,
   traces, metrics, ledger rows, audits, and test evidence.
-- [ ] `AI-ADM-SAFE-05` — Timeout, cancellation, provider rejection, malformed
+  Automated log-capture, response-envelope, and isolated PostgreSQL audit/ledger
+  evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+- [x] `AI-ADM-SAFE-05` — Timeout, cancellation, provider rejection, malformed
   output, rate limit, budget exhaustion, circuit-open state, database failure,
   and query timeout produce the specified safe failure, make no partial domain
   change, and leave the non-AI statistics workflow available.
+  Automated evidence is recorded in
+  [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 - [ ] `AI-ADM-SAFE-06` — Load and concurrency tests prove one provider call per
   user action, bounded query/result sizes, no response chaining, and continued
   availability of normal authenticated incident endpoints.
@@ -420,6 +437,16 @@ statistics-unavailable result and never retries the provider.
   broadened by the planning instructions, and non-ranking plans reject lone
   ranking fields. The repository-wide check also passed. See
   [`test-evidence/2026-10-23-admin-insight-planning-guardrails.md`](test-evidence/2026-10-23-admin-insight-planning-guardrails.md).
+- Phase-1 criteria evidence: focused MVC denial, ranking, resilience,
+  observability, and isolated PostgreSQL analytics/concurrency/anonymity tests
+  close `AI-ADM-AUTH-01`, `AI-ADM-QUERY-03`, `AI-ADM-QUERY-04`,
+  `AI-ADM-QUERY-06`, `AI-ADM-SAFE-01`, `AI-ADM-SAFE-02`, `AI-ADM-SAFE-04`, and
+  `AI-ADM-SAFE-05`. The same work found that the shared AI gateway test fixture
+  was not actually selecting its isolated schema and had been running against the
+  shared `public` schema, which is migrated only to V8; it now pins and verifies
+  the schema. Those 16 gateway tests were also absent from any executing task.
+  The isolated PostgreSQL suite rose from 74 to 94 tests with no skips. See
+  [`test-evidence/2026-10-23-admin-insight-phase-1-criteria.md`](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
