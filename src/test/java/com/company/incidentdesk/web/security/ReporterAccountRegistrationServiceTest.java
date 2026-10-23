@@ -48,17 +48,20 @@ class ReporterAccountRegistrationServiceTest {
         CountingEncoder encoder = new CountingEncoder();
         ReporterAccountRegistrationService service = service(store, encoder);
         String oversizedLogin = "x".repeat(ReporterAccountRegistrationService.MAX_LOGIN_NAME_LENGTH + 1);
-        String oversizedPassword = "x".repeat(ReporterAccountRegistrationService.MAX_PASSWORD_LENGTH + 1);
+        String undersizedPassword = "x".repeat(PasswordPolicy.MIN_LENGTH - 1);
+        String oversizedPassword = "x".repeat(PasswordPolicy.MAX_LENGTH + 1);
 
         assertEquals(RegistrationOutcome.INVALID_LOGIN_NAME,
-                service.register(" ", "secret", "secret"));
+                service.register(" ", "valid-secret", "valid-secret"));
         assertEquals(RegistrationOutcome.INVALID_LOGIN_NAME,
-                service.register(oversizedLogin, "secret", "secret"));
+                service.register(oversizedLogin, "valid-secret", "valid-secret"));
         assertEquals(RegistrationOutcome.INVALID_PASSWORD, service.register("name", "", ""));
+        assertEquals(RegistrationOutcome.INVALID_PASSWORD,
+                service.register("name", undersizedPassword, undersizedPassword));
         assertEquals(RegistrationOutcome.INVALID_PASSWORD,
                 service.register("name", oversizedPassword, oversizedPassword));
         assertEquals(RegistrationOutcome.PASSWORD_MISMATCH,
-                service.register("name", "one", "two"));
+                service.register("name", "first-secret", "other-secret"));
         assertEquals(0, encoder.calls);
         assertEquals(null, store.saved);
     }
@@ -79,7 +82,7 @@ class ReporterAccountRegistrationServiceTest {
         };
 
         assertEquals(RegistrationOutcome.UNAVAILABLE,
-                service(store, unavailable).register("reporter", "secret", "secret"));
+                service(store, unavailable).register("reporter", "valid-secret", "valid-secret"));
         assertEquals(null, store.saved);
     }
 
@@ -90,10 +93,10 @@ class ReporterAccountRegistrationServiceTest {
 
         store.outcome = RegistrationOutcome.DUPLICATE;
         assertEquals(RegistrationOutcome.DUPLICATE,
-                service.register("same", "secret", "secret"));
+                service.register("same", "valid-secret", "valid-secret"));
         store.outcome = RegistrationOutcome.UNAVAILABLE;
         assertEquals(RegistrationOutcome.UNAVAILABLE,
-                service.register("other", "secret", "secret"));
+                service.register("other", "valid-secret", "valid-secret"));
     }
 
     private static ReporterAccountRegistrationService service(

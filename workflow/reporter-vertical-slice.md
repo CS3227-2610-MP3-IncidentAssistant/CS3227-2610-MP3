@@ -409,8 +409,9 @@ All criteria remain open until their exact automated and required manual or
 deployed evidence is recorded.
 
 - [ ] `REP-AC-01` — Public registration is available only from the Reporter
-  portal, creates only a Reporter, stores no plaintext password, and rejects
-  duplicate, invalid, and tampered privileged-role requests generically. A
+  portal, creates only a Reporter, accepts passwords containing 12 through 128
+  characters, stores no plaintext password, and rejects duplicate, invalid,
+  and tampered privileged-role requests generically. A
   missing or stale CSRF token returns `SECURITY_SESSION_EXPIRED`; the browser
   refreshes its security session, retries registration at most once, and
   preserves the form if recovery fails.

@@ -34,7 +34,8 @@ final class ReporterAccountRegistrationController {
                 .body(new RegistrationResponse("ACCOUNT_CREATED", "Account created"));
         case INVALID_LOGIN_NAME -> response(HttpStatus.BAD_REQUEST, "INVALID_LOGIN_NAME",
                 "Enter a non-blank login name.");
-        case INVALID_PASSWORD -> response(HttpStatus.BAD_REQUEST, "INVALID_PASSWORD", "Enter a password.");
+        case INVALID_PASSWORD -> response(HttpStatus.BAD_REQUEST, "INVALID_PASSWORD",
+                "Use 12 to 128 characters.");
         case PASSWORD_MISMATCH -> response(HttpStatus.BAD_REQUEST, "PASSWORD_MISMATCH", "Passwords do not match.");
         case DUPLICATE -> response(HttpStatus.CONFLICT, "DUPLICATE_LOGIN_NAME",
                 "That case-sensitive login name is already registered.");
