@@ -34,7 +34,16 @@ Screenshots captured on 23 October 2026 show a local demonstration with fictiona
 
 Use **Sign out** when finished, especially on a shared computer. Select **Update password** to change your password. If an administrator resets your password, obtain the temporary password through your agreed private channel and complete the required password change before continuing. The application asks for your current password, new password, and confirmation.
 
-An administrator account is provisioned by the deployment owner. There are no shared default production credentials in this guide.
+Administrator accounts cannot currently be created through the web interface.
+The first Administrator must be provisioned by the deployment owner using the
+one-time procedure in [First Administrator Bootstrap](AdministratorBootstrap.md),
+and the application does not currently provide a later Administrator creation
+or recovery flow.
+
+For the designated grading/test deployment, select **Administrator** and use
+the login name `admin`. Strictly for grading purposes, the password for this
+account will be listed in this document. The password for the account is 
+`administration`.
 
 ## Report and track an incident
 
@@ -201,7 +210,7 @@ reproducible and do not vary between identical questions.
    direction, limit, grouping, and the exact period in Singapore time with the
    end bound exclusive, followed by up to 10 rows.
 
-![Statistics filters](images/mp3/admin-statistics-filters.png)
+![AI-assisted operational statistics question and responder selection](images/mp3/admin-ai-insights.png)
 
 The category and responder filters already applied to the page are applied to
 your question separately. They are not disclosed to the AI provider.
@@ -214,13 +223,21 @@ your question separately. They are not disclosed to the AI provider.
 | Which responder resolved the most incidents this month? | Responder ranking by resolved-cycle count. |
 | Which responders have the highest reopen rate over the past week? | Responder ranking by reopen rate; a zero denominator reads Not available. |
 | Compare the selected responders by resolved count this month. | One row for each responder you ticked, including a zero row for anyone without a qualifying cycle. |
-| Which category had the longest average time to claim this week? | Category ranking by queue time to claim. |
-| Which category has the most reopened incidents in the last 30 days? | Category ranking by reopen count or rate. |
-| Show the weekly incident volume by category for the last 30 days. | A bounded daily, weekly, or monthly series for up to 10 categories. |
+| Which category had the longest average time to claim this week? | Category ranking by queue time to claim for cycles that entered the queue this week. Active cycles count only while they remain assigned; completed cycles come from resolution history. |
+| Which category has the most reopen events in the last 30 days? | Category ranking by reopen-event count. Repeated reopenings of one incident are separate events. Ask for reopen rate when you want the proportion of resolved incidents that reopened. |
+| Show incident volume by category for the last 30 days. | A daily series for up to 10 categories. The application chooses the interval automatically from the reporting-window length; question wording cannot select a different interval. |
 | How did incident volume this month compare with last month? | The same metric across two adjacent, non-overlapping periods. |
-| Where is the oldest unassigned backlog right now? | Current unassigned counts and age buckets by category, plus the oldest age. |
-| Which category metrics were above their configured SLO targets last month? | Observed averages and reopen rate against each applicable target version, one row per version. |
-| Give me an operational overview for the past 30 days. | A fixed combination of volume, resolved count, claim and progress averages, reopen rate, SLO comparisons, and backlog count. |
+| Show the current unassigned backlog by category for the past 30 days. | Current unassigned count and oldest unassigned age for each category. A reporting period is required to interpret the question, but it does not restrict the current snapshot. |
+| Compare category average time to claim with its configured SLO target last month. | Observed-minus-target difference for the one requested SLO metric, with a separate row for each applicable target version. A positive value is above target. |
+| Give me an operational overview for the past 30 days. | Resolved-incident count, average time to claim, average time in progress, reopen rate, and current unassigned backlog count. It does not include total incident volume or SLO comparisons. |
+
+**Sample** is the number of qualifying records reported alongside a value. An
+average claim time uses claimed queue cycles. Responder metrics and category
+reopen metrics display completed resolution cycles as their sample, although a
+category reopen-rate denominator counts distinct resolved incidents. A value
+of `0` with a sample of `1` means one qualifying cycle was examined and no
+matching event occurred; a sample of `0` means no qualifying cycles supported
+the value.
 
 ### Exactly what can be accessed
 
@@ -229,14 +246,21 @@ The feature reads only aggregated operational statistics. It can report:
 - incident volume and resolved counts;
 - average time to claim and average time in progress;
 - reopen rate and reopen event count;
-- unassigned backlog counts, age buckets, and oldest unassigned age;
-- observed values compared with the versioned category SLO targets; and
-- administrator-resolved counts.
+- unassigned backlog counts and oldest unassigned age; and
+- one selected observed metric compared with versioned category SLO targets,
+  reported as the observed-minus-target difference.
 
-These can be grouped company-wide, by category, or by responder, over a rolling
-7 or 30 days, a UTC calendar week or month, the previous week or month, or
-explicit dates. A reporting interval may not exceed 366 days, and periods
-ending in the future are rejected.
+The available grouping depends on the query: responder rankings use completed
+resolution cycles, category rankings use category aggregates, and comparisons
+may use company or category scope. Supported periods are rolling 7 or 30 days,
+a UTC calendar week or month, the previous week or month, or explicit dates. A
+reporting interval may not exceed 366 days, and periods ending in the future
+are rejected.
+
+Trend intervals are selected automatically from the reporting-window length:
+windows of up to 31 days use daily points, windows of up to 180 days use
+seven-day points, and longer windows use 31-day points. Asking for a different
+interval in the question does not override this selection.
 
 It cannot access individual incidents or personal data. There is no way to
 retrieve an incident's identifier, title, description, comments, or
