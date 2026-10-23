@@ -43,15 +43,15 @@ test.describe('assign and reassign', () => {
     const responder = adminPage.getByRole('combobox', { name: 'Assign to responder' })
     await expect(responder).toBeVisible()
     await responder.selectOption({ label: 'e2e-responder' })
-    await adminPage.getByRole('button', { name: 'Assign incident' }).click()
+    await adminPage.getByRole('button', { name: 'Assign incident', exact: true }).click()
 
     // The incident becomes assigned, so the control becomes a reassignment.
-    await expect(adminPage.getByRole('button', { name: 'Reassign incident' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Reassign incident', exact: true })).toBeVisible()
 
     // Persisted, not merely optimistic: it survives reopening the detail view.
     await adminPage.reload()
     await openIncident(adminPage, incidents.submitted[0])
-    await expect(adminPage.getByRole('button', { name: 'Reassign incident' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Reassign incident', exact: true })).toBeVisible()
     // The select is relabelled for reassignment rather than removed.
     await expect(
       adminPage.getByRole('combobox', { name: 'Reassign to responder' }),
@@ -74,26 +74,30 @@ test.describe('assign and reassign', () => {
       await concurrentPage
         .getByRole('combobox', { name: 'Assign to responder' })
         .selectOption({ label: 'e2e-responder' })
-      await concurrentPage.getByRole('button', { name: 'Assign incident' }).click()
+      await concurrentPage.getByRole('button', { name: 'Assign incident', exact: true }).click()
       await expect(
-        concurrentPage.getByRole('button', { name: 'Reassign incident' }),
+        concurrentPage.getByRole('button', { name: 'Reassign incident', exact: true }),
       ).toBeVisible()
     } finally {
       await concurrent.close()
     }
 
     // The stale submission must not silently overwrite the newer assignment.
-    await adminPage.getByRole('button', { name: 'Assign incident' }).click()
+    await adminPage.getByRole('button', { name: 'Assign incident', exact: true }).click()
+    // The refusal may surface as the inline error or simply as the control
+    // having become a reassignment; `.or()` can match both at once, so this
+    // asserts on the first match rather than demanding a unique element.
     await expect(
       adminPage
         .getByRole('alert')
-        .or(adminPage.getByRole('button', { name: 'Reassign incident' })),
+        .or(adminPage.getByRole('button', { name: 'Reassign incident', exact: true }))
+        .first(),
     ).toBeVisible()
 
     // Exactly one assignee survives: the incident is assigned, not re-opened.
     await adminPage.reload()
     await openIncident(adminPage, title)
-    await expect(adminPage.getByRole('button', { name: 'Reassign incident' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Reassign incident', exact: true })).toBeVisible()
     await expect(
       adminPage.getByRole('combobox', { name: 'Reassign to responder' }),
     ).toBeVisible()
@@ -103,23 +107,23 @@ test.describe('assign and reassign', () => {
 test.describe('unassign', () => {
   test('unassigning an assigned incident succeeds after confirmation', async ({ adminPage }) => {
     await openIncident(adminPage, incidents.assigned[0])
-    await adminPage.getByRole('button', { name: 'Unassign incident' }).click()
+    await adminPage.getByRole('button', { name: 'Unassign incident', exact: true }).click()
     const dialog = adminPage.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await dialog.getByRole('button', { name: 'Unassign incident' }).click()
+    await dialog.getByRole('button', { name: 'Unassign incident', exact: true }).click()
     await expect(adminPage.getByRole('combobox', { name: 'Assign to responder' })).toBeVisible()
   })
 
   test('cancelling the unassign dialog makes no change and restores focus', async ({ adminPage }) => {
     await openIncident(adminPage, incidents.assigned[1])
-    const trigger = adminPage.getByRole('button', { name: 'Unassign incident' })
+    const trigger = adminPage.getByRole('button', { name: 'Unassign incident', exact: true })
     await trigger.click()
     const dialog = adminPage.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(dialog).toHaveCount(0)
     // The interaction contract requires focus to return to the trigger.
     await expect(trigger).toBeFocused()
-    await expect(adminPage.getByRole('button', { name: 'Reassign incident' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Reassign incident', exact: true })).toBeVisible()
   })
 })
 
