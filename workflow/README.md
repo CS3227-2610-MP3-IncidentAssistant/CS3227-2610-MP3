@@ -1,7 +1,8 @@
 # MP3 Specification and Evidence Workflow
 
-Status: **scaffold created; sections marked TODO require team approval or
-verified evidence before release.**
+Status: **Active MP3 specification and evidence workflow. Individual
+specifications and decisions retain their own approval and verification status;
+open manual, independent-review, deployed, and release gates remain explicit.**
 
 This directory records the team's own specification-driven, multi-agent
 workflow for MP3. It is not an off-the-shelf SDD toolkit. Product behavior is
