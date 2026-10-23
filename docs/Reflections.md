@@ -8,6 +8,166 @@ nav_order: 4
 
 Throughout the development of Incident Desk, our team used AI coding agents to support planning, implementation, testing, documentation, and code review. We found that these tools were most useful when we gave them a narrow scope, clear product constraints, and an outcome that we could verify. They accelerated repetitive work and helped us explore solutions, but human judgement remained essential at the boundaries between components, in the running user experience, and when deciding whether a technically correct solution was maintainable.
 
+## AI Security
+
+### Treat every model-facing boundary as an attack surface
+
+The AI features introduced more than one prompt-injection surface. Reporter
+draft text and Responder-visible incident text can contain direct instructions
+to the model. Stored comments, attachment names, previous model output, and
+unrelated incidents are indirect-injection candidates even when the user did
+not type them into the current form. The Administrator insight question is a
+different risk: an attacker can ask for SQL, a tool call, a URL fetch, another
+user's identity, or an unsupported personnel conclusion. Provider output is
+also hostile input because it can contain markup, fabricated facts, an
+oversized response, or a plan designed to reach an unintended handler.
+
+We learned that prompt wording alone cannot secure those boundaries. Each
+feature reauthorizes the current actor immediately before selecting canonical
+data, builds an explicit allowlist rather than serializing an entity, and
+excludes credentials, sessions, reporter identity, attachments, audit data,
+and unrelated records. Reporter assistance sends only the current title,
+category, and description. Responder assistance sends one currently authorized
+incident's approved operational fields and no comments or attachments. The
+Administrator question feature sends only the validated question, request
+instant, and closed vocabulary; responder selections and all statistics remain
+local. Previous AI output is never chained into another provider request.
+
+The provider receives no application tool, database connection, callback, or
+mutation capability. Responses are bounded, validated, and rendered as escaped
+plain text. The Administrator provider response must match a closed JSON plan;
+typed Java code validates it and invokes one allowlisted read-only analytics
+handler. Tests use a hostile fake provider to attempt SQL, reflection-style
+class names, URLs, traversal paths, tool calls, markup, duplicated fields,
+trailing prose, and structurally invalid JSON. The important property is not
+that the model always obeys the prompt, but that disobedience has no authority
+and cannot widen the data or action boundary.
+
+### Resource limits and safe failure are security controls
+
+SoCLaaS is a shared and rate-limited resource, so availability and cost abuse
+are part of the threat model. The gateway applies per-account and global
+request limits, shared PostgreSQL budget reservations, input and output bounds,
+timeouts, bounded retry, and circuit breakers. Conservative accounting remains
+charged when provider usage is ambiguous. Load and concurrency tests check that
+one user action causes at most one provider call for Administrator insights,
+that slow AI work does not serialize unrelated requests, and that normal
+incident endpoints remain available during provider failure. This made us view
+quotas as mutable external ceilings rather than capacity the application can
+assume it owns.
+
+### Human oversight must be outside the model's control
+
+Every AI result is advisory. Applying a Reporter suggestion changes only the
+browser draft; submitting the incident is a separate validated and
+CSRF-protected action. Responder advice cannot prefill resolution remarks or
+claim, comment on, hand off, or resolve an incident. Administrator insight
+results cannot change incidents, accounts, access, SLOs, or audit data. Labels,
+separate controls, server-side authorization, and the absence of provider tools
+make the review point structural rather than an instruction the model can ask
+the application to ignore. A user can still accept poor advice, so the residual
+risk is social and cannot be removed by technical validation alone.
+
+## Specification-Driven Development
+
+### What a buildable specification must make explicit
+
+A useful specification names the authorized actor, trusted source of identity,
+preconditions, accepted inputs, size limits, persisted effects, audit effects,
+normal and denied outcomes, stale and concurrent behavior, failure recovery,
+and required evidence. For an AI feature it must additionally name every field
+allowed to reach the provider, excluded data, output validation, resource
+limits, and the human review point. We found a specification precise enough for
+an agent when two independent implementers could derive the same observable
+HTTP and persistence behavior without inventing a security or product choice.
+
+The Reporter-to-Responder promotion journey was a useful example. Its contract
+distinguished requested categories from the Administrator-approved subset,
+made the role change and audit record transactional, required old sessions to
+fail closed, and required a fresh login through the Responder portal. Those
+details prevented an agent from treating a role dropdown or a UI-only change
+as sufficient. The resulting tests checked the stored account, request
+history, category set, audit state, rollback, concurrent decision, and portal
+behavior rather than merely checking for a success message.
+
+### Requirement changes must flow through the whole evidence chain
+
+The Administrator insight sample-size rule showed why the specification cannot
+be repaired only in code. The initial design suppressed small responder
+samples. After product review removed that threshold, the team first amended
+the owning specification and review record, then changed deterministic
+analytics, rendering, UI disclosure, tests, and evidence together. The revised
+tests prove that a one-cycle responder remains ranked, a selected responder
+with zero qualifying cycles remains visible with an explicit unavailable
+metric, and every result shows its sample size. Keeping the old text in the
+threat model or User Guide would have recreated ambiguity even if the code was
+correct.
+
+Tests also need to prove intent rather than repeat wording. During the release
+sweep, two promotion browser tests reported success while silently skipping the
+actual decision path because a Playwright count was not awaited. A timing probe
+showed the request appeared after the guard had already decided to skip. The
+harness was corrected and the suite then exercised both decisions with zero
+skips. That episode changed our standard of evidence: a green suite is useful
+only when we inspect whether the intended path really ran.
+
+## Basic Multi-Agent Software Engineering
+
+### Specialized agents and bounded handoffs
+
+We separated five responsibilities: an analyst turns an approved goal into
+observable criteria; an architecture/security reviewer defines trust,
+transaction, and privacy boundaries; a developer implements one bounded
+change; a test agent attacks allowed, denied, stale, concurrent, and failure
+paths; and a reviewer compares the diff and evidence with the approved
+contract. Specialization helped most when the output of one role was concrete:
+the specification agent produced criterion identifiers, the developer named
+the exact files and assumptions, and the tester returned reproducible commands
+and failures instead of a general assurance.
+
+For Responder AI, the handoff carried the approved incident fields, excluded
+identity/comments/attachments, current-access rule, stale-result discard rule,
+provider limits, and the required fake-provider evidence. For Administrator
+insights, the architecture handoff constrained the model to a closed plan and
+the test handoff attempted to escape that plan through malformed JSON, SQL,
+tool calls, URLs, and fabricated labels. For deployment, the handoff separated
+the GitHub OIDC deployer identity, Cloud Run runtime identity, Neon credentials,
+and the human-only release gate. These boundaries made it possible for one
+agent to challenge another's output without silently broadening the task.
+
+### Where errors or malicious instructions can enter
+
+An error can enter before code is written if an analyst treats issue text or a
+model suggestion as an approved requirement. It can enter at architecture if a
+reviewer overlooks a cross-role data flow, at implementation if an agent trusts
+browser-supplied identity, at testing if generated assertions merely encode the
+same mistake, and at handoff if skipped checks or unresolved assumptions are
+omitted. Repository issues, incident content, attachments, web pages,
+dependency output, tool output, and messages from another agent are therefore
+treated as untrusted inputs rather than authority.
+
+We reduced context loss by requiring every handoff to include the issue and
+criteria, approved scope and exclusions, files, security risks, checks already
+run, failures, and the next human gate. We kept specifications, ADRs, dated
+review records, interaction summaries, and exact-command test evidence in the
+repository. Agents were not allowed to infer human approval, deploy, merge,
+rewrite history, or weaken a test to obtain a pass. A later reviewer could
+challenge an earlier result, but had to leave the disagreement and supporting
+evidence visible for a person to decide.
+
+### How we would improve the workflow
+
+The strongest multi-agent runs used narrow tasks and independent evidence; the
+weakest allowed one agent's summary to become the next agent's unquestioned
+premise. In future work we would assign named human owners at the start of each
+feature, require a compact machine-checkable handoff alongside the prose, and
+make the test agent demonstrate at least one intentionally failing or
+adversarial case before accepting the happy path. We would also preserve the
+original sanitized command or CI output whenever a summary records a failure,
+so a reviewer can distinguish an observed result from a persuasive narrative.
+
+## Cross-cutting case studies
+
 ## Working from product requirements rather than plausible output
 
 One recurring lesson was that convincing output is not the same as a working product. For example, a web mockup helped us agree on a visual direction, but it did not prove that the JavaFX application could submit or track incidents. When the Reporter form was first connected, the actual authenticated route still constructed the page without an `IncidentService`, leaving users with a **Submission unavailable** message. Tracing the route through `DefaultViewFactory` revealed the missing dependency and ensured that submission used the existing validation, authorization, persistence, and audit path.
