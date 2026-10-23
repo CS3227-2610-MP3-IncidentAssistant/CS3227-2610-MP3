@@ -395,9 +395,11 @@ statistics-unavailable result and never retries the provider.
   change, and leave the non-AI statistics workflow available.
   Automated evidence is recorded in
   [the 2026-10-23 phase-1 criteria verification](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
-- [ ] `AI-ADM-SAFE-06` — Load and concurrency tests prove one provider call per
+- [x] `AI-ADM-SAFE-06` — Load and concurrency tests prove one provider call per
   user action, bounded query/result sizes, no response chaining, and continued
   availability of normal authenticated incident endpoints.
+  Automated evidence is recorded in
+  [the 2026-10-23 load and adversarial verification](test-evidence/2026-10-23-admin-insight-load-and-adversarial.md).
 - [ ] `AI-ADM-SAFE-07` — UI and response tests prove every result-affecting
   product constraint is disclosed, no undocumented data-volume or sample-size
   condition suppresses a result, and a data-bearing responder request is not
@@ -447,6 +449,14 @@ statistics-unavailable result and never retries the provider.
   the schema. Those 16 gateway tests were also absent from any executing task.
   The isolated PostgreSQL suite rose from 74 to 94 tests with no skips. See
   [`test-evidence/2026-10-23-admin-insight-phase-1-criteria.md`](test-evidence/2026-10-23-admin-insight-phase-1-criteria.md).
+- Load, concurrency, and adversarial-provider evidence: focused suites prove one
+  provider call per administrator action, bounded request/query/result sizes, no
+  response chaining, that a slow provider does not serialize concurrent actions,
+  and that a hostile provider cannot smuggle SQL, reflection, URLs, file paths,
+  tool calls, mutations, or fabricated names through its plan. This closes
+  `AI-ADM-SAFE-06`. The repository-wide and isolated PostgreSQL checks also
+  passed. See
+  [`test-evidence/2026-10-23-admin-insight-load-and-adversarial.md`](test-evidence/2026-10-23-admin-insight-load-and-adversarial.md).
 - Manual/deployed evidence: pending; verify the supported question catalog,
   accessibility, responsive layout, production provider configuration,
   sanitized observability, and safe failure behavior.
