@@ -38,6 +38,11 @@ class ReporterAccountRegistrationControllerTest {
         assertEquals(HttpStatus.BAD_REQUEST, invalid.getStatusCode());
         assertEquals("INVALID_LOGIN_NAME", invalid.getBody().code());
         assertEquals("Enter a non-blank login name.", invalid.getBody().message());
+
+        var invalidPassword = controller.register(new RegistrationRequest("name", "too-short", "too-short"));
+        assertEquals(HttpStatus.BAD_REQUEST, invalidPassword.getStatusCode());
+        assertEquals("INVALID_PASSWORD", invalidPassword.getBody().code());
+        assertEquals("Use 12 to 128 characters.", invalidPassword.getBody().message());
     }
 
     private static void assertResponse(
@@ -48,7 +53,7 @@ class ReporterAccountRegistrationControllerTest {
             String expectedCode,
             String expectedMessage) {
         store.outcome = outcome;
-        var response = controller.register(new RegistrationRequest("name", "secret", "secret"));
+        var response = controller.register(new RegistrationRequest("name", "valid-secret", "valid-secret"));
         RegistrationResponse body = response.getBody();
         assertEquals(expectedStatus, response.getStatusCode());
         assertEquals(expectedCode, body.code());

@@ -24,9 +24,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Repository
 @ConditionalOnBean(DataSource.class)
 class OwnPasswordService {
-    static final int MAX_PASSWORD_LENGTH = 128;
-    static final int MIN_PASSWORD_LENGTH = 12;
-
     enum Outcome { CHANGED, REJECTED, RESOURCE_UNAVAILABLE, PERSISTENCE_FAILURE }
 
     private final JdbcTemplate jdbc;
@@ -46,8 +43,7 @@ class OwnPasswordService {
     }
 
     static boolean isAcceptablePassword(String password) {
-        return password != null && password.length() >= MIN_PASSWORD_LENGTH
-                && password.length() <= MAX_PASSWORD_LENGTH && !password.isBlank();
+        return PasswordPolicy.accepts(password);
     }
 
     Outcome changeOwnPassword(String loginName, String currentPassword, String newPassword) {

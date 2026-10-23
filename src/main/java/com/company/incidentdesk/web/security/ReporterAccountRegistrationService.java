@@ -25,7 +25,6 @@ import com.company.incidentdesk.domain.account.Role;
 @ConditionalOnBean(DataSource.class)
 final class ReporterAccountRegistrationService {
     static final int MAX_LOGIN_NAME_LENGTH = 128;
-    static final int MAX_PASSWORD_LENGTH = 128;
 
     private final ReporterAccountRegistrationStore store;
     private final PasswordEncoder passwords;
@@ -79,7 +78,7 @@ final class ReporterAccountRegistrationService {
     }
 
     private static boolean validPassword(String password) {
-        return password != null && !password.isEmpty() && password.length() <= MAX_PASSWORD_LENGTH;
+        return PasswordPolicy.accepts(password);
     }
 
     enum RegistrationOutcome {

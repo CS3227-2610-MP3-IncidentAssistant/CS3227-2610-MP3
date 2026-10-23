@@ -26,9 +26,10 @@ MP2 implementation details, not MP3 production architecture.
 - Public registration is available only from the Reporter portal and always
   creates a Reporter. The Responder and Administrator portals provide no public
   registration or client-controlled role selection.
-- Authenticated users can replace their own password after confirming their current password.
-  Replacement passwords contain 12 through 128 characters; browser helper text
-  describes the minimum while the backend remains authoritative for both bounds.
+- Passwords selected during Reporter registration or authenticated password
+  replacement contain 12 through 128 characters. Password replacement also
+  requires confirmation of the current password. Browser helper text describes
+  the minimum while the backend remains authoritative for both bounds.
 - Role- and category-based access control.
 - Reusable table/list views with searching, filtering, and sorting where
   required.
@@ -204,7 +205,7 @@ The following are deliberately not invented by this document:
 - Whether an admin can recover the identity of an anonymous reporter through a
   separate exceptional process.
 - Notification presentation and retention.
-- Password policy and the exact delivery mechanism for reset credentials.
+- The exact delivery mechanism for reset credentials.
 - The SoCLaaS endpoint and published quota defaults are recorded in
   `workflow/ai-features.md`. Before coding, approve its application limits,
   select a model visible to the production key, verify the actual key budget,

@@ -141,9 +141,10 @@ public final class AdministratorBootstrap implements ApplicationRunner {
             throw new IllegalStateException("Invalid INCIDENT_DESK_BOOTSTRAP_ADMIN_LOGIN: expected 1 to 128 "
                     + "characters. No account was created.");
         }
-        if (password.length() < 12 || password.length() > 128) {
-            throw new IllegalStateException("Invalid INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD: expected 12 to 128 "
-                    + "characters. No account was created.");
+        if (!PasswordPolicy.accepts(password)) {
+            throw new IllegalStateException("Invalid INCIDENT_DESK_BOOTSTRAP_ADMIN_PASSWORD: expected "
+                    + PasswordPolicy.MIN_LENGTH + " to " + PasswordPolicy.MAX_LENGTH
+                    + " characters. No account was created.");
         }
     }
 

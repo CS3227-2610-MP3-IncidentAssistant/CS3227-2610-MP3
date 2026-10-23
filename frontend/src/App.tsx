@@ -325,16 +325,20 @@ function ReporterRegistration({ onRefreshSession, onReturn }: {
             type="password"
             autoComplete="new-password"
             required
+            minLength={12}
             maxLength={128}
+            aria-describedby="registration-password-help"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
+          <span className="help-text" id="registration-password-help">Use at least 12 characters.</span>
           <label htmlFor="registration-confirmation">Confirm password</label>
           <input
             id="registration-confirmation"
             type="password"
             autoComplete="new-password"
             required
+            minLength={12}
             maxLength={128}
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
