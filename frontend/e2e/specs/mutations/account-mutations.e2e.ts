@@ -107,34 +107,39 @@ test.describe('account tombstoning', () => {
 
 test.describe('promotion decisions', () => {
   // The seeder creates exactly one pending request, for `e2e-promotion-candidate`.
-  // Approve and reject are mutually exclusive, so each runs in its own worker
-  // pass; the suite is serial, and whichever runs first consumes the request.
-  // Promotion requests render on the accounts destination, which the outer
-  // beforeEach has already opened.
+  // Approving consumes it, so the non-consuming cancel path is declared first
+  // and the suite runs serially. Promotion requests render on the accounts
+  // destination, which the outer beforeEach has already opened.
+  //
+  // The request list loads asynchronously after the panel heading renders, so
+  // the decision control is awaited rather than counted: an unawaited count()
+  // observes the pre-load DOM and silently reports no pending request.
   test.beforeEach(async ({ adminPage }) => {
     await expect(adminPage.getByRole('heading', { name: 'Promotion requests' })).toBeVisible()
-  })
-
-  test('approving a pending request requires explicit confirmation', async ({ adminPage }) => {
-    const approve = adminPage.getByRole('button', { name: 'Approve selected categories' })
-    test.skip(!(await approve.count()), 'No pending promotion request remained for this pass.')
-
-    await expect(adminPage.getByLabel('IT')).toBeChecked()
-    await approve.click()
-    const dialog = adminPage.getByRole('dialog')
-    await expect(dialog).toBeVisible()
-    await dialog.getByRole('button', { name: 'Confirm promotion' }).click()
-    await expect(dialog).toHaveCount(0)
+    await expect(
+      adminPage.getByRole('button', { name: 'Approve selected categories' }),
+    ).toBeVisible()
   })
 
   test('cancelling a decision leaves the request pending', async ({ adminPage }) => {
     const approve = adminPage.getByRole('button', { name: 'Approve selected categories' })
-    test.skip(!(await approve.count()), 'No pending promotion request remained for this pass.')
 
     await approve.click()
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
     await expect(adminPage.getByRole('dialog')).toHaveCount(0)
     // Still pending, so the decision control is still offered.
     await expect(approve).toBeVisible()
+  })
+
+  test('approving a pending request requires explicit confirmation', async ({ adminPage }) => {
+    const approve = adminPage.getByRole('button', { name: 'Approve selected categories' })
+
+    // 'IT' is a substring of 'Facilities', so the checkbox is matched exactly.
+    await expect(adminPage.getByRole('checkbox', { name: 'IT', exact: true })).toBeChecked()
+    await approve.click()
+    const dialog = adminPage.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Confirm promotion' }).click()
+    await expect(dialog).toHaveCount(0)
   })
 })
