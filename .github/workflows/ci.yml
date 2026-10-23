@@ -72,6 +72,67 @@ jobs:
             build/reports/tests/test/
           retention-days: 7
 
+  administrator-browser-tests:
+    name: Administrator browser and accessibility suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: incidentdesk_e2e
+          POSTGRES_USER: incidentdesk_e2e
+          POSTGRES_PASSWORD: incidentdesk_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U incidentdesk_e2e -d incidentdesk_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # An ephemeral service database: never a deployed or production target.
+      INCIDENT_DESK_TEST_DATABASE_URL: postgresql://incidentdesk_e2e:incidentdesk_e2e@localhost:5432/incidentdesk_e2e
+      INCIDENT_DESK_TEST_DATABASE_CONFIRM_ISOLATED: 'true'
+      INCIDENT_DESK_E2E_SCHEMA: e2e_browser_suite
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle Wrapper executable
+        run: chmod +x gradlew
+
+      - name: Record the commit under verification
+        run: 'echo "Browser evidence commit: $GITHUB_SHA"'
+
+      - name: Run the administrator browser and accessibility suite
+        run: ./gradlew administratorBrowserTest
+
+      - name: Preserve browser and accessibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: administrator-browser-evidence-${{ github.sha }}
+          path: |
+            frontend/e2e-results/junit.xml
+            frontend/e2e-results/html/
+            frontend/e2e-results/artifacts/
+          retention-days: 7
+
   attachment-platform-tests:
     name: Attachments and packaging (${{ matrix.os }}, ${{ matrix.architecture }})
     strategy:
