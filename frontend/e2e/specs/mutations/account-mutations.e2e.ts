@@ -114,8 +114,19 @@ test.describe('promotion decisions', () => {
   // The request list loads asynchronously after the panel heading renders, so
   // the decision control is awaited rather than counted: an unawaited count()
   // observes the pre-load DOM and silently reports no pending request.
+  //
+  // Approving promotes the candidate to Responder, which cannot be undone
+  // through the application, so these two tests are not idempotent against an
+  // already-approved dataset. They therefore run only on a freshly seeded
+  // schema: `administratorBrowserTest` reseeds before every run, and the
+  // retry below is disabled so a retried attempt cannot re-enter them against
+  // the dataset the first attempt consumed.
+  test.describe.configure({ retries: 0 })
+
   test.beforeEach(async ({ adminPage }) => {
-    await expect(adminPage.getByRole('heading', { name: 'Promotion requests' })).toBeVisible()
+    await expect(
+      adminPage.getByRole('heading', { name: 'Promotion requests', exact: true }),
+    ).toBeVisible()
     await expect(
       adminPage.getByRole('button', { name: 'Approve selected categories' }),
     ).toBeVisible()

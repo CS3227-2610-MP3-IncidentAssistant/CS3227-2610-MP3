@@ -48,8 +48,11 @@ test.describe('administrator navigation destinations', () => {
 
   test('promotion requests are reachable on the accounts destination', async ({ adminPage }) => {
     await openAdminPage(adminPage, 'Accounts')
+    // Reachability only. The exact match matters because the panel's empty
+    // state renders "No pending promotion requests", which a substring match
+    // would also select once a decision test has consumed the seeded request.
     await expect(
-      adminPage.getByRole('heading', { name: 'Promotion requests' }),
+      adminPage.getByRole('heading', { name: 'Promotion requests', exact: true }),
     ).toBeVisible()
   })
 
